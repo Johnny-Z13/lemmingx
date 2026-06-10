@@ -1,6 +1,7 @@
-import type { SimulationState, Skill } from '../sim/types';
+import type { Lemming, SimulationState, Skill } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
+import { MATERIAL, type Terrain } from '../sim/Terrain';
 
 export type HudEvents = {
   onSelectSkill: (skill: Skill) => void;
@@ -11,7 +12,18 @@ export type HudEvents = {
   onCycleSpeed: () => void;
   /** Advance to the next level (only meaningful from the win overlay). */
   onNext?: () => void;
+  /** Center the camera at a level-space fraction (minimap click/drag). */
+  onMinimapJump?: (fractionX: number, fractionY: number) => void;
 };
+
+/** Everything the minimap needs to draw one frame, in level coordinates. */
+export interface MinimapData {
+  terrain: Terrain;
+  lemmings: ReadonlyArray<Lemming>;
+  camera: { x: number; y: number; width: number; height: number };
+  width: number;
+  height: number;
+}
 
 /** Extra read-only display info the scene feeds the HUD each frame. */
 export interface HudView {
@@ -21,7 +33,14 @@ export interface HudView {
   hoveredJob: string | null; // label of the lemming under the cursor
   levelName: string;
   hasNextLevel: boolean;
+  /** null hides the minimap (level fits on one screen). */
+  minimap: MinimapData | null;
 }
+
+/** Minimap display width in CSS px; height follows the level's aspect. */
+const MINIMAP_WIDTH = 180;
+/** Terrain layer redraw interval — dots/camera redraw every frame regardless. */
+const MINIMAP_TERRAIN_MS = 100;
 
 const SKILLS = ALL_SKILLS.map((skill) => ({
   skill,
@@ -47,6 +66,10 @@ export class Hud {
   private readonly speedButton: HTMLButtonElement;
   private readonly notice: HTMLDivElement;
   private readonly overlay: HTMLDivElement;
+  private readonly minimap: HTMLCanvasElement;
+  /** Offscreen terrain layer so the cell sweep runs at ~10 Hz, not 60. */
+  private readonly minimapTerrain = document.createElement('canvas');
+  private minimapTerrainAt = 0;
   private readonly events: HudEvents;
 
   constructor(events: HudEvents) {
@@ -116,6 +139,20 @@ export class Hud {
     this.notice.className = 'hud__notice';
     this.root.append(this.notice);
 
+    // --- Minimap (scrolling levels only) ---
+    this.minimap = document.createElement('canvas');
+    this.minimap.className = 'hud__minimap';
+    this.minimap.hidden = true;
+    this.minimap.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.minimap.setPointerCapture(e.pointerId);
+      this.minimapJump(e);
+    });
+    this.minimap.addEventListener('pointermove', (e) => {
+      if (this.minimap.hasPointerCapture(e.pointerId)) this.minimapJump(e);
+    });
+    this.root.append(this.minimap);
+
     // --- Win/lose overlay (hidden until outcome resolves) ---
     this.overlay = document.createElement('div');
     this.overlay.className = 'hud__overlay';
@@ -123,6 +160,63 @@ export class Hud {
     this.root.append(this.overlay);
 
     document.body.append(this.root);
+  }
+
+  private minimapJump(e: PointerEvent): void {
+    const rect = this.minimap.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const fx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const fy = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    this.events.onMinimapJump?.(fx, fy);
+  }
+
+  /** Redraw the minimap: cached terrain layer + live dots + camera rectangle. */
+  private drawMinimap(data: MinimapData): void {
+    const scale = MINIMAP_WIDTH / data.width;
+    const height = Math.max(24, Math.round(data.height * scale));
+
+    if (this.minimap.width !== MINIMAP_WIDTH || this.minimap.height !== height) {
+      this.minimap.width = MINIMAP_WIDTH;
+      this.minimap.height = height;
+      this.minimapTerrain.width = MINIMAP_WIDTH;
+      this.minimapTerrain.height = height;
+      this.minimapTerrainAt = 0; // force a terrain redraw
+    }
+
+    const now = performance.now();
+    if (now - this.minimapTerrainAt >= MINIMAP_TERRAIN_MS) {
+      this.minimapTerrainAt = now;
+      const tctx = this.minimapTerrain.getContext('2d');
+      if (tctx) {
+        tctx.clearRect(0, 0, MINIMAP_WIDTH, height);
+        data.terrain.forEachSolidCell((x, y, w, h, material) => {
+          tctx.fillStyle =
+            material === MATERIAL.steel ? '#8a93a6' :
+            material === MATERIAL.dirt ? '#4d9674' : '#d9b84d';
+          tctx.fillRect(x * scale, y * scale, Math.max(1, w * scale), Math.max(1, h * scale));
+        });
+      }
+    }
+
+    const ctx = this.minimap.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, MINIMAP_WIDTH, height);
+    ctx.drawImage(this.minimapTerrain, 0, 0);
+
+    ctx.fillStyle = '#9ef7c3';
+    for (const l of data.lemmings) {
+      if (l.state === 'dead' || l.state === 'exited') continue;
+      ctx.fillRect(l.x * scale - 1, l.y * scale - 1, 2, 2);
+    }
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      data.camera.x * scale + 0.5,
+      data.camera.y * scale + 0.5,
+      data.camera.width * scale - 1,
+      data.camera.height * scale - 1,
+    );
   }
 
   private makeButton(text: string, title: string, onClick: () => void): HTMLButtonElement {
@@ -166,6 +260,9 @@ export class Hud {
 
     this.notice.textContent = this.noticeText(state, view);
     this.notice.hidden = state.outcome !== 'running';
+
+    this.minimap.hidden = view.minimap === null;
+    if (view.minimap) this.drawMinimap(view.minimap);
 
     this.renderOverlay(state, view);
   }

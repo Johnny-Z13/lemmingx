@@ -28,6 +28,9 @@ export class GameScene extends Phaser.Scene {
   private paused = false;
   private speed = 1;
   private levelIndex = 0;
+  private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
+  /** Edge-scroll only engages once the mouse has actually entered the game. */
+  private pointerSeen = false;
   private readonly particles = new Particles();
   private readonly sfx = new Sfx();
 
@@ -41,9 +44,19 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerdown', () => this.sfx.unlock());
     this.input.keyboard?.on('keydown', () => this.sfx.unlock());
     // Click-to-assign is bound once here (reads the current sim each time), so
-    // restarting a level never strips the handler.
+    // restarting a level never strips the handler. Left button only — the
+    // right/middle buttons drag-pan the camera.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.assignSelectedSkill(pointer.worldX, pointer.worldY);
+      if (pointer.button === 0) this.assignSelectedSkill(pointer.worldX, pointer.worldY);
+    });
+    this.input.mouse?.disableContextMenu();
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      this.pointerSeen = true;
+      if (pointer.middleButtonDown() || pointer.rightButtonDown()) {
+        const cam = this.cameras.main;
+        cam.scrollX -= pointer.position.x - pointer.prevPosition.x;
+        cam.scrollY -= pointer.position.y - pointer.prevPosition.y;
+      }
     });
     this.startLevel();
   }
@@ -59,9 +72,34 @@ export class GameScene extends Phaser.Scene {
     }
     this.animClockMs += delta;
     this.particles.update(this.paused ? 0 : delta * this.speed);
+    this.updateCamera(delta);
     this.updateHover();
     this.drawWorld();
     this.hud.update(this.sim.state, this.hudView());
+  }
+
+  /** Camera pan: arrow keys + screen-edge scroll (drag pan lives in create()). */
+  private updateCamera(deltaMs: number): void {
+    const cam = this.cameras.main;
+    const pan = 420 * (deltaMs / 1000);
+
+    if (this.cursors) {
+      if (this.cursors.left.isDown) cam.scrollX -= pan;
+      if (this.cursors.right.isDown) cam.scrollX += pan;
+      if (this.cursors.up.isDown) cam.scrollY -= pan;
+      if (this.cursors.down.isDown) cam.scrollY += pan;
+    }
+
+    if (this.pointerSeen) {
+      const pointer = this.input.activePointer;
+      const edge = 24;
+      if (pointer.x >= 0 && pointer.y >= 0 && pointer.x <= this.scale.width && pointer.y <= this.scale.height) {
+        if (pointer.x < edge) cam.scrollX -= pan;
+        else if (pointer.x > this.scale.width - edge) cam.scrollX += pan;
+        if (pointer.y < edge) cam.scrollY -= pan;
+        else if (pointer.y > this.scale.height - edge) cam.scrollY += pan;
+      }
+    }
   }
 
   /** Route sim events to sound + particle feedback. */
@@ -105,6 +143,8 @@ export class GameScene extends Phaser.Scene {
     const hovered = this.hoveredId
       ? this.sim.state.lemmings.find((l) => l.id === this.hoveredId)
       : null;
+    const cam = this.cameras.main;
+    const scrolls = this.level.width > this.scale.width || this.level.height > this.scale.height;
     return {
       paused: this.paused,
       speed: this.speed,
@@ -112,6 +152,15 @@ export class GameScene extends Phaser.Scene {
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
       levelName: `${this.levelIndex + 1}/${LEVEL_COUNT} · ${this.level.name ?? 'LemmingX'}`,
       hasNextLevel: true,
+      minimap: scrolls
+        ? {
+            terrain: this.level.terrain,
+            lemmings: this.sim.state.lemmings,
+            camera: { x: cam.scrollX, y: cam.scrollY, width: cam.width, height: cam.height },
+            width: this.level.width,
+            height: this.level.height,
+          }
+        : null,
     };
   }
 
@@ -138,6 +187,7 @@ export class GameScene extends Phaser.Scene {
     this.children.removeAll(true);
     this.cameras.main.setBounds(0, 0, this.level.width, this.level.height);
     this.cameras.main.setBackgroundColor('#12171f');
+    this.cameras.main.centerOn(this.level.spawn.x, this.level.spawn.y);
 
     this.addBackground();
     this.terrainGraphics = this.add.graphics();
@@ -157,6 +207,7 @@ export class GameScene extends Phaser.Scene {
       onTogglePause: () => this.togglePause(),
       onCycleSpeed: () => this.cycleSpeed(),
       onNext: () => this.nextLevel(),
+      onMinimapJump: (fx, fy) => this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height),
     });
     this.hud.update(this.sim.state, this.hudView());
   }
@@ -190,6 +241,7 @@ export class GameScene extends Phaser.Scene {
   private installKeyboard(): void {
     const kb = this.input.keyboard;
     if (!kb) return;
+    this.cursors = kb.createCursorKeys();
     kb.on('keydown', (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       // Skill hotkeys (1–7) map to the registry's declared hotkeys.

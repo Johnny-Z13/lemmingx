@@ -258,6 +258,19 @@ button:disabled {
   backdrop-filter: blur(8px);
 }
 
+/* ---- Minimap (scrolling levels) ---- */
+.hud__minimap {
+  position: absolute;
+  top: 64px;
+  right: 14px;
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  background: rgba(10, 14, 20, 0.85);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
 /* ---- Win / lose overlay ---- */
 .hud__overlay {
   position: absolute;
