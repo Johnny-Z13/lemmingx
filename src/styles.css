@@ -244,7 +244,7 @@ button:disabled {
 .hud__notice {
   position: absolute;
   left: 50%;
-  bottom: 86px;
+  bottom: 148px; /* clears the control bar even when it wraps to two rows */
   max-width: min(360px, calc(100vw - 36px));
   padding: 8px 14px;
   border: 1px solid var(--stroke);

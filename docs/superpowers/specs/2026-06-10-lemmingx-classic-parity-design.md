@@ -1,5 +1,6 @@
 # LemmingX Second Pass — Classic Parity
 
+**Status:** Shipped 2026-06-10 (stages 1–8 complete; all success criteria met).
 **Date:** 2026-06-10
 **Goal:** Close the gap between LemmingX and the classic Lemmings feature set at a
 professional polish level. Original work; no copyrighted assets or source; the

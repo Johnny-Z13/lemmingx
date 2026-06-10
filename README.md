@@ -21,12 +21,20 @@ npm run build   # typecheck + production build
 
 ## How to play
 
+- The game opens on a **level select**: 10 levels on a difficulty arc; clearing
+  one unlocks the next, and your best save-% is remembered (localStorage).
 - Lemmings walk, fall, and turn at walls automatically. Get enough of them to the
   exit to meet the **save quota** before the **timer** expires.
 - Pick a skill (click its button or press its hotkey **1–8**), then click a
   lemming to assign it. The hovered lemming is ringed and its current job shown.
-- **Space** pause · **F** fast-forward (1×/2×/3×) · **N** nuke · **R** restart.
-- Clear a level to unlock **Next Level**.
+- **Space** pause · **F** fast-forward (1×/2×/3×) · **N** nuke · **R** restart ·
+  **Esc** level select.
+- Big levels scroll: pan with **arrow keys**, screen-edge scroll, or
+  **right/middle-drag**; the **minimap** (top right) jumps the camera on click.
+- Watch out for **traps** — crushers, zappers and chompers kill the first
+  lemming that springs them, then need a moment to re-arm.
+- Original **chiptune music** (synthesized at runtime, like all audio) plays per
+  level; the HUD has music/SFX mute toggles and volume sliders that persist.
 
 ### Skills
 
@@ -52,19 +60,28 @@ unit-testable, with Phaser only drawing what the sim reports.
 ```
 src/
   sim/                Deterministic, headless simulation (no Phaser/DOM)
-    Terrain.ts        Pixel-destructible bitmap terrain (Uint8 grid)
-    GameSimulation.ts Lemming state machine, physics, outcome, SimEvents
-    types.ts          Shared types (Lemming, LevelDefinition, Skill, …)
+    Terrain.ts        Destructible bitmap terrain with materials
+                      (dirt/steel/one-way) + direction-aware carving
+    GameSimulation.ts Lemming state machine, physics, traps, outcome, SimEvents
+    types.ts          Shared types (Lemming, LevelDefinition, Skill, Trap, …)
     skills/           Skill registry: each skill's assignment rules + metadata
   render/
     LemmingSprite.ts  Procedural retro-pixel lemming drawing (per state/dir/frame)
     Particles.ts      Pooled CPU particle bursts (dust, debris, sparkle, splat)
-  audio/Sfx.ts        WebAudio sounds synthesized at runtime (no asset files)
-  scenes/GameScene.ts Phaser scene: input, camera, draws sim state, drives FX
-  ui/Hud.ts           DOM HUD: skills, counters, timer, controls, overlays
-  levels/             Level roster (index.ts) + level1/2/3 factories
+  audio/
+    Sfx.ts            WebAudio sounds synthesized at runtime (no asset files)
+    Music.ts          4-channel chiptune sequencer (lookahead scheduling)
+    tracks.ts         Original tunes authored as note-pattern data
+    settings.ts       Persisted music/SFX mute + volume
+  scenes/GameScene.ts Phaser scene: input, camera pan, draws sim state, FX
+  ui/
+    Hud.ts            DOM HUD: skills, counters, timer, minimap, audio, overlays
+    LevelSelect.ts    Campaign screen (locks, NEW badges, best save-%)
+  progress.ts         Campaign progress in localStorage (injectable for tests)
+  levels/             Level roster (index.ts) + level1…level10 factories
   main.ts             Phaser bootstrap
-test/                 Vitest: sim behavior + per-level solvability guards
+test/                 Vitest: sim behavior, tracks shape, progress,
+                      per-level solvability guards
 ```
 
 ### Key design notes
@@ -93,12 +110,12 @@ test/                 Vitest: sim behavior + per-level solvability guards
 
 ## Future work
 
-- More skills/variants (miner/diagonal-digger, stacker, fencer).
-- Camera pan/scroll for levels larger than the viewport.
-- Level select screen + progress persistence (localStorage).
-- Decorative terrain themes / tilesets and parallax backgrounds.
+- More skill variants (stacker, fencer, bridger-down).
+- More trap kinds and per-level visual themes / parallax backgrounds.
+- Difficulty tiers (Fun/Tricky/Taxing-style groupings) as the roster grows.
 - Mobile touch tuning for skill-assignment precision.
 - A simple level-editor harness (the bitmap + data format already supports it).
+- Replays / pause-and-rewind built on the deterministic sim.
 
 ## Reference Note
 
