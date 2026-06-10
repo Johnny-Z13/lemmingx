@@ -3,18 +3,12 @@ import { createDemoLevel } from '../levels/demoLevel';
 import { GameSimulation } from '../sim/GameSimulation';
 import type { Lemming, LevelDefinition, Skill } from '../sim/types';
 import { Hud } from '../ui/Hud';
+import { drawLemming } from '../render/LemmingSprite';
 
-const LEMMING_COLORS: Record<string, number> = {
-  walker: 0x5ef2a1,
-  faller: 0xf8d66d,
-  climber: 0xffd96b,
-  blocker: 0xff5b7f,
-  builder: 0x6ae1ff,
-  basher: 0xffa24d,
-  digger: 0xd696ff,
-  exited: 0x88ffcc,
-  dead: 0x5e6575,
-};
+/** Animation advances at this many frames per second (shared by all sprites). */
+const ANIM_FPS = 12;
+/** Pixels: how close the cursor must be to a lemming to hover/select it. */
+const HOVER_RADIUS = 16;
 
 export class GameScene extends Phaser.Scene {
   private level!: LevelDefinition;
@@ -23,6 +17,8 @@ export class GameScene extends Phaser.Scene {
   private terrainGraphics!: Phaser.GameObjects.Graphics;
   private actorGraphics!: Phaser.GameObjects.Graphics;
   private fxGraphics!: Phaser.GameObjects.Graphics;
+  private animClockMs = 0;
+  private hoveredId: number | null = null;
 
   constructor() {
     super('GameScene');
@@ -34,8 +30,22 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.sim.step(Math.min(delta, 33));
+    this.animClockMs += delta;
+    this.updateHover();
     this.drawWorld();
     this.hud.update(this.sim.state, this.sim.state.outcome === 'running' && !this.sim.state.nuking);
+  }
+
+  /** Current shared animation frame index. */
+  private animFrame(): number {
+    return Math.floor((this.animClockMs / 1000) * ANIM_FPS);
+  }
+
+  /** Track which lemming the cursor is over, for the selection ring. */
+  private updateHover(): void {
+    const pointer = this.input.activePointer;
+    const target = this.findNearestLemming(pointer.worldX, pointer.worldY, HOVER_RADIUS);
+    this.hoveredId = target?.id ?? null;
   }
 
   private startLevel(): void {
@@ -83,9 +93,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private findNearestLemming(worldX: number, worldY: number): Lemming | null {
+  private findNearestLemming(worldX: number, worldY: number, radius = 26): Lemming | null {
     let nearest: Lemming | null = null;
-    let nearestDistanceSq = 26 ** 2;
+    let nearestDistanceSq = radius ** 2;
 
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'dead' || lemming.state === 'exited') continue;
@@ -182,19 +192,10 @@ export class GameScene extends Phaser.Scene {
 
   private drawLemmings(): void {
     this.actorGraphics.clear();
+    const frame = this.animFrame();
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'exited') continue;
-      const color = LEMMING_COLORS[lemming.state] ?? LEMMING_COLORS.walker;
-      this.actorGraphics.fillStyle(color, lemming.state === 'dead' ? 0.45 : 1);
-      this.actorGraphics.fillCircle(lemming.x, lemming.y - 7, 5);
-      this.actorGraphics.fillRoundedRect(lemming.x - 4, lemming.y - 3, 8, 14, 4);
-      this.actorGraphics.lineStyle(2, color, 1);
-      this.actorGraphics.lineBetween(lemming.x, lemming.y + 4, lemming.x + lemming.direction * 8, lemming.y + 7);
-
-      if (lemming.state === 'blocker') {
-        this.actorGraphics.lineStyle(2, 0xffffff, 0.8);
-        this.actorGraphics.strokeCircle(lemming.x, lemming.y + 1, 14);
-      }
+      drawLemming(this.actorGraphics, lemming, frame, lemming.id === this.hoveredId);
     }
   }
 

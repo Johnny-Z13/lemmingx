@@ -5,7 +5,7 @@ import './styles.css';
 const GAME_WIDTH = 960;
 const GAME_HEIGHT = 540;
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'app',
   width: GAME_WIDTH,
@@ -18,3 +18,9 @@ new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
   },
 });
+
+// Dev-only handle so the preview/devtools can inspect or drive the running game
+// even when the tab is backgrounded (and rAF is throttled).
+if (import.meta.env.DEV) {
+  (window as unknown as { game: Phaser.Game }).game = game;
+}
