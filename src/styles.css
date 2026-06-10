@@ -35,6 +35,14 @@ canvas {
   display: block;
 }
 
+/* The HUD toggles elements via the `hidden` attribute; author `display` rules
+   (e.g. .hud__overlay { display: grid }) would otherwise override the UA's
+   [hidden] { display: none } and leave full-screen backdrop-filter layers
+   blurring/darkening the game. */
+[hidden] {
+  display: none !important;
+}
+
 button {
   border: 1px solid var(--stroke);
   border-radius: 8px;
