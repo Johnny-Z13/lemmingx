@@ -1,9 +1,42 @@
 import type { Terrain } from './Terrain';
 
-export type Skill = 'blocker' | 'builder' | 'digger';
+/**
+ * The eight classic skills. Two kinds:
+ * - State skills replace what the lemming is doing (blocker/builder/basher/digger/bomber).
+ * - Trait skills are permanent modifiers layered on top of normal walking/falling
+ *   (climber/floater): a lemming can be a "climber walker" or a "floater faller".
+ */
+export type Skill =
+  | 'climber'
+  | 'floater'
+  | 'bomber'
+  | 'blocker'
+  | 'builder'
+  | 'basher'
+  | 'digger';
+
+export const ALL_SKILLS: readonly Skill[] = [
+  'climber',
+  'floater',
+  'bomber',
+  'blocker',
+  'builder',
+  'basher',
+  'digger',
+] as const;
+
 export type SkillInventory = Record<Skill, number>;
 
-export type LemmingState = 'walker' | 'faller' | 'blocker' | 'builder' | 'digger' | 'exited' | 'dead';
+export type LemmingState =
+  | 'walker'
+  | 'faller'
+  | 'climber' // actively scaling a wall
+  | 'blocker'
+  | 'builder'
+  | 'basher'
+  | 'digger'
+  | 'exited'
+  | 'dead';
 
 export interface Point {
   x: number;
@@ -57,6 +90,15 @@ export interface Lemming {
   buildSteps: number;
   actionTimerMs: number;
   fallStartY: number;
+  /** Permanent trait: can scale vertical walls instead of turning. */
+  isClimber: boolean;
+  /** Permanent trait: opens a parachute, never dies from fall distance. */
+  isFloater: boolean;
+  /**
+   * Bomber fuse in ms once armed, else null. Counts down regardless of state;
+   * at zero the lemming explodes, carving terrain and dying.
+   */
+  fuseMs: number | null;
 }
 
 export interface SimulationState {
@@ -75,4 +117,6 @@ export interface SimulationState {
   timeMs: number;
   selectedSkill: Skill;
   outcome: 'running' | 'won' | 'lost';
+  /** True once the nuke (mass self-destruct) has been triggered. */
+  nuking: boolean;
 }

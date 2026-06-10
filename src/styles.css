@@ -59,11 +59,12 @@ button:disabled {
   position: absolute;
   bottom: 14px;
   left: 50%;
-  display: grid;
-  grid-template-columns: 126px 390px 142px 94px 205px 78px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   align-items: center;
-  width: min(1120px, calc(100vw - 24px));
+  width: min(1180px, calc(100vw - 24px));
   padding: 8px;
   border: 1px solid var(--stroke);
   border-radius: 8px;
@@ -91,13 +92,13 @@ button:disabled {
 }
 
 .hud__tools {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(72px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .hud__tool,
-.hud__pulse,
+.hud__nuke,
 .hud__restart {
   display: inline-flex;
   align-items: center;
@@ -157,9 +158,9 @@ button:disabled {
   text-align: center;
 }
 
-.hud__pulse {
-  border-color: rgba(94, 242, 161, 0.5);
-  background: rgba(94, 242, 161, 0.14);
+.hud__nuke {
+  border-color: rgba(255, 91, 127, 0.6);
+  background: rgba(255, 91, 127, 0.16);
 }
 
 .hud__restart {

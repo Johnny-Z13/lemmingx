@@ -19,8 +19,12 @@ function makeFlatLevel(overrides: Partial<LevelDefinition> = {}): LevelDefinitio
     maxReleaseRate: 99,
     targetSaved: 1,
     skills: {
+      climber: 10,
+      floater: 10,
+      bomber: 10,
       blocker: 10,
       builder: 10,
+      basher: 10,
       digger: 10,
     },
     terrain,
@@ -100,8 +104,12 @@ describe('GameSimulation', () => {
     const sim = new GameSimulation(
       makeFlatLevel({
         skills: {
+          climber: 0,
+          floater: 0,
+          bomber: 0,
           blocker: 0,
           builder: 0,
+          basher: 0,
           digger: 1,
         },
       }),
@@ -170,14 +178,78 @@ describe('GameSimulation', () => {
     expect(sim.state.outcome).toBe('lost');
   });
 
-  it('pulse reverses active walkers as the first remix verb', () => {
-    const sim = new GameSimulation(makeFlatLevel({ totalLemmings: 2, targetSaved: 2 }));
+  it('bashers carve horizontally and break through a wall', () => {
+    const terrain = new Terrain(200, 120, 4);
+    terrain.fillRect(0, 88, 200, 32); // floor
+    terrain.fillRect(80, 56, 16, 32); // wall blocking the path
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 200,
+        spawn: { x: 40, y: 72 },
+        exit: { x: 180, y: 72, width: 16, height: 24 },
+        terrain,
+      }),
+    );
     sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    // Walk up to the wall.
+    for (let i = 0; i < 80; i += 1) sim.step(16);
+    const before = terrain.solidCellCount();
+    sim.assignSkill(lemming.id, 'basher');
+    for (let i = 0; i < 200; i += 1) sim.step(16);
+
+    expect(terrain.solidCellCount()).toBeLessThan(before);
+    // The wall column should have been breached.
+    expect(terrain.isSolidAt(88, 72)).toBe(false);
+  });
+
+  it('a floater survives a fall that would otherwise be fatal', () => {
+    const terrain = new Terrain(120, 400, 4);
+    terrain.fillRect(0, 40, 40, 8); // small ledge up high
+    terrain.fillRect(0, 380, 120, 20); // floor far below
+    const fatal = new GameSimulation(
+      makeFlatLevel({ width: 120, height: 400, spawn: { x: 20, y: 24 }, exit: { x: 200, y: 0, width: 1, height: 1 }, terrain: terrain.clone() }),
+    );
+    const floaty = new GameSimulation(
+      makeFlatLevel({ width: 120, height: 400, spawn: { x: 20, y: 24 }, exit: { x: 200, y: 0, width: 1, height: 1 }, terrain: terrain.clone() }),
+    );
+
+    // Control: no floater -> dies on impact.
+    for (let i = 0; i < 400; i += 1) fatal.step(16);
+    expect(fatal.state.lost).toBe(1);
+
+    // Floater armed before the drop survives.
+    floaty.step(120);
+    floaty.assignSkill(floaty.state.lemmings[0].id, 'floater');
+    for (let i = 0; i < 400; i += 1) floaty.step(16);
+    expect(floaty.state.lost).toBe(0);
+  });
+
+  it('a bomber explodes after its fuse and carves a crater', () => {
+    const terrain = new Terrain(120, 120, 4);
+    terrain.fillRect(0, 72, 120, 48);
+    const sim = new GameSimulation(
+      makeFlatLevel({ width: 120, spawn: { x: 40, y: 56 }, exit: { x: 200, y: 0, width: 1, height: 1 }, terrain }),
+    );
     sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    const before = terrain.solidCellCount();
+    sim.assignSkill(lemming.id, 'bomber');
+    // Run past the 5s fuse.
+    for (let i = 0; i < 400; i += 1) sim.step(16);
 
-    const changed = sim.triggerPulse();
+    expect(lemming.state).toBe('dead');
+    expect(terrain.solidCellCount()).toBeLessThan(before);
+  });
 
-    expect(changed).toBe(2);
-    expect(sim.state.lemmings.map((lemming) => lemming.direction)).toEqual([-1, -1]);
+  it('nukeAll arms every live lemming with a fuse', () => {
+    const sim = new GameSimulation(makeFlatLevel({ totalLemmings: 3, targetSaved: 3 }));
+    for (let i = 0; i < 200; i += 1) sim.step(16);
+    const live = sim.state.lemmings.filter((l) => l.state !== 'dead' && l.state !== 'exited');
+    const armed = sim.nukeAll();
+
+    expect(armed).toBe(live.length);
+    expect(sim.state.nuking).toBe(true);
+    expect(live.every((l) => l.fuseMs !== null)).toBe(true);
   });
 });

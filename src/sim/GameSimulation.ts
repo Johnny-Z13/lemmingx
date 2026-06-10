@@ -1,12 +1,19 @@
 import type { Lemming, LevelDefinition, SimulationState, Skill } from './types';
+import type { SkillContext } from './skills/types';
+import { SKILL_DEFS, BOMBER_FUSE_MS } from './skills/registry';
 
 const WALK_SPEED = 26;
+const CLIMB_SPEED = 22;
+const FLOAT_FALL_SPEED = 40; // terminal velocity while parachuting
 const GRAVITY = 360;
 const MAX_SAFE_FALL = 38;
 const BODY_HALF_WIDTH = 4;
 const FOOT_Y = 14;
 const HEAD_Y = -8;
 const STEP_HEIGHT = 7;
+const BASH_INTERVAL_MS = 70; // time between basher bites
+const BASH_REACH = 7; // how far ahead a basher carves per bite
+const BOMBER_BLAST_RADIUS = 22;
 
 export class GameSimulation {
   readonly level: LevelDefinition;
@@ -32,6 +39,7 @@ export class GameSimulation {
       timeMs: 0,
       selectedSkill: 'digger',
       outcome: 'running',
+      nuking: false,
     };
   }
 
@@ -52,25 +60,19 @@ export class GameSimulation {
     this.updateOutcome();
   }
 
+  /**
+   * Assign a skill to a lemming by id, consuming one use if the registry's
+   * `canAssign` rule accepts it and stock remains. Returns true on success.
+   */
   assignSkill(lemmingId: number, skill: Skill): boolean {
     const lemming = this.state.lemmings.find((candidate) => candidate.id === lemmingId);
     if (!lemming || lemming.state === 'dead' || lemming.state === 'exited') return false;
     if (this.state.skills[skill] <= 0) return false;
 
-    lemming.actionTimerMs = 0;
-    if (skill === 'builder') {
-      lemming.state = 'builder';
-      lemming.buildSteps = 0;
-      this.state.skills[skill] -= 1;
-      return true;
-    }
-    if (skill === 'blocker') {
-      lemming.state = 'blocker';
-      lemming.velocityY = 0;
-      this.state.skills[skill] -= 1;
-      return true;
-    }
-    lemming.state = 'digger';
+    const def = SKILL_DEFS[skill];
+    if (!def.canAssign(lemming)) return false;
+
+    def.onAssign(lemming, this.skillContext());
     this.state.skills[skill] -= 1;
     return true;
   }
@@ -85,15 +87,35 @@ export class GameSimulation {
     return this.state.releaseRate;
   }
 
-  triggerPulse(): number {
-    let changed = 0;
+  /**
+   * Arm every live lemming with a staggered bomber fuse — the classic "nuke"
+   * panic button. Returns how many were armed.
+   */
+  nukeAll(): number {
+    let armed = 0;
+    let stagger = 0;
     for (const lemming of this.state.lemmings) {
-      if (lemming.state === 'walker' || lemming.state === 'builder' || lemming.state === 'digger') {
-        lemming.direction *= -1;
-        changed += 1;
-      }
+      if (lemming.state === 'dead' || lemming.state === 'exited') continue;
+      if (lemming.fuseMs !== null) continue;
+      // Small stagger so they pop in a cascade rather than all at once.
+      lemming.fuseMs = 600 + stagger;
+      stagger += 120;
+      armed += 1;
     }
-    return changed;
+    this.state.nuking = true;
+    return armed;
+  }
+
+  /** The limited operation surface exposed to skill modules. */
+  private skillContext(): SkillContext {
+    return {
+      terrain: this.level.terrain,
+      level: this.level,
+      killLemming: (l) => this.kill(l),
+      findStandingY: (x, y) => this.findStandingY(x, y),
+      hasGroundBelow: (l) => this.hasGroundBelow(l),
+      startFalling: (l) => this.beginFall(l),
+    };
   }
 
   private spawnLemming(): void {
@@ -107,18 +129,43 @@ export class GameSimulation {
       buildSteps: 0,
       actionTimerMs: 0,
       fallStartY: this.level.spawn.y,
+      isClimber: false,
+      isFloater: false,
+      fuseMs: null,
     });
     this.nextLemmingId += 1;
     this.state.spawned += 1;
   }
 
+  /** Kill a lemming and record the loss (idempotent for already-dead). */
+  private kill(lemming: Lemming): void {
+    if (lemming.state === 'dead' || lemming.state === 'exited') return;
+    lemming.state = 'dead';
+    this.state.lost += 1;
+  }
+
+  /** Transition a lemming into a fresh fall from its current Y. */
+  private beginFall(lemming: Lemming): void {
+    lemming.state = 'faller';
+    lemming.fallStartY = lemming.y;
+    lemming.velocityY = 0;
+  }
+
   private updateLemming(lemming: Lemming, deltaMs: number): void {
     if (lemming.state === 'dead' || lemming.state === 'exited') return;
 
+    // Bomber fuse counts down in every active state. At zero it explodes.
+    if (lemming.fuseMs !== null) {
+      lemming.fuseMs -= deltaMs;
+      if (lemming.fuseMs <= 0) {
+        this.explode(lemming);
+        return;
+      }
+    }
+
     // Hazards kill any lemming touching them, including blockers.
     if (this.isInHazard(lemming)) {
-      lemming.state = 'dead';
-      this.state.lost += 1;
+      this.kill(lemming);
       return;
     }
 
@@ -135,15 +182,24 @@ export class GameSimulation {
       return;
     }
 
+    if (lemming.state === 'basher') {
+      this.updateBasher(lemming, deltaMs);
+      return;
+    }
+
     if (lemming.state === 'builder') {
       this.updateBuilder(lemming, deltaMs);
       return;
     }
 
+    if (lemming.state === 'climber') {
+      this.updateClimber(lemming, deltaMs);
+      return;
+    }
+
     if (!this.hasGroundBelow(lemming)) {
       if (lemming.state !== 'faller') {
-        lemming.state = 'faller';
-        lemming.fallStartY = lemming.y;
+        this.beginFall(lemming);
       }
       this.updateFaller(lemming, deltaMs);
       return;
@@ -151,6 +207,13 @@ export class GameSimulation {
 
     lemming.state = 'walker';
     this.walk(lemming, deltaMs);
+  }
+
+  /** Bomber detonation: carve a crater and kill the lemming. */
+  private explode(lemming: Lemming): void {
+    this.level.terrain.eraseCircle(lemming.x, lemming.y + 4, BOMBER_BLAST_RADIUS);
+    lemming.fuseMs = null;
+    this.kill(lemming);
   }
 
   private updateDigger(lemming: Lemming, deltaMs: number): void {
@@ -184,24 +247,104 @@ export class GameSimulation {
     }
   }
 
+  /**
+   * Basher: carves horizontally in the facing direction, advancing through
+   * solid terrain. Stops (reverts to walker) when there's no more wall ahead,
+   * and falls if it bashes out the floor under itself.
+   */
+  private updateBasher(lemming: Lemming, deltaMs: number): void {
+    // A basher keeps eating while solid material remains *beyond* the slab it
+    // carves. We probe one body just past the carve depth — untouched terrain —
+    // so detection never depends on what was already cleared. Once that lookahead
+    // is clear, the wall is breached and the basher walks on.
+    if (!this.wallAheadOfBasher(lemming)) {
+      lemming.state = 'walker';
+      lemming.y = this.findStandingY(lemming.x, lemming.y);
+      return;
+    }
+
+    lemming.actionTimerMs += deltaMs;
+    if (lemming.actionTimerMs < BASH_INTERVAL_MS) return;
+    lemming.actionTimerMs = 0;
+
+    // Carve a slab in front of the body at head-to-shin height (leaving the
+    // floor intact), then step forward into the cleared space.
+    const frontX = lemming.x + lemming.direction * BODY_HALF_WIDTH;
+    const left = lemming.direction === 1 ? frontX : frontX - BASH_REACH;
+    this.level.terrain.eraseRect(left, lemming.y + HEAD_Y, BASH_REACH, FOOT_Y - HEAD_Y - 1);
+    lemming.x += lemming.direction * 3;
+
+    if (!this.hasGroundBelow(lemming)) {
+      this.beginFall(lemming);
+    }
+  }
+
+  /**
+   * True if solid terrain remains just past a basher's carve depth — i.e. there
+   * is still wall to chew. Probing beyond the carve (rather than within it) keeps
+   * detection independent of already-cleared terrain, so the basher reliably
+   * eats fully through and then stops.
+   */
+  private wallAheadOfBasher(lemming: Lemming): boolean {
+    const start = BODY_HALF_WIDTH + BASH_REACH;
+    for (let dx = start; dx <= start + BODY_HALF_WIDTH * 2; dx += 1) {
+      const probeX = lemming.x + lemming.direction * dx;
+      for (let dy = HEAD_Y + 2; dy <= FOOT_Y - 3; dy += 2) {
+        if (this.level.terrain.isSolidAt(probeX, lemming.y + dy)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Climber: scales straight up a wall on the side it's facing. Pops over the
+   * top to resume walking when the wall ends, or detaches to a fall if the wall
+   * vanishes mid-climb (e.g. bashed away).
+   */
+  private updateClimber(lemming: Lemming, deltaMs: number): void {
+    const rise = CLIMB_SPEED * (deltaMs / 1000);
+    const wallX = lemming.x + lemming.direction * (BODY_HALF_WIDTH + 1);
+
+    // Still a wall beside the head? keep climbing.
+    if (this.level.terrain.isSolidAt(wallX, lemming.y + HEAD_Y)) {
+      lemming.y -= rise;
+      // Lost the wall surface entirely (overhang/gap) -> fall away.
+      if (!this.level.terrain.isSolidAt(wallX, lemming.y + 4)) {
+        this.beginFall(lemming);
+      }
+      return;
+    }
+
+    // Reached the top: mount onto the ledge and resume walking.
+    lemming.y -= STEP_HEIGHT;
+    lemming.x += lemming.direction * (BODY_HALF_WIDTH + 2);
+    lemming.state = 'walker';
+    lemming.y = this.findStandingY(lemming.x, lemming.y);
+  }
+
   private updateFaller(lemming: Lemming, deltaMs: number): void {
     const dt = deltaMs / 1000;
-    lemming.velocityY += GRAVITY * dt;
+    const floating = lemming.isFloater;
+
+    if (floating) {
+      // Parachute: capped descent speed, no fall damage on landing.
+      lemming.velocityY = FLOAT_FALL_SPEED;
+    } else {
+      lemming.velocityY += GRAVITY * dt;
+    }
     lemming.y += lemming.velocityY * dt;
 
     if (this.hasGroundBelow(lemming)) {
       const fallDistance = lemming.y - lemming.fallStartY;
-      if (fallDistance > MAX_SAFE_FALL) {
-        lemming.state = 'dead';
-        this.state.lost += 1;
+      if (!floating && fallDistance > MAX_SAFE_FALL) {
+        this.kill(lemming);
       } else {
         lemming.state = 'walker';
         lemming.velocityY = 0;
         lemming.y = this.findStandingY(lemming.x, lemming.y);
       }
     } else if (lemming.y > this.level.height + 28) {
-      lemming.state = 'dead';
-      this.state.lost += 1;
+      this.kill(lemming);
     }
   }
 
@@ -212,6 +355,11 @@ export class GameSimulation {
     if (this.hitsWall(nextX, lemming.y, lemming.direction)) {
       const climbedY = this.findStepUp(lemming, nextX);
       if (climbedY === null) {
+        // A climber scales the wall instead of turning around.
+        if (lemming.isClimber) {
+          lemming.state = 'climber';
+          return;
+        }
         lemming.direction *= -1;
         return;
       }

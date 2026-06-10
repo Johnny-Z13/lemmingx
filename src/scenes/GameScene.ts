@@ -7,8 +7,10 @@ import { Hud } from '../ui/Hud';
 const LEMMING_COLORS: Record<string, number> = {
   walker: 0x5ef2a1,
   faller: 0xf8d66d,
+  climber: 0xffd96b,
   blocker: 0xff5b7f,
   builder: 0x6ae1ff,
+  basher: 0xffa24d,
   digger: 0xd696ff,
   exited: 0x88ffcc,
   dead: 0x5e6575,
@@ -21,8 +23,6 @@ export class GameScene extends Phaser.Scene {
   private terrainGraphics!: Phaser.GameObjects.Graphics;
   private actorGraphics!: Phaser.GameObjects.Graphics;
   private fxGraphics!: Phaser.GameObjects.Graphics;
-  private pulseCooldownMs = 0;
-  private pulseFlashMs = 0;
 
   constructor() {
     super('GameScene');
@@ -34,17 +34,13 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.sim.step(Math.min(delta, 33));
-    this.pulseCooldownMs = Math.max(0, this.pulseCooldownMs - delta);
-    this.pulseFlashMs = Math.max(0, this.pulseFlashMs - delta);
     this.drawWorld();
-    this.hud.update(this.sim.state, this.pulseCooldownMs === 0 && this.sim.state.outcome === 'running');
+    this.hud.update(this.sim.state, this.sim.state.outcome === 'running' && !this.sim.state.nuking);
   }
 
   private startLevel(): void {
     this.level = createDemoLevel();
     this.sim = new GameSimulation(this.level);
-    this.pulseCooldownMs = 0;
-    this.pulseFlashMs = 0;
 
     this.children.removeAll(true);
     this.cameras.main.setBounds(0, 0, this.level.width, this.level.height);
@@ -63,7 +59,7 @@ export class GameScene extends Phaser.Scene {
     this.hud?.destroy();
     this.hud = new Hud({
       onSelectSkill: (skill) => this.selectSkill(skill),
-      onPulse: () => this.triggerPulse(),
+      onNuke: () => this.triggerNuke(),
       onReleaseRate: (delta) => this.sim.changeReleaseRate(delta),
       onRestart: () => this.startLevel(),
     });
@@ -74,13 +70,9 @@ export class GameScene extends Phaser.Scene {
     this.sim.setSelectedSkill(skill);
   }
 
-  private triggerPulse(): void {
-    if (this.pulseCooldownMs > 0 || this.sim.state.outcome !== 'running') return;
-    const changed = this.sim.triggerPulse();
-    if (changed > 0) {
-      this.pulseCooldownMs = 5200;
-      this.pulseFlashMs = 520;
-    }
+  private triggerNuke(): void {
+    if (this.sim.state.outcome !== 'running' || this.sim.state.nuking) return;
+    this.sim.nukeAll();
   }
 
   private assignSelectedSkill(worldX: number, worldY: number): void {
@@ -126,7 +118,6 @@ export class GameScene extends Phaser.Scene {
     this.drawExit();
     this.drawHazards();
     this.drawLemmings();
-    this.drawPulse();
   }
 
   private drawTerrain(): void {
@@ -207,11 +198,4 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private drawPulse(): void {
-    this.fxGraphics.clear();
-    if (this.pulseFlashMs <= 0) return;
-    const progress = 1 - this.pulseFlashMs / 520;
-    this.fxGraphics.lineStyle(4, 0x6ae1ff, 1 - progress);
-    this.fxGraphics.strokeCircle(this.level.spawn.x, this.level.spawn.y, 80 + progress * 620);
-  }
 }

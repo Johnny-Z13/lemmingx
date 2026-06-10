@@ -1,24 +1,26 @@
 import type { SimulationState, Skill } from '../sim/types';
+import { ALL_SKILLS } from '../sim/types';
+import { SKILL_DEFS } from '../sim/skills/registry';
 
 type HudEvents = {
   onSelectSkill: (skill: Skill) => void;
-  onPulse: () => void;
+  onNuke: () => void;
   onReleaseRate: (delta: number) => void;
   onRestart: () => void;
 };
 
-const SKILLS: Array<{ skill: Skill; label: string; icon: string }> = [
-  { skill: 'digger', label: 'Digger', icon: 'D' },
-  { skill: 'builder', label: 'Builder', icon: 'B' },
-  { skill: 'blocker', label: 'Blocker', icon: 'S' },
-];
+const SKILLS: Array<{ skill: Skill; label: string; icon: string }> = ALL_SKILLS.map((skill) => ({
+  skill,
+  label: SKILL_DEFS[skill].label,
+  icon: SKILL_DEFS[skill].icon,
+}));
 
 export class Hud {
   private readonly root: HTMLDivElement;
   private readonly counters: HTMLDivElement;
   private readonly releaseValue: HTMLSpanElement;
   private readonly skillButtons = new Map<Skill, HTMLButtonElement>();
-  private readonly pulseButton: HTMLButtonElement;
+  private readonly nukeButton: HTMLButtonElement;
   private readonly notice: HTMLDivElement;
 
   constructor(events: HudEvents) {
@@ -65,13 +67,13 @@ export class Hud {
     plus.addEventListener('click', () => events.onReleaseRate(5));
     release.append(minus, this.releaseValue, plus);
 
-    this.pulseButton = document.createElement('button');
-    this.pulseButton.className = 'hud__pulse';
-    this.pulseButton.type = 'button';
-    this.pulseButton.title = 'Pulse';
-    this.pulseButton.setAttribute('aria-label', 'Pulse');
-    this.pulseButton.innerHTML = '<span class="hud__icon">X</span><span>Pulse</span>';
-    this.pulseButton.addEventListener('click', events.onPulse);
+    this.nukeButton = document.createElement('button');
+    this.nukeButton.className = 'hud__nuke';
+    this.nukeButton.type = 'button';
+    this.nukeButton.title = 'Nuke all (mass self-destruct)';
+    this.nukeButton.setAttribute('aria-label', 'Nuke all');
+    this.nukeButton.innerHTML = '<span class="hud__icon">!</span><span>Nuke</span>';
+    this.nukeButton.addEventListener('click', events.onNuke);
 
     const restartButton = document.createElement('button');
     restartButton.className = 'hud__restart';
@@ -84,14 +86,14 @@ export class Hud {
     this.counters = document.createElement('div');
     this.counters.className = 'hud__counters';
 
-    bar.append(brand, tools, release, this.pulseButton, this.counters, restartButton);
+    bar.append(brand, tools, release, this.nukeButton, this.counters, restartButton);
     this.notice = document.createElement('div');
     this.notice.className = 'hud__notice';
     this.root.append(bar, this.notice);
     document.body.append(this.root);
   }
 
-  update(state: SimulationState, pulseReady: boolean): void {
+  update(state: SimulationState, nukeReady: boolean): void {
     this.counters.innerHTML = `
       <span>Saved <strong>${state.saved}/${state.targetSaved}</strong></span>
       <span>Out <strong>${state.spawned}/${state.totalLemmings}</strong></span>
@@ -104,7 +106,7 @@ export class Hud {
       button.classList.toggle('is-active', skill === state.selectedSkill);
       button.disabled = state.skills[skill] <= 0 || state.outcome !== 'running';
     }
-    this.pulseButton.disabled = !pulseReady;
+    this.nukeButton.disabled = !nukeReady;
     this.notice.textContent = this.noticeText(state);
   }
 

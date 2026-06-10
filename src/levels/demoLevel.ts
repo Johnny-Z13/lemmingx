@@ -32,8 +32,12 @@ export function createDemoLevel(): LevelDefinition {
     maxReleaseRate: 99,
     targetSaved: 8,
     skills: {
+      climber: 2,
+      floater: 2,
+      bomber: 1,
       blocker: 2,
       builder: 4,
+      basher: 2,
       digger: 10,
     },
     terrain,
