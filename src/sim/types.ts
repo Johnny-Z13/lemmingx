@@ -82,6 +82,29 @@ export interface LevelDefinition {
   timeLimitMs?: number;
 }
 
+/**
+ * One-shot things that happened during a sim step, drained by the renderer for
+ * audio + particle feedback. Keeping these as data keeps the sim free of any
+ * audio/render coupling.
+ */
+export type SimEventKind =
+  | 'spawn'
+  | 'assign'
+  | 'exit'
+  | 'splat' // fatal fall / off-bottom
+  | 'drown' // died in a hazard
+  | 'explode'
+  | 'dig'
+  | 'bash'
+  | 'build'
+  | 'nuke';
+
+export interface SimEvent {
+  kind: SimEventKind;
+  x: number;
+  y: number;
+}
+
 export interface Lemming {
   id: number;
   x: number;

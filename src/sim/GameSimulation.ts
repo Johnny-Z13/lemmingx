@@ -1,4 +1,4 @@
-import type { Lemming, LevelDefinition, SimulationState, Skill } from './types';
+import type { Lemming, LevelDefinition, SimEvent, SimEventKind, SimulationState, Skill } from './types';
 import type { SkillContext } from './skills/types';
 import { SKILL_DEFS, BOMBER_FUSE_MS } from './skills/registry';
 
@@ -20,6 +20,18 @@ export class GameSimulation {
   readonly state: SimulationState;
   private nextLemmingId = 1;
   private spawnTimerMs = 0;
+  private events: SimEvent[] = [];
+
+  /** Take and clear the events accumulated since the last drain (for FX/audio). */
+  drainEvents(): SimEvent[] {
+    const out = this.events;
+    this.events = [];
+    return out;
+  }
+
+  private emit(kind: SimEventKind, x: number, y: number): void {
+    this.events.push({ kind, x, y });
+  }
 
   constructor(level: LevelDefinition) {
     this.level = level;
@@ -78,6 +90,7 @@ export class GameSimulation {
 
     def.onAssign(lemming, this.skillContext());
     this.state.skills[skill] -= 1;
+    this.emit('assign', lemming.x, lemming.y);
     return true;
   }
 
@@ -107,6 +120,7 @@ export class GameSimulation {
       armed += 1;
     }
     this.state.nuking = true;
+    if (armed > 0) this.emit('nuke', this.level.spawn.x, this.level.spawn.y);
     return armed;
   }
 
@@ -137,15 +151,22 @@ export class GameSimulation {
       isFloater: false,
       fuseMs: null,
     });
+    this.emit('spawn', this.level.spawn.x, this.level.spawn.y);
     this.nextLemmingId += 1;
     this.state.spawned += 1;
   }
 
-  /** Kill a lemming and record the loss (idempotent for already-dead). */
-  private kill(lemming: Lemming): void {
+  /**
+   * Kill a lemming and record the loss (idempotent for already-dead). `cause`
+   * picks the feedback flavour: a splat (fall), a drown (hazard), or none (the
+   * caller already emitted its own event, e.g. an explosion).
+   */
+  private kill(lemming: Lemming, cause: 'splat' | 'drown' | 'silent' = 'splat'): void {
     if (lemming.state === 'dead' || lemming.state === 'exited') return;
     lemming.state = 'dead';
+    lemming.actionTimerMs = 0; // reset so the splat sprite can fade from now
     this.state.lost += 1;
+    if (cause !== 'silent') this.emit(cause, lemming.x, lemming.y);
   }
 
   /** Transition a lemming into a fresh fall from its current Y. */
@@ -169,7 +190,7 @@ export class GameSimulation {
 
     // Hazards kill any lemming touching them, including blockers.
     if (this.isInHazard(lemming)) {
-      this.kill(lemming);
+      this.kill(lemming, 'drown');
       return;
     }
 
@@ -178,6 +199,7 @@ export class GameSimulation {
     if (this.isInsideExit(lemming)) {
       lemming.state = 'exited';
       this.state.saved += 1;
+      this.emit('exit', lemming.x, lemming.y);
       return;
     }
 
@@ -216,8 +238,9 @@ export class GameSimulation {
   /** Bomber detonation: carve a crater and kill the lemming. */
   private explode(lemming: Lemming): void {
     this.level.terrain.eraseCircle(lemming.x, lemming.y + 4, BOMBER_BLAST_RADIUS);
+    this.emit('explode', lemming.x, lemming.y);
     lemming.fuseMs = null;
-    this.kill(lemming);
+    this.kill(lemming, 'silent');
   }
 
   private updateDigger(lemming: Lemming, deltaMs: number): void {
@@ -226,6 +249,7 @@ export class GameSimulation {
     if (lemming.actionTimerMs >= 80) {
       lemming.actionTimerMs = 0;
       lemming.y += 4;
+      this.emit('dig', lemming.x, lemming.y + 12);
     }
     if (!this.level.terrain.isSolidAt(lemming.x, lemming.y + FOOT_Y + 3)) {
       lemming.state = 'faller';
@@ -248,6 +272,7 @@ export class GameSimulation {
       lemming.x += lemming.direction * 3.2;
       lemming.y -= 1.2;
       lemming.buildSteps += 1;
+      this.emit('build', plankX, plankY);
     }
   }
 
@@ -276,6 +301,7 @@ export class GameSimulation {
     const frontX = lemming.x + lemming.direction * BODY_HALF_WIDTH;
     const left = lemming.direction === 1 ? frontX : frontX - BASH_REACH;
     this.level.terrain.eraseRect(left, lemming.y + HEAD_Y, BASH_REACH, FOOT_Y - HEAD_Y - 1);
+    this.emit('bash', frontX + lemming.direction * 2, lemming.y);
     lemming.x += lemming.direction * 3;
 
     if (!this.hasGroundBelow(lemming)) {

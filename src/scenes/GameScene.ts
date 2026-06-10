@@ -4,8 +4,11 @@ import { GameSimulation } from '../sim/GameSimulation';
 import type { Lemming, LevelDefinition, Skill } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
+import type { SimEvent } from '../sim/types';
 import { Hud } from '../ui/Hud';
 import { drawLemming } from '../render/LemmingSprite';
+import { Particles } from '../render/Particles';
+import { Sfx } from '../audio/Sfx';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -23,6 +26,8 @@ export class GameScene extends Phaser.Scene {
   private hoveredId: number | null = null;
   private paused = false;
   private speed = 1;
+  private readonly particles = new Particles();
+  private readonly sfx = new Sfx();
 
   constructor() {
     super('GameScene');
@@ -30,6 +35,14 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.installKeyboard();
+    // Audio contexts need a user gesture; unlock on the first pointer/key.
+    this.input.on('pointerdown', () => this.sfx.unlock());
+    this.input.keyboard?.on('keydown', () => this.sfx.unlock());
+    // Click-to-assign is bound once here (reads the current sim each time), so
+    // restarting a level never strips the handler.
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.assignSelectedSkill(pointer.worldX, pointer.worldY);
+    });
     this.startLevel();
   }
 
@@ -39,12 +52,47 @@ export class GameScene extends Phaser.Scene {
       // Fast-forward runs extra sim sub-steps; rendering stays once per frame.
       for (let i = 0; i < this.speed; i += 1) {
         this.sim.step(clamped);
+        this.consumeEvents(this.sim.drainEvents());
       }
     }
     this.animClockMs += delta;
+    this.particles.update(this.paused ? 0 : delta * this.speed);
     this.updateHover();
     this.drawWorld();
     this.hud.update(this.sim.state, this.hudView());
+  }
+
+  /** Route sim events to sound + particle feedback. */
+  private consumeEvents(events: SimEvent[]): void {
+    for (const e of events) {
+      this.sfx.play(e.kind);
+      switch (e.kind) {
+        case 'dig':
+          this.particles.burst(e.x, e.y, 4, { color: [0x4d9674, 0x297567], speed: 0.05, lifeMs: 420, size: 2 });
+          break;
+        case 'bash':
+          this.particles.burst(e.x, e.y, 5, { color: [0x4d9674, 0x297567, 0xffe9c2], speed: 0.09, spread: Math.PI, lifeMs: 380, size: 2 });
+          break;
+        case 'build':
+          this.particles.burst(e.x, e.y, 2, { color: 0x6ae1ff, speed: 0.04, lifeMs: 300, size: 1.5 });
+          break;
+        case 'exit':
+          this.particles.burst(e.x, e.y - 6, 12, { color: [0x78ffd6, 0x6ae1ff, 0xffffff], speed: 0.12, lifeMs: 700, size: 2.5, gravity: -0.0002, upward: true });
+          break;
+        case 'splat':
+          this.particles.burst(e.x, e.y + 8, 8, { color: [0xff5b7f, 0x5e6575], speed: 0.1, spread: Math.PI, angle: -Math.PI / 2, lifeMs: 500, size: 2 });
+          break;
+        case 'drown':
+          this.particles.burst(e.x, e.y, 8, { color: [0x4ab6ff, 0xffffff], speed: 0.09, lifeMs: 500, size: 2, upward: true });
+          break;
+        case 'explode':
+          this.particles.burst(e.x, e.y, 24, { color: [0xff7a3a, 0xffd96b, 0x5e6575, 0xff5b7f], speed: 0.22, lifeMs: 800, size: 3 });
+          break;
+        case 'nuke':
+          this.particles.burst(e.x, e.y, 16, { color: [0xff5b7f, 0xffd96b], speed: 0.18, lifeMs: 700, size: 3 });
+          break;
+      }
+    }
   }
 
   /** Snapshot of scene-side display state the HUD needs each frame. */
@@ -91,11 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.actorGraphics = this.add.graphics();
     this.fxGraphics = this.add.graphics();
 
-    this.input.off('pointerdown');
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.assignSelectedSkill(pointer.worldX, pointer.worldY);
-    });
-
+    this.particles.clear();
     this.paused = false;
     this.speed = 1;
 
@@ -198,6 +242,8 @@ export class GameScene extends Phaser.Scene {
     this.drawExit();
     this.drawHazards();
     this.drawLemmings();
+    this.fxGraphics.clear();
+    this.particles.draw(this.fxGraphics);
   }
 
   private drawTerrain(): void {

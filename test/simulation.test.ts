@@ -242,6 +242,31 @@ describe('GameSimulation', () => {
     expect(terrain.solidCellCount()).toBeLessThan(before);
   });
 
+  it('emits drainable events for spawn, assign, dig and exit', () => {
+    const sim = new GameSimulation(makeFlatLevel());
+    // First steps should produce at least one spawn event.
+    sim.step(120);
+    let kinds = sim.drainEvents().map((e) => e.kind);
+    expect(kinds).toContain('spawn');
+    // Draining clears the queue.
+    expect(sim.drainEvents().length).toBe(0);
+
+    // Assigning emits an 'assign' event.
+    const lemming = sim.state.lemmings[0];
+    sim.assignSkill(lemming.id, 'digger');
+    kinds = sim.drainEvents().map((e) => e.kind);
+    expect(kinds).toContain('assign');
+
+    // Running to completion should yield an 'exit' somewhere.
+    const sim2 = new GameSimulation(makeFlatLevel());
+    const all: string[] = [];
+    for (let i = 0; i < 900; i += 1) {
+      sim2.step(16);
+      all.push(...sim2.drainEvents().map((e) => e.kind));
+    }
+    expect(all).toContain('exit');
+  });
+
   it('nukeAll arms every live lemming with a fuse', () => {
     const sim = new GameSimulation(makeFlatLevel({ totalLemmings: 3, targetSaved: 3 }));
     for (let i = 0; i < 200; i += 1) sim.step(16);
