@@ -16,10 +16,15 @@ export function createDemoLevel(): LevelDefinition {
   terrain.eraseCircle(286, 460, 36);
 
   return {
+    name: 'Just Dig-ish',
     width: 960,
     height: 540,
     spawn: { x: 76, y: 116 },
     exit: { x: 884, y: 358, width: 42, height: 44 },
+    hazards: [
+      // Lava pit carved into the lower-right plateau — instant death.
+      { x: 700, y: 470, width: 88, height: 70, kind: 'lava' },
+    ],
     spawnIntervalMs: 850,
     totalLemmings: 10,
     releaseRate: 50,

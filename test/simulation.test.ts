@@ -150,6 +150,26 @@ describe('GameSimulation', () => {
     expect(terrain.isSolidAt(90, 76)).toBe(true);
   });
 
+  it('kills a lemming that walks into a hazard zone', () => {
+    const terrain = new Terrain(240, 120, 4);
+    terrain.fillRect(0, 88, 240, 32);
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        terrain,
+        // Lava covering the right half of the floor.
+        hazards: [{ x: 120, y: 80, width: 120, height: 40, kind: 'lava' }],
+      }),
+    );
+
+    for (let i = 0; i < 900; i += 1) {
+      sim.step(16);
+    }
+
+    expect(sim.state.saved).toBe(0);
+    expect(sim.state.lost).toBe(1);
+    expect(sim.state.outcome).toBe('lost');
+  });
+
   it('pulse reverses active walkers as the first remix verb', () => {
     const sim = new GameSimulation(makeFlatLevel({ totalLemmings: 2, targetSaved: 2 }));
     sim.step(120);

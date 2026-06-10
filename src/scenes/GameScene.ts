@@ -167,15 +167,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawHazards(): void {
-    this.terrainGraphics.fillStyle(0x0a0d12, 0.8);
-    this.terrainGraphics.fillRect(700, 460, 88, 80);
-    this.terrainGraphics.lineStyle(2, 0xff5b7f, 0.95);
-    this.terrainGraphics.lineBetween(704, 462, 786, 462);
-    this.terrainGraphics.fillStyle(0xff5b7f, 0.9);
-    this.terrainGraphics.fillCircle(744, 494, 10);
-    this.terrainGraphics.fillRect(739, 501, 10, 18);
-    this.terrainGraphics.lineStyle(2, 0xff5b7f, 0.8);
-    this.terrainGraphics.lineBetween(730, 509, 758, 509);
+    const hazards = this.level.hazards ?? [];
+    for (const hazard of hazards) {
+      const isLava = hazard.kind === 'lava';
+      const surface = isLava ? 0xff5b3a : 0x4ab6ff;
+      const deep = isLava ? 0x6e1410 : 0x123a63;
+      // Dark basin.
+      this.terrainGraphics.fillStyle(0x0a0d12, 0.85);
+      this.terrainGraphics.fillRect(hazard.x, hazard.y, hazard.width, hazard.height);
+      // Molten/liquid body.
+      this.terrainGraphics.fillStyle(deep, 0.9);
+      this.terrainGraphics.fillRect(hazard.x, hazard.y + 6, hazard.width, hazard.height - 6);
+      // Animated-looking surface ripples (offset by a slow time wave).
+      const t = this.sim.state.timeMs / 240;
+      this.terrainGraphics.fillStyle(surface, isLava ? 0.95 : 0.7);
+      const step = 12;
+      for (let x = hazard.x; x < hazard.x + hazard.width; x += step) {
+        const wave = Math.sin((x + t) * 0.18) * 2;
+        this.terrainGraphics.fillRect(x, hazard.y + 4 + wave, step - 2, 4);
+      }
+    }
   }
 
   private drawLemmings(): void {

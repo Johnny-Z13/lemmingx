@@ -113,7 +113,16 @@ export class GameSimulation {
   }
 
   private updateLemming(lemming: Lemming, deltaMs: number): void {
-    if (lemming.state === 'dead' || lemming.state === 'exited' || lemming.state === 'blocker') return;
+    if (lemming.state === 'dead' || lemming.state === 'exited') return;
+
+    // Hazards kill any lemming touching them, including blockers.
+    if (this.isInHazard(lemming)) {
+      lemming.state = 'dead';
+      this.state.lost += 1;
+      return;
+    }
+
+    if (lemming.state === 'blocker') return;
 
     if (this.isInsideExit(lemming)) {
       lemming.state = 'exited';
@@ -253,15 +262,46 @@ export class GameSimulation {
     return null;
   }
 
+  /**
+   * Snap a walking lemming vertically so its feet rest on the terrain surface.
+   * Bounded scans (never more than STEP_HEIGHT in either direction) keep this
+   * deterministic and cheap: a walker can step up a small lip or settle down a
+   * shallow drop, but anything larger is handled by the faller path instead.
+   */
   private findStandingY(x: number, y: number): number {
+    // If feet are buried in terrain, climb out (up to one step height).
     let candidateY = y;
-    while (candidateY > 0 && this.level.terrain.isSolidAt(x, candidateY + FOOT_Y - 1)) {
+    for (let i = 0; i < STEP_HEIGHT && candidateY > 0; i += 1) {
+      if (!this.level.terrain.isSolidAt(x, candidateY + FOOT_Y - 1)) break;
       candidateY -= 1;
     }
-    while (candidateY < this.level.height && !this.level.terrain.isSolidAt(x, candidateY + FOOT_Y + 1)) {
+    // If feet are in the air, settle down onto the surface (up to one step height).
+    for (let i = 0; i < STEP_HEIGHT && candidateY < this.level.height; i += 1) {
+      if (this.level.terrain.isSolidAt(x, candidateY + FOOT_Y + 1)) break;
       candidateY += 1;
     }
     return candidateY;
+  }
+
+  private isInHazard(lemming: Lemming): boolean {
+    const hazards = this.level.hazards;
+    if (!hazards || hazards.length === 0) return false;
+    // Approximate the body as a box from head to foot.
+    const left = lemming.x - BODY_HALF_WIDTH;
+    const right = lemming.x + BODY_HALF_WIDTH;
+    const top = lemming.y + HEAD_Y;
+    const bottom = lemming.y + FOOT_Y;
+    for (const hazard of hazards) {
+      if (
+        right >= hazard.x &&
+        left <= hazard.x + hazard.width &&
+        bottom >= hazard.y &&
+        top <= hazard.y + hazard.height
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private isInsideExit(lemming: Lemming): boolean {

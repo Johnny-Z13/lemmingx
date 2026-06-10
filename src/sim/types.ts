@@ -15,12 +15,29 @@ export interface ExitZone extends Point {
   height: number;
 }
 
+/**
+ * A hazard kills any lemming whose body overlaps it.
+ * - `lava`/`water`: classic instant-death zones (lava = burn, water = drown).
+ * - `pit` is handled separately by the off-bottom fall check, so it is not a zone.
+ */
+export type HazardKind = 'lava' | 'water';
+
+export interface HazardZone extends Point {
+  width: number;
+  height: number;
+  kind: HazardKind;
+}
+
 export interface LevelDefinition {
+  /** Optional human-readable name shown in the HUD / level select. */
+  name?: string;
   width: number;
   height: number;
   spawn: Point;
   exit: ExitZone;
   terrain: Terrain;
+  /** Simulated death zones. Empty/omitted means no hazards. */
+  hazards?: HazardZone[];
   spawnIntervalMs: number;
   totalLemmings: number;
   releaseRate: number;
