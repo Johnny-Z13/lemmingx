@@ -2,54 +2,43 @@ import { Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 3 — "Up and Over".
- * The exit sits high-right behind a tall wall. The crew must become climbers to
- * scale the wall, walk the top shelf, then float down to the exit ledge — the
- * drop is fatal without a floater. Water at the bottom drowns anyone who walks
- * off the shelf early or overshoots. Combines two traits + careful timing; the
- * hardest of the three.
+ * Level 3 — "Hold the Line".
+ * A wall and nothing to carve it with: plant a blocker right at the wall's
+ * face and arm it as a bomber — one brave volunteer blasts the way open for
+ * everyone else. Teaches the blocker + bomber combo (and that bombers cost
+ * lives). The blast circle only clears the wall when planted close, so
+ * placement matters.
  */
 export function createLevel3(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
 
-  // Bottom floor (start area) with water on the right half.
-  terrain.fillRect(0, 470, 520, 70);
-
-  // Tall wall the crew climbs, on the left.
-  terrain.fillRect(300, 150, 34, 320);
-
-  // Top shelf running right from the top of the wall.
-  terrain.fillRect(300, 150, 470, 20);
-
-  // Exit ledge, mid-right, below the shelf's right end.
-  terrain.fillRect(700, 380, 260, 22);
+  // Continuous floor; one wall barring the route — too tall to step over,
+  // thin enough that a single well-placed crater clears the body height.
+  terrain.fillRect(0, 430, 960, 110);
+  terrain.fillRect(560, 400, 8, 30);
 
   return {
-    name: 'Up and Over',
+    name: 'Hold the Line',
     width: 960,
     height: 540,
-    spawn: { x: 90, y: 446 },
-    exit: { x: 880, y: 336, width: 40, height: 44 },
-    hazards: [
-      // Water trough on the low floor, right of the start.
-      { x: 520, y: 476, width: 180, height: 64, kind: 'water' },
-    ],
+    spawn: { x: 80, y: 406 },
+    exit: { x: 880, y: 386, width: 40, height: 44 },
     spawnIntervalMs: 1000,
-    releaseRate: 45,
-    minReleaseRate: 30,
-    maxReleaseRate: 99,
     totalLemmings: 10,
+    releaseRate: 50,
+    minReleaseRate: 40,
+    maxReleaseRate: 99,
     targetSaved: 6,
     timeLimitMs: 240000,
     skills: {
-      climber: 6,
-      floater: 6,
-      bomber: 0,
-      blocker: 2,
-      builder: 2,
-      basher: 1,
+      climber: 0,
+      floater: 0,
+      bomber: 3,
+      blocker: 3,
+      builder: 0,
+      basher: 0,
       miner: 0,
-      digger: 1,
+      digger: 0,
     },
     terrain,
   };

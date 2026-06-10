@@ -2,31 +2,33 @@ import { Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 2 — "Drop & Dash".
- * The crew starts on a high ledge with a wall ahead. Bash through the wall, then
- * the only way down to the exit floor is a long drop that's fatal without a
- * floater — so float the crew down. Lava pools on the low floor punish anyone
- * who drifts past the exit. Introduces hazards + two skills working together.
+ * Level 2 — "Bridge the Gap".
+ * Two plateaus separated by a water-filled chasm. Builders must lay a two-stage
+ * bridge from the left edge; the gap is sized so the chained bridge's landing
+ * drop stays survivable. Teaches builders + the water hazard.
+ *
+ * Intended solution: builder at ~x385 heading right, second builder where the
+ * first bridge ends (~x430), crew walks the bridge across.
  */
 export function createLevel2(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
 
-  // High start ledge on the left.
-  terrain.fillRect(0, 200, 430, 22);
-  // Wall blocking the ledge near its right end.
-  terrain.fillRect(360, 120, 34, 102);
-  // Low exit floor spanning the bottom.
-  terrain.fillRect(0, 470, 960, 70);
+  // Left plateau and right plateau with a 90px chasm between.
+  terrain.fillRect(0, 430, 400, 110);
+  terrain.fillRect(490, 430, 470, 110);
+  // Raised landing shelf: the two-stage bridge ends high, and this catches it
+  // so the drop on the far side stays survivable.
+  terrain.fillRect(490, 400, 80, 30);
 
   return {
-    name: 'Drop & Dash',
+    name: 'Bridge the Gap',
     width: 960,
     height: 540,
-    spawn: { x: 70, y: 176 },
-    exit: { x: 470, y: 426, width: 40, height: 44 },
+    spawn: { x: 80, y: 406 },
+    exit: { x: 880, y: 386, width: 40, height: 44 },
     hazards: [
-      // Lava to the right of the exit on the low floor.
-      { x: 600, y: 478, width: 240, height: 62, kind: 'lava' },
+      // Water filling the chasm floor.
+      { x: 400, y: 490, width: 90, height: 50, kind: 'water' },
     ],
     spawnIntervalMs: 900,
     totalLemmings: 10,
@@ -36,14 +38,14 @@ export function createLevel2(): LevelDefinition {
     targetSaved: 6,
     timeLimitMs: 240000,
     skills: {
-      climber: 1,
-      floater: 8,
+      climber: 0,
+      floater: 0,
       bomber: 0,
-      blocker: 3,
-      builder: 2,
-      basher: 4,
+      blocker: 2,
+      builder: 4,
+      basher: 0,
       miner: 0,
-      digger: 2,
+      digger: 0,
     },
     terrain,
   };

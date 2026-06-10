@@ -1,0 +1,47 @@
+import { Terrain } from '../sim/Terrain';
+import type { LevelDefinition } from '../sim/types';
+
+/**
+ * Level 6 — "Trap House".
+ * Three killing machines guard the corridor: a crusher, a zapper, and a
+ * chomper, each with a long re-arm cycle. The crew is released at a high rate
+ * so it travels as one tight mob: each trap claims its first victim, then the
+ * rest stream past while the machine resets. Teaches traps + the release-rate
+ * dial. No skills required — only nerve.
+ */
+export function createLevel6(): LevelDefinition {
+  const terrain = new Terrain(1440, 540, 6);
+
+  terrain.fillRect(0, 430, 1440, 110);
+
+  return {
+    name: 'Trap House',
+    width: 1440,
+    height: 540,
+    spawn: { x: 80, y: 406 },
+    exit: { x: 1340, y: 386, width: 40, height: 44 },
+    traps: [
+      { x: 500, y: 402, width: 14, height: 28, kind: 'crusher', cycleMs: 5000 },
+      { x: 800, y: 402, width: 14, height: 28, kind: 'zapper', cycleMs: 5000 },
+      { x: 1100, y: 402, width: 14, height: 28, kind: 'chomper', cycleMs: 5000 },
+    ],
+    spawnIntervalMs: 600,
+    totalLemmings: 10,
+    releaseRate: 90,
+    minReleaseRate: 60,
+    maxReleaseRate: 99,
+    targetSaved: 6,
+    timeLimitMs: 240000,
+    skills: {
+      climber: 0,
+      floater: 0,
+      bomber: 0,
+      blocker: 2,
+      builder: 2,
+      basher: 0,
+      miner: 0,
+      digger: 0,
+    },
+    terrain,
+  };
+}

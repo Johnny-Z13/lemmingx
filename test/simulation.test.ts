@@ -304,12 +304,16 @@ describe('GameSimulation', () => {
     const second = sim.state.lemmings[1];
     sim.assignSkill(first.id, 'blocker');
 
+    // The second walker must get reversed by the blocker at some point
+    // (it may bounce off the level edge afterwards and face right again).
+    let reversed = false;
     for (let i = 0; i < 140; i += 1) {
       sim.step(16);
+      if (second.direction === -1) reversed = true;
     }
 
     expect(first.state).toBe('blocker');
-    expect(second.direction).toBe(-1);
+    expect(reversed).toBe(true);
   });
 
   it('diggers carve the terrain below themselves', () => {

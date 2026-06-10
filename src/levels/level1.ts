@@ -2,12 +2,11 @@ import { Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 1 — "Just Dig-ish".
+ * Level 1 — "First Steps".
  * The gentlest possible puzzle. The whole crew spawns onto one long, safe floor
  * and can almost walk straight to the exit — but a low wall blocks the way. A
  * single basher tunnels through it (or a builder ramps over, or a digger drops
- * under). Generous skills and a forgiving quota; no hazards yet — lava arrives
- * in level 2. Designed to be solvable with one well-placed skill.
+ * under). Generous skills and a forgiving quota; no hazards yet.
  */
 export function createLevel1(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
@@ -19,7 +18,7 @@ export function createLevel1(): LevelDefinition {
   terrain.fillRect(560, 360, 40, 70);
 
   return {
-    name: 'Just Dig-ish',
+    name: 'First Steps',
     width: 960,
     height: 540,
     spawn: { x: 90, y: 410 },
@@ -32,14 +31,14 @@ export function createLevel1(): LevelDefinition {
     targetSaved: 7,
     timeLimitMs: 180000,
     skills: {
-      climber: 2,
-      floater: 2,
+      climber: 0,
+      floater: 0,
       bomber: 1,
       blocker: 2,
-      builder: 4,
-      basher: 4,
+      builder: 2,
+      basher: 3,
       miner: 0,
-      digger: 4,
+      digger: 3,
     },
     terrain,
   };

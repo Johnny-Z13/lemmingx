@@ -495,6 +495,12 @@ export class GameSimulation {
     const distance = WALK_SPEED * (deltaMs / 1000) * lemming.direction;
     const nextX = lemming.x + distance;
 
+    // Bounce off the level edges instead of hugging them forever.
+    if (nextX <= BODY_HALF_WIDTH || nextX >= this.level.width - BODY_HALF_WIDTH) {
+      lemming.direction *= -1;
+      return;
+    }
+
     if (this.hitsWall(nextX, lemming.y, lemming.direction)) {
       const climbedY = this.findStepUp(lemming, nextX);
       if (climbedY === null) {
