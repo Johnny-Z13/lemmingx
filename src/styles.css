@@ -258,6 +258,23 @@ button:disabled {
   backdrop-filter: blur(8px);
 }
 
+/* ---- Audio cluster ---- */
+.hud__audio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud__audio-toggle.is-muted {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.hud__audio-slider {
+  width: 56px;
+  accent-color: #6ae1ff;
+}
+
 /* ---- Minimap (scrolling levels) ---- */
 .hud__minimap {
   position: absolute;

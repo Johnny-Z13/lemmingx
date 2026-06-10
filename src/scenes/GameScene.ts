@@ -10,6 +10,8 @@ import { drawLemming } from '../render/LemmingSprite';
 import { MATERIAL } from '../sim/Terrain';
 import { Particles } from '../render/Particles';
 import { Sfx } from '../audio/Sfx';
+import { Music } from '../audio/Music';
+import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/settings';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -33,6 +35,8 @@ export class GameScene extends Phaser.Scene {
   private pointerSeen = false;
   private readonly particles = new Particles();
   private readonly sfx = new Sfx();
+  private readonly music = new Music();
+  private audioSettings = loadAudioSettings();
 
   constructor() {
     super('GameScene');
@@ -40,9 +44,10 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.installKeyboard();
+    this.applyAudioSettings(this.audioSettings);
     // Audio contexts need a user gesture; unlock on the first pointer/key.
-    this.input.on('pointerdown', () => this.sfx.unlock());
-    this.input.keyboard?.on('keydown', () => this.sfx.unlock());
+    this.input.on('pointerdown', () => this.unlockAudio());
+    this.input.keyboard?.on('keydown', () => this.unlockAudio());
     // Click-to-assign is bound once here (reads the current sim each time), so
     // restarting a level never strips the handler. Left button only — the
     // right/middle buttons drag-pan the camera.
@@ -142,6 +147,7 @@ export class GameScene extends Phaser.Scene {
           break;
         case 'nuke':
           this.particles.burst(e.x, e.y, 16, { color: [0xff5b7f, 0xffd96b], speed: 0.18, lifeMs: 700, size: 3 });
+          this.music.duck(1500);
           break;
       }
     }
@@ -217,8 +223,27 @@ export class GameScene extends Phaser.Scene {
       onCycleSpeed: () => this.cycleSpeed(),
       onNext: () => this.nextLevel(),
       onMinimapJump: (fx, fy) => this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height),
-    });
+      onAudioChange: (settings) => {
+        this.applyAudioSettings(settings);
+        saveAudioSettings(settings);
+      },
+    }, this.audioSettings);
     this.hud.update(this.sim.state, this.hudView());
+
+    this.music.play(this.levelIndex);
+  }
+
+  private unlockAudio(): void {
+    this.sfx.unlock();
+    this.music.unlock();
+  }
+
+  private applyAudioSettings(settings: AudioSettings): void {
+    this.audioSettings = settings;
+    this.sfx.setMuted(settings.sfxMuted);
+    this.sfx.setVolume(settings.sfxVolume);
+    this.music.setMuted(settings.musicMuted);
+    this.music.setVolume(settings.musicVolume);
   }
 
   /** Advance to the next level (wraps to the first after the last). */

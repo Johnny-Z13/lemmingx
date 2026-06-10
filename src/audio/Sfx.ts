@@ -11,6 +11,7 @@ export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private muted = false;
+  private volume = 0.5;
   /** Per-kind throttle so rapid diggers/bashers don't machine-gun the speakers. */
   private lastPlayed: Partial<Record<SimEventKind, number>> = {};
 
@@ -22,7 +23,7 @@ export class Sfx {
       if (!Ctor) return;
       this.ctx = new Ctor();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.25;
+      this.master.gain.value = this.volume * 0.5;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
@@ -34,6 +35,12 @@ export class Sfx {
 
   isMuted(): boolean {
     return this.muted;
+  }
+
+  /** 0..1 master volume (0.5 matches the original fixed level). */
+  setVolume(volume: number): void {
+    this.volume = Math.min(1, Math.max(0, volume));
+    if (this.master) this.master.gain.value = this.volume * 0.5;
   }
 
   /** Map a sim event to a sound. Unknown kinds are silently ignored. */

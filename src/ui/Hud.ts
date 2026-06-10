@@ -2,6 +2,7 @@ import type { Lemming, SimulationState, Skill } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import { MATERIAL, type Terrain } from '../sim/Terrain';
+import type { AudioSettings } from '../audio/settings';
 
 export type HudEvents = {
   onSelectSkill: (skill: Skill) => void;
@@ -14,6 +15,8 @@ export type HudEvents = {
   onNext?: () => void;
   /** Center the camera at a level-space fraction (minimap click/drag). */
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
+  /** Music/SFX mute or volume changed via the HUD audio cluster. */
+  onAudioChange?: (settings: AudioSettings) => void;
 };
 
 /** Everything the minimap needs to draw one frame, in level coordinates. */
@@ -71,9 +74,11 @@ export class Hud {
   private readonly minimapTerrain = document.createElement('canvas');
   private minimapTerrainAt = 0;
   private readonly events: HudEvents;
+  private readonly audio: AudioSettings;
 
-  constructor(events: HudEvents) {
+  constructor(events: HudEvents, audio?: AudioSettings) {
     this.events = events;
+    this.audio = audio ?? { musicMuted: false, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
     this.root.className = 'hud';
 
@@ -130,7 +135,7 @@ export class Hud {
     const restartButton = this.makeButton('⟲ Restart', 'Restart (R)', events.onRestart);
     restartButton.className = 'hud__btn hud__restart';
 
-    controls.append(release, this.pauseButton, this.speedButton, this.nukeButton, restartButton);
+    controls.append(release, this.pauseButton, this.speedButton, this.nukeButton, restartButton, this.makeAudioCluster());
     bar.append(tools, controls);
     this.root.append(bar);
 
@@ -160,6 +165,39 @@ export class Hud {
     this.root.append(this.overlay);
 
     document.body.append(this.root);
+  }
+
+  /** Music + SFX mute toggles with volume sliders. */
+  private makeAudioCluster(): HTMLDivElement {
+    const cluster = document.createElement('div');
+    cluster.className = 'hud__audio';
+
+    const make = (label: string, mutedKey: 'musicMuted' | 'sfxMuted', volumeKey: 'musicVolume' | 'sfxVolume', title: string) => {
+      const button = this.makeButton(label, title, () => {
+        this.audio[mutedKey] = !this.audio[mutedKey];
+        button.classList.toggle('is-muted', this.audio[mutedKey]);
+        this.events.onAudioChange?.({ ...this.audio });
+      });
+      button.className = 'hud__btn hud__audio-toggle';
+      button.classList.toggle('is-muted', this.audio[mutedKey]);
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0';
+      slider.max = '100';
+      slider.value = String(Math.round(this.audio[volumeKey] * 100));
+      slider.title = `${title} volume`;
+      slider.className = 'hud__audio-slider';
+      slider.addEventListener('input', () => {
+        this.audio[volumeKey] = Number(slider.value) / 100;
+        this.events.onAudioChange?.({ ...this.audio });
+      });
+      cluster.append(button, slider);
+    };
+
+    make('♪', 'musicMuted', 'musicVolume', 'Music');
+    make('🔊', 'sfxMuted', 'sfxVolume', 'Sound effects');
+    return cluster;
   }
 
   private minimapJump(e: PointerEvent): void {
