@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { createDemoLevel } from '../levels/demoLevel';
+import { createLevelAt, LEVEL_COUNT } from '../levels';
 import { GameSimulation } from '../sim/GameSimulation';
 import type { Lemming, LevelDefinition, Skill } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
@@ -26,6 +26,7 @@ export class GameScene extends Phaser.Scene {
   private hoveredId: number | null = null;
   private paused = false;
   private speed = 1;
+  private levelIndex = 0;
   private readonly particles = new Particles();
   private readonly sfx = new Sfx();
 
@@ -105,8 +106,8 @@ export class GameScene extends Phaser.Scene {
       speed: this.speed,
       nukeReady: this.sim.state.outcome === 'running' && !this.sim.state.nuking,
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
-      levelName: this.level.name ?? 'LemmingX',
-      hasNextLevel: false,
+      levelName: `${this.levelIndex + 1}/${LEVEL_COUNT} · ${this.level.name ?? 'LemmingX'}`,
+      hasNextLevel: true,
     };
   }
 
@@ -127,7 +128,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startLevel(): void {
-    this.level = createDemoLevel();
+    this.level = createLevelAt(this.levelIndex);
     this.sim = new GameSimulation(this.level);
 
     this.children.removeAll(true);
@@ -151,8 +152,15 @@ export class GameScene extends Phaser.Scene {
       onRestart: () => this.startLevel(),
       onTogglePause: () => this.togglePause(),
       onCycleSpeed: () => this.cycleSpeed(),
+      onNext: () => this.nextLevel(),
     });
     this.hud.update(this.sim.state, this.hudView());
+  }
+
+  /** Advance to the next level (wraps to the first after the last). */
+  private nextLevel(): void {
+    this.levelIndex = (this.levelIndex + 1) % LEVEL_COUNT;
+    this.startLevel();
   }
 
   private selectSkill(skill: Skill): void {
