@@ -42,7 +42,7 @@ export class Sfx {
     const now = this.ctx.currentTime;
 
     // Throttle the noisy repeating actions.
-    const throttle: Partial<Record<SimEventKind, number>> = { dig: 0.09, bash: 0.07, build: 0.12, spawn: 0.05 };
+    const throttle: Partial<Record<SimEventKind, number>> = { dig: 0.09, bash: 0.07, build: 0.12, spawn: 0.05, clank: 0.15 };
     const minGap = throttle[kind];
     if (minGap !== undefined) {
       const last = this.lastPlayed[kind] ?? -Infinity;
@@ -68,6 +68,11 @@ export class Sfx {
         break;
       case 'build':
         this.blip(523, 0.05, 'triangle', 0.5);
+        break;
+      case 'clank':
+        // Metallic ping: a bright square hit with a fast ring-down.
+        this.blip(1320, 0.09, 'square', 0.8, 0, 880);
+        this.noise(0.04, 0.4, 3200);
         break;
       case 'splat':
         this.noise(0.14, 0.9, 700, true);

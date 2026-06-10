@@ -1,6 +1,7 @@
 import type { Lemming, LevelDefinition, SimEvent, SimEventKind, SimulationState, Skill } from './types';
 import type { SkillContext } from './skills/types';
 import { SKILL_DEFS, BOMBER_FUSE_MS } from './skills/registry';
+import { MATERIAL } from './Terrain';
 
 const WALK_SPEED = 26;
 const CLIMB_SPEED = 22;
@@ -235,25 +236,47 @@ export class GameSimulation {
     this.walk(lemming, deltaMs);
   }
 
-  /** Bomber detonation: carve a crater and kill the lemming. */
+  /** Bomber detonation: carve a crater (steel survives) and kill the lemming. */
   private explode(lemming: Lemming): void {
-    this.level.terrain.eraseCircle(lemming.x, lemming.y + 4, BOMBER_BLAST_RADIUS);
+    this.level.terrain.carveCircle(lemming.x, lemming.y + 4, BOMBER_BLAST_RADIUS);
     this.emit('explode', lemming.x, lemming.y);
     lemming.fuseMs = null;
     this.kill(lemming, 'silent');
   }
 
+  /** Stop a worker that hit uncarvable terrain: clank feedback, back to walking. */
+  private cancelOnUncarvable(lemming: Lemming, atX: number, atY: number): void {
+    this.emit('clank', atX, atY);
+    lemming.state = 'walker';
+    lemming.y = this.findStandingY(lemming.x, lemming.y);
+  }
+
+  /**
+   * Digger: bite-and-descend cycle. Each bite removes the slab directly under
+   * the feet and the digger settles into it, so it rides its own pit down —
+   * it never free-falls between bites. Steel underfoot ends the job; an empty
+   * pocket below means the shaft broke through into a cavity, so it falls.
+   */
   private updateDigger(lemming: Lemming, deltaMs: number): void {
     lemming.actionTimerMs += deltaMs;
-    this.level.terrain.eraseRect(lemming.x - 8, lemming.y + 10, 16, 16);
-    if (lemming.actionTimerMs >= 80) {
-      lemming.actionTimerMs = 0;
-      lemming.y += 4;
-      this.emit('dig', lemming.x, lemming.y + 12);
+    if (lemming.actionTimerMs < 80) return;
+    lemming.actionTimerMs = 0;
+
+    // Steel where the next bite would go stops the dig (standing on the slab).
+    if (this.level.terrain.materialAt(lemming.x, lemming.y + FOOT_Y + 2) === MATERIAL.steel) {
+      this.cancelOnUncarvable(lemming, lemming.x, lemming.y + FOOT_Y);
+      return;
     }
-    if (!this.level.terrain.isSolidAt(lemming.x, lemming.y + FOOT_Y + 3)) {
-      lemming.state = 'faller';
-      lemming.fallStartY = lemming.y;
+
+    this.level.terrain.carveRect(lemming.x - 8, lemming.y + FOOT_Y, 16, 5, 0);
+    // Descend with the bite and settle onto the new shaft floor (the carve can
+    // clear slightly deeper than 4px when it straddles a cell row).
+    lemming.y = this.findStandingY(lemming.x, lemming.y + 4);
+    this.emit('dig', lemming.x, lemming.y + FOOT_Y);
+
+    // Broke through into open air below -> fall.
+    if (!this.hasGroundBelow(lemming)) {
+      this.beginFall(lemming);
     }
   }
 
@@ -297,10 +320,15 @@ export class GameSimulation {
     lemming.actionTimerMs = 0;
 
     // Carve a slab in front of the body at head-to-shin height (leaving the
-    // floor intact), then step forward into the cleared space.
+    // floor intact), then step forward into the cleared space. Steel — or a
+    // one-way wall against our direction — refuses the bite and ends the job.
     const frontX = lemming.x + lemming.direction * BODY_HALF_WIDTH;
     const left = lemming.direction === 1 ? frontX : frontX - BASH_REACH;
-    this.level.terrain.eraseRect(left, lemming.y + HEAD_Y, BASH_REACH, FOOT_Y - HEAD_Y - 1);
+    const bite = this.level.terrain.carveRect(left, lemming.y + HEAD_Y, BASH_REACH, FOOT_Y - HEAD_Y - 1, lemming.direction);
+    if (bite.blocked && bite.carved === 0) {
+      this.cancelOnUncarvable(lemming, frontX + lemming.direction * 2, lemming.y);
+      return;
+    }
     this.emit('bash', frontX + lemming.direction * 2, lemming.y);
     lemming.x += lemming.direction * 3;
 

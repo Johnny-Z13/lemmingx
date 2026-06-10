@@ -97,6 +97,7 @@ export type SimEventKind =
   | 'dig'
   | 'bash'
   | 'build'
+  | 'clank' // carve attempt hit steel / a one-way wall the wrong way
   | 'nuke';
 
 export interface SimEvent {

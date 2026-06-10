@@ -7,6 +7,7 @@ import { SKILL_DEFS } from '../sim/skills/registry';
 import type { SimEvent } from '../sim/types';
 import { Hud } from '../ui/Hud';
 import { drawLemming } from '../render/LemmingSprite';
+import { MATERIAL } from '../sim/Terrain';
 import { Particles } from '../render/Particles';
 import { Sfx } from '../audio/Sfx';
 
@@ -85,6 +86,9 @@ export class GameScene extends Phaser.Scene {
           break;
         case 'drown':
           this.particles.burst(e.x, e.y, 8, { color: [0x4ab6ff, 0xffffff], speed: 0.09, lifeMs: 500, size: 2, upward: true });
+          break;
+        case 'clank':
+          this.particles.burst(e.x, e.y, 6, { color: [0xffffff, 0xffd96b, 0x9aa6c2], speed: 0.14, lifeMs: 320, size: 1.5 });
           break;
         case 'explode':
           this.particles.burst(e.x, e.y, 24, { color: [0xff7a3a, 0xffd96b, 0x5e6575, 0xff5b7f], speed: 0.22, lifeMs: 800, size: 3 });
@@ -261,11 +265,35 @@ export class GameScene extends Phaser.Scene {
     // Shade by depth (fraction of level height) so terrain reads with a sense
     // of "lower = deeper/darker" on any level layout, not just level 1.
     const h = this.level.height;
-    this.level.terrain.forEachSolidCell((x, y, width, height) => {
+    this.level.terrain.forEachSolidCell((x, y, width, height, material) => {
+      if (material === MATERIAL.steel) {
+        // Riveted gray plate, clearly "not diggable".
+        this.terrainGraphics.fillStyle(0x77819a, 1);
+        this.terrainGraphics.fillRect(x, y, width, height);
+        this.terrainGraphics.fillStyle(0x59617a, 1);
+        this.terrainGraphics.fillRect(x, y + height - 1, width, 1);
+        if ((Math.floor(x / width) + Math.floor(y / height)) % 3 === 0) {
+          this.terrainGraphics.fillStyle(0x9aa6c2, 1);
+          this.terrainGraphics.fillRect(x + 1, y + 1, 1, 1);
+        }
+        return;
+      }
       const depth = y / h;
       const shade = depth > 0.85 ? 0x1f5f55 : depth > 0.72 ? 0x297567 : 0x4d9674;
       this.terrainGraphics.fillStyle(shade, 1);
       this.terrainGraphics.fillRect(x, y, width, height);
+      if (material === MATERIAL.oneWayLeft || material === MATERIAL.oneWayRight) {
+        // Chevron tint marking the only carve direction.
+        const dir = material === MATERIAL.oneWayRight ? 1 : -1;
+        const cx = x + width / 2;
+        const cy = y + height / 2;
+        this.terrainGraphics.fillStyle(0xffd96b, 0.55);
+        this.terrainGraphics.fillTriangle(
+          cx - dir * (width / 4), y + 1,
+          cx - dir * (width / 4), y + height - 1,
+          cx + dir * (width / 3), cy,
+        );
+      }
     });
   }
 

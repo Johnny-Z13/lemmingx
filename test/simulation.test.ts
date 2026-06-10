@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../src/sim/GameSimulation';
-import { Terrain } from '../src/sim/Terrain';
+import { MATERIAL, Terrain } from '../src/sim/Terrain';
 import type { LevelDefinition } from '../src/sim/types';
 
 function makeFlatLevel(overrides: Partial<LevelDefinition> = {}): LevelDefinition {
@@ -42,6 +42,156 @@ describe('Terrain', () => {
 
     expect(terrain.solidCellCount()).toBeLessThan(before);
     expect(terrain.isSolidAt(40, 44)).toBe(false);
+  });
+});
+
+describe('Terrain materials', () => {
+  it('steel is solid but never carved', () => {
+    const terrain = new Terrain(80, 80, 4);
+    terrain.fillRect(0, 40, 80, 8, MATERIAL.steel);
+    expect(terrain.isSolidAt(40, 44)).toBe(true);
+
+    const result = terrain.carveRect(0, 40, 80, 8, 0);
+
+    expect(result.carved).toBe(0);
+    expect(result.blocked).toBe(true);
+    expect(terrain.isSolidAt(40, 44)).toBe(true);
+  });
+
+  it('one-way walls carve only in their arrow direction', () => {
+    const terrain = new Terrain(80, 80, 4);
+    terrain.fillRect(40, 40, 8, 8, MATERIAL.oneWayRight);
+
+    const wrongWay = terrain.carveRect(40, 40, 8, 8, -1);
+    expect(wrongWay.carved).toBe(0);
+    expect(wrongWay.blocked).toBe(true);
+    expect(terrain.isSolidAt(42, 42)).toBe(true);
+
+    const rightWay = terrain.carveRect(40, 40, 8, 8, 1);
+    expect(rightWay.carved).toBeGreaterThan(0);
+    expect(terrain.isSolidAt(42, 42)).toBe(false);
+  });
+
+  it('a digger stops on steel with a clank and the steel survives', () => {
+    const terrain = new Terrain(120, 160, 4);
+    terrain.fillRect(0, 72, 120, 16); // dirt layer
+    terrain.fillRect(0, 88, 120, 16, MATERIAL.steel); // steel slab beneath
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 120,
+        height: 160,
+        spawn: { x: 32, y: 56 },
+        exit: { x: 100, y: 150, width: 16, height: 24 }, // unreachable
+        terrain,
+      }),
+    );
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    sim.assignSkill(lemming.id, 'digger');
+
+    const kinds: string[] = [];
+    for (let i = 0; i < 300; i += 1) {
+      sim.step(16);
+      kinds.push(...sim.drainEvents().map((e) => e.kind));
+    }
+
+    expect(terrain.isSolidAt(32, 76)).toBe(false); // dirt was dug
+    expect(kinds).toContain('clank');
+    expect(lemming.state).not.toBe('digger');
+    expect(terrain.isSolidAt(32, 92)).toBe(true); // steel intact
+  });
+
+  it('a basher stops at a steel wall with a clank', () => {
+    const terrain = new Terrain(200, 120, 4);
+    terrain.fillRect(0, 88, 200, 32); // floor
+    terrain.fillRect(80, 56, 16, 32, MATERIAL.steel); // steel wall
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 200,
+        spawn: { x: 40, y: 72 },
+        exit: { x: 180, y: 72, width: 16, height: 24 },
+        terrain,
+      }),
+    );
+
+    let assigned = false;
+    const kinds: string[] = [];
+    for (let i = 0; i < 300; i += 1) {
+      sim.step(16);
+      kinds.push(...sim.drainEvents().map((e) => e.kind));
+      const l = sim.state.lemmings[0];
+      if (l && !assigned && l.state === 'walker' && l.direction === 1 && l.x > 64) {
+        assigned = sim.assignSkill(l.id, 'basher');
+      }
+    }
+
+    expect(assigned).toBe(true);
+    expect(kinds).toContain('clank');
+    expect(terrain.isSolidAt(88, 72)).toBe(true); // wall intact
+    expect(sim.state.lemmings[0].state).not.toBe('basher');
+  });
+
+  it('a basher breaches a one-way wall only along its arrow', () => {
+    const makeWallLevel = (material: number) => {
+      const terrain = new Terrain(200, 120, 4);
+      terrain.fillRect(0, 88, 200, 32);
+      terrain.fillRect(80, 56, 16, 32, material as 3 | 4);
+      return makeFlatLevel({
+        width: 200,
+        spawn: { x: 40, y: 72 },
+        exit: { x: 180, y: 72, width: 16, height: 24 },
+        terrain,
+      });
+    };
+
+    const runBash = (level: LevelDefinition) => {
+      const sim = new GameSimulation(level);
+      let assigned = false;
+      for (let i = 0; i < 600; i += 1) {
+        sim.step(16);
+        const l = sim.state.lemmings[0];
+        if (l && !assigned && l.state === 'walker' && l.direction === 1 && l.x > 64) {
+          assigned = sim.assignSkill(l.id, 'basher');
+        }
+      }
+      return { sim, assigned };
+    };
+
+    // Arrow pointing right: a rightward basher chews through and exits.
+    const withArrow = runBash(makeWallLevel(MATERIAL.oneWayRight));
+    expect(withArrow.assigned).toBe(true);
+    expect(withArrow.sim.level.terrain.isSolidAt(88, 72)).toBe(false);
+
+    // Arrow pointing left: the same approach is blocked like steel.
+    const againstArrow = runBash(makeWallLevel(MATERIAL.oneWayLeft));
+    expect(againstArrow.assigned).toBe(true);
+    expect(againstArrow.sim.level.terrain.isSolidAt(88, 72)).toBe(true);
+  });
+
+  it('a bomber crater erases dirt but leaves steel intact', () => {
+    const terrain = new Terrain(120, 160, 4);
+    terrain.fillRect(0, 72, 120, 16); // dirt floor
+    terrain.fillRect(0, 88, 120, 16, MATERIAL.steel); // steel slab beneath
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 120,
+        height: 160,
+        spawn: { x: 60, y: 56 },
+        exit: { x: 5, y: 150, width: 1, height: 1 }, // unreachable
+        terrain,
+      }),
+    );
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    const before = terrain.solidCellCount();
+    sim.assignSkill(lemming.id, 'bomber');
+    for (let i = 0; i < 400; i += 1) sim.step(16);
+
+    expect(lemming.state).toBe('dead');
+    expect(terrain.solidCellCount()).toBeLessThan(before); // dirt crater carved
+    for (let x = 2; x < 120; x += 4) {
+      expect(terrain.isSolidAt(x, 92)).toBe(true); // entire steel row intact
+    }
   });
 });
 
