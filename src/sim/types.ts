@@ -78,6 +78,8 @@ export interface LevelDefinition {
   maxReleaseRate: number;
   targetSaved: number;
   skills: SkillInventory;
+  /** Optional level time limit in ms. Omit/0 for no limit. */
+  timeLimitMs?: number;
 }
 
 export interface Lemming {
@@ -115,6 +117,8 @@ export interface SimulationState {
   maxReleaseRate: number;
   skills: SkillInventory;
   timeMs: number;
+  /** Time left in ms when the level has a limit, else null (untimed). */
+  timeRemainingMs: number | null;
   selectedSkill: Skill;
   outcome: 'running' | 'won' | 'lost';
   /** True once the nuke (mass self-destruct) has been triggered. */

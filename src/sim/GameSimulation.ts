@@ -37,6 +37,7 @@ export class GameSimulation {
       maxReleaseRate: level.maxReleaseRate,
       skills: { ...level.skills },
       timeMs: 0,
+      timeRemainingMs: level.timeLimitMs && level.timeLimitMs > 0 ? level.timeLimitMs : null,
       selectedSkill: 'digger',
       outcome: 'running',
       nuking: false,
@@ -47,6 +48,9 @@ export class GameSimulation {
     if (this.state.outcome !== 'running') return;
 
     this.state.timeMs += deltaMs;
+    if (this.state.timeRemainingMs !== null) {
+      this.state.timeRemainingMs = Math.max(0, this.state.timeRemainingMs - deltaMs);
+    }
     this.spawnTimerMs += deltaMs * (this.state.releaseRate / 50);
     while (this.state.spawned < this.level.totalLemmings && this.spawnTimerMs >= this.level.spawnIntervalMs) {
       this.spawnTimerMs -= this.level.spawnIntervalMs;
@@ -465,6 +469,12 @@ export class GameSimulation {
   private updateOutcome(): void {
     if (this.state.saved >= this.level.targetSaved) {
       this.state.outcome = 'won';
+      return;
+    }
+
+    // Running out of time ends the level immediately on whatever's been saved.
+    if (this.state.timeRemainingMs === 0) {
+      this.state.outcome = this.state.saved >= this.level.targetSaved ? 'won' : 'lost';
       return;
     }
 

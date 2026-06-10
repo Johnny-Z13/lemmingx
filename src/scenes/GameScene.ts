@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { createDemoLevel } from '../levels/demoLevel';
 import { GameSimulation } from '../sim/GameSimulation';
 import type { Lemming, LevelDefinition, Skill } from '../sim/types';
+import { ALL_SKILLS } from '../sim/types';
+import { SKILL_DEFS } from '../sim/skills/registry';
 import { Hud } from '../ui/Hud';
 import { drawLemming } from '../render/LemmingSprite';
 
@@ -19,21 +21,49 @@ export class GameScene extends Phaser.Scene {
   private fxGraphics!: Phaser.GameObjects.Graphics;
   private animClockMs = 0;
   private hoveredId: number | null = null;
+  private paused = false;
+  private speed = 1;
 
   constructor() {
     super('GameScene');
   }
 
   create(): void {
+    this.installKeyboard();
     this.startLevel();
   }
 
   update(_time: number, delta: number): void {
-    this.sim.step(Math.min(delta, 33));
+    const clamped = Math.min(delta, 33);
+    if (!this.paused) {
+      // Fast-forward runs extra sim sub-steps; rendering stays once per frame.
+      for (let i = 0; i < this.speed; i += 1) {
+        this.sim.step(clamped);
+      }
+    }
     this.animClockMs += delta;
     this.updateHover();
     this.drawWorld();
-    this.hud.update(this.sim.state, this.sim.state.outcome === 'running' && !this.sim.state.nuking);
+    this.hud.update(this.sim.state, this.hudView());
+  }
+
+  /** Snapshot of scene-side display state the HUD needs each frame. */
+  private hudView() {
+    const hovered = this.hoveredId
+      ? this.sim.state.lemmings.find((l) => l.id === this.hoveredId)
+      : null;
+    return {
+      paused: this.paused,
+      speed: this.speed,
+      nukeReady: this.sim.state.outcome === 'running' && !this.sim.state.nuking,
+      hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
+      levelName: this.level.name ?? 'LemmingX',
+      hasNextLevel: false,
+    };
+  }
+
+  private titleCase(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
   /** Current shared animation frame index. */
@@ -66,14 +96,19 @@ export class GameScene extends Phaser.Scene {
       this.assignSelectedSkill(pointer.worldX, pointer.worldY);
     });
 
+    this.paused = false;
+    this.speed = 1;
+
     this.hud?.destroy();
     this.hud = new Hud({
       onSelectSkill: (skill) => this.selectSkill(skill),
       onNuke: () => this.triggerNuke(),
       onReleaseRate: (delta) => this.sim.changeReleaseRate(delta),
       onRestart: () => this.startLevel(),
+      onTogglePause: () => this.togglePause(),
+      onCycleSpeed: () => this.cycleSpeed(),
     });
-    this.hud.update(this.sim.state, true);
+    this.hud.update(this.sim.state, this.hudView());
   }
 
   private selectSkill(skill: Skill): void {
@@ -83,6 +118,41 @@ export class GameScene extends Phaser.Scene {
   private triggerNuke(): void {
     if (this.sim.state.outcome !== 'running' || this.sim.state.nuking) return;
     this.sim.nukeAll();
+  }
+
+  private togglePause(): void {
+    if (this.sim.state.outcome !== 'running') return;
+    this.paused = !this.paused;
+  }
+
+  private cycleSpeed(): void {
+    // 1× → 2× → 3× → 1×
+    this.speed = this.speed >= 3 ? 1 : this.speed + 1;
+  }
+
+  /** Keyboard bindings: skill hotkeys, pause, speed, nuke, restart. */
+  private installKeyboard(): void {
+    const kb = this.input.keyboard;
+    if (!kb) return;
+    kb.on('keydown', (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      // Skill hotkeys (1–7) map to the registry's declared hotkeys.
+      const skill = ALL_SKILLS.find((s) => SKILL_DEFS[s].hotkey === key);
+      if (skill) {
+        this.selectSkill(skill);
+        return;
+      }
+      if (key === ' ' || key === 'spacebar') {
+        event.preventDefault();
+        this.togglePause();
+      } else if (key === 'f') {
+        this.cycleSpeed();
+      } else if (key === 'n') {
+        this.triggerNuke();
+      } else if (key === 'r') {
+        this.startLevel();
+      }
+    });
   }
 
   private assignSelectedSkill(worldX: number, worldY: number): void {

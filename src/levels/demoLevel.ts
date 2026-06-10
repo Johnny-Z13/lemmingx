@@ -31,6 +31,7 @@ export function createDemoLevel(): LevelDefinition {
     minReleaseRate: 50,
     maxReleaseRate: 99,
     targetSaved: 8,
+    timeLimitMs: 180000, // 3 minutes
     skills: {
       climber: 2,
       floater: 2,
