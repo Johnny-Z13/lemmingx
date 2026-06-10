@@ -13,6 +13,8 @@ export type HudEvents = {
   onCycleSpeed: () => void;
   /** Advance to the next level (only meaningful from the win overlay). */
   onNext?: () => void;
+  /** Return to the level-select screen. */
+  onLevelSelect?: () => void;
   /** Center the camera at a level-space fraction (minimap click/drag). */
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
   /** Music/SFX mute or volume changed via the HUD audio cluster. */
@@ -336,6 +338,11 @@ export class Hud {
     const retry = this.makeButton(won ? 'Replay' : 'Try Again', 'Restart', this.events.onRestart);
     retry.className = 'hud__btn';
     actions.append(retry);
+    if (this.events.onLevelSelect) {
+      const select = this.makeButton('Level Select', 'Back to level select (Esc)', this.events.onLevelSelect);
+      select.className = 'hud__btn';
+      actions.append(select);
+    }
   }
 
   destroy(): void {

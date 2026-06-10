@@ -258,6 +258,78 @@ button:disabled {
   backdrop-filter: blur(8px);
 }
 
+/* ---- Level select ---- */
+.select {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 9, 14, 0.78);
+  backdrop-filter: blur(6px);
+  z-index: 30;
+}
+
+.select__panel {
+  width: min(640px, calc(100vw - 32px));
+  padding: 30px 32px;
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  background: var(--panel-strong);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.select__title {
+  margin: 0 0 4px;
+  font-size: 2rem;
+  letter-spacing: 0.04em;
+}
+
+.select__sub {
+  margin: 0 0 18px;
+  opacity: 0.75;
+}
+
+.select__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.select__card {
+  display: grid;
+  gap: 4px;
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.select__card.is-completed {
+  border-color: rgba(94, 242, 161, 0.5);
+}
+
+.select__num {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.select__name {
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.select__best {
+  font-size: 0.78rem;
+  color: #78ffd6;
+}
+
+.select__best--new {
+  color: #ffd96b;
+}
+
+.select__lock {
+  opacity: 0.6;
+}
+
 /* ---- Audio cluster ---- */
 .hud__audio {
   display: flex;

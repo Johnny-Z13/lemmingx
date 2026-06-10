@@ -6,6 +6,8 @@ import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import type { SimEvent } from '../sim/types';
 import { Hud } from '../ui/Hud';
+import { LevelSelect } from '../ui/LevelSelect';
+import { Progress } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
 import { MATERIAL } from '../sim/Terrain';
 import { Particles } from '../render/Particles';
@@ -37,6 +39,10 @@ export class GameScene extends Phaser.Scene {
   private readonly sfx = new Sfx();
   private readonly music = new Music();
   private audioSettings = loadAudioSettings();
+  private readonly progress = new Progress(localStorage);
+  private levelSelect!: LevelSelect;
+  private selectOpen = false;
+  private winRecorded = false;
 
   constructor() {
     super('GameScene');
@@ -63,10 +69,35 @@ export class GameScene extends Phaser.Scene {
         cam.scrollY -= pointer.position.y - pointer.prevPosition.y;
       }
     });
-    this.startLevel();
+    this.levelSelect = new LevelSelect((index) => {
+      this.levelIndex = index;
+      this.selectOpen = false;
+      this.levelSelect.hide();
+      this.startLevel();
+    });
+    this.openLevelSelect();
+  }
+
+  /** Show the campaign screen (boot, Esc, or from the win/lose overlay). */
+  private openLevelSelect(): void {
+    this.selectOpen = true;
+    this.music.stop();
+    const cards = Array.from({ length: LEVEL_COUNT }, (_, index) => {
+      const def = createLevelAt(index);
+      const result = this.progress.get(index);
+      return {
+        index,
+        name: def.name ?? `Level ${index + 1}`,
+        unlocked: this.progress.isUnlocked(index),
+        completed: result.completed,
+        bestSavedPct: result.bestSavedPct,
+      };
+    });
+    this.levelSelect.show(cards);
   }
 
   update(_time: number, delta: number): void {
+    if (this.selectOpen || !this.sim) return; // frozen behind the level select
     const clamped = Math.min(delta, 33);
     if (!this.paused) {
       // Fast-forward runs extra sim sub-steps; rendering stays once per frame.
@@ -74,6 +105,11 @@ export class GameScene extends Phaser.Scene {
         this.sim.step(clamped);
         this.consumeEvents(this.sim.drainEvents());
       }
+    }
+    if (this.sim.state.outcome === 'won' && !this.winRecorded) {
+      this.winRecorded = true;
+      const pct = (this.sim.state.saved / Math.max(1, this.sim.state.totalLemmings)) * 100;
+      this.progress.recordWin(this.levelIndex, pct);
     }
     this.animClockMs += delta;
     this.particles.update(this.paused ? 0 : delta * this.speed);
@@ -166,7 +202,7 @@ export class GameScene extends Phaser.Scene {
       nukeReady: this.sim.state.outcome === 'running' && !this.sim.state.nuking,
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
       levelName: `${this.levelIndex + 1}/${LEVEL_COUNT} · ${this.level.name ?? 'LemmingX'}`,
-      hasNextLevel: true,
+      hasNextLevel: this.levelIndex < LEVEL_COUNT - 1,
       minimap: scrolls
         ? {
             terrain: this.level.terrain,
@@ -223,6 +259,7 @@ export class GameScene extends Phaser.Scene {
       onCycleSpeed: () => this.cycleSpeed(),
       onNext: () => this.nextLevel(),
       onMinimapJump: (fx, fy) => this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height),
+      onLevelSelect: () => this.openLevelSelect(),
       onAudioChange: (settings) => {
         this.applyAudioSettings(settings);
         saveAudioSettings(settings);
@@ -246,9 +283,13 @@ export class GameScene extends Phaser.Scene {
     this.music.setVolume(settings.musicVolume);
   }
 
-  /** Advance to the next level (wraps to the first after the last). */
+  /** Advance to the next level; from the finale, back to the level select. */
   private nextLevel(): void {
-    this.levelIndex = (this.levelIndex + 1) % LEVEL_COUNT;
+    if (this.levelIndex + 1 >= LEVEL_COUNT) {
+      this.openLevelSelect();
+      return;
+    }
+    this.levelIndex += 1;
     this.startLevel();
   }
 
@@ -277,8 +318,9 @@ export class GameScene extends Phaser.Scene {
     if (!kb) return;
     this.cursors = kb.createCursorKeys();
     kb.on('keydown', (event: KeyboardEvent) => {
+      if (this.selectOpen) return; // the level select owns the keyboard
       const key = event.key.toLowerCase();
-      // Skill hotkeys (1–7) map to the registry's declared hotkeys.
+      // Skill hotkeys (1–8) map to the registry's declared hotkeys.
       const skill = ALL_SKILLS.find((s) => SKILL_DEFS[s].hotkey === key);
       if (skill) {
         this.selectSkill(skill);
@@ -293,6 +335,8 @@ export class GameScene extends Phaser.Scene {
         this.triggerNuke();
       } else if (key === 'r') {
         this.startLevel();
+      } else if (key === 'escape' && !this.selectOpen) {
+        this.openLevelSelect();
       }
     });
   }
