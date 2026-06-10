@@ -14,6 +14,7 @@ const HEAD_Y = -8;
 const STEP_HEIGHT = 7;
 const BASH_INTERVAL_MS = 70; // time between basher bites
 const BASH_REACH = 7; // how far ahead a basher carves per bite
+const MINE_INTERVAL_MS = 90; // time between miner pick swings
 const BOMBER_BLAST_RADIUS = 22;
 
 export class GameSimulation {
@@ -214,6 +215,11 @@ export class GameSimulation {
       return;
     }
 
+    if (lemming.state === 'miner') {
+      this.updateMiner(lemming, deltaMs);
+      return;
+    }
+
     if (lemming.state === 'builder') {
       this.updateBuilder(lemming, deltaMs);
       return;
@@ -352,6 +358,46 @@ export class GameSimulation {
       }
     }
     return false;
+  }
+
+  /**
+   * Miner: swings a pick on a diagonal, carving a tunnel that descends in the
+   * facing direction. Steel (or a one-way wall against the swing) refuses the
+   * bite and ends the job with a clank; tunnelling out into open air becomes
+   * a fall, and running out of anything to mine resumes walking.
+   */
+  private updateMiner(lemming: Lemming, deltaMs: number): void {
+    lemming.actionTimerMs += deltaMs;
+    if (lemming.actionTimerMs < MINE_INTERVAL_MS) return;
+    lemming.actionTimerMs = 0;
+
+    // Swing: clear a body-height pocket spanning the lemming's own column and
+    // the ground ahead — including its column keeps the descending tunnel
+    // continuous (no ridge left underfoot between consecutive swings).
+    const frontX = lemming.x + lemming.direction * BODY_HALF_WIDTH;
+    const reach = 14;
+    const left = lemming.direction === 1 ? lemming.x - 2 : lemming.x + 2 - reach;
+    const swing = this.level.terrain.carveRect(left, lemming.y + HEAD_Y, reach, FOOT_Y - HEAD_Y + 2, lemming.direction);
+
+    if (swing.blocked && swing.carved === 0) {
+      this.cancelOnUncarvable(lemming, frontX + lemming.direction * 3, lemming.y + FOOT_Y);
+      return;
+    }
+    if (swing.carved === 0) {
+      // Nothing left to mine (e.g. swinging at the level edge) — walk on.
+      lemming.state = 'walker';
+      lemming.y = this.findStandingY(lemming.x, lemming.y);
+      return;
+    }
+
+    this.emit('dig', frontX + lemming.direction * 3, lemming.y + FOOT_Y);
+    lemming.x += lemming.direction * 3.4;
+    lemming.y = this.findStandingY(lemming.x, lemming.y + 2);
+
+    // The tunnel broke through into a cavity -> fall.
+    if (!this.hasGroundBelow(lemming)) {
+      this.beginFall(lemming);
+    }
   }
 
   /**

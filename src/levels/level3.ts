@@ -48,6 +48,7 @@ export function createLevel3(): LevelDefinition {
       blocker: 2,
       builder: 2,
       basher: 1,
+      miner: 0,
       digger: 1,
     },
     terrain,

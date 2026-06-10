@@ -116,6 +116,10 @@ export function drawLemming(
       drawBasherArms(g, ox, oy, dir, frame);
       drawWalkLegs(g, ox, oy, 0, false);
       break;
+    case 'miner':
+      drawMinerArms(g, ox, oy, dir, frame);
+      drawWalkLegs(g, ox, oy, 0, false);
+      break;
     case 'digger':
       drawDiggerArms(g, ox, oy, frame);
       break;
@@ -188,6 +192,14 @@ function drawBasherArms(g: Phaser.GameObjects.Graphics, ox: number, oy: number, 
   const ax = dir === 1 ? (jab ? 5 : 6) : jab ? 0 : -1;
   blk(g, ox, oy, SKIN, ax, 5, 2, 1);
   if (jab) blk(g, ox, oy, 0xffe9c2, dir === 1 ? 7 : -2, 5, 1, 1);
+}
+
+function drawMinerArms(g: Phaser.GameObjects.Graphics, ox: number, oy: number, dir: number, frame: number): void {
+  // Pick swings on a diagonal: raised behind the head, then buried low ahead.
+  const swing = Math.floor(frame / 1) % 2 === 0;
+  const ax = dir === 1 ? (swing ? 5 : 6) : swing ? 0 : -1;
+  blk(g, ox, oy, SKIN, ax, swing ? 3 : 7, 2, 1);
+  if (!swing) blk(g, ox, oy, 0xffe9c2, dir === 1 ? 7 : -2, 8, 1, 1);
 }
 
 function drawDiggerArms(g: Phaser.GameObjects.Graphics, ox: number, oy: number, frame: number): void {

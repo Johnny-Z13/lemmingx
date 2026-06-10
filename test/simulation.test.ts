@@ -25,6 +25,7 @@ function makeFlatLevel(overrides: Partial<LevelDefinition> = {}): LevelDefinitio
       blocker: 10,
       builder: 10,
       basher: 10,
+      miner: 10,
       digger: 10,
     },
     terrain,
@@ -168,6 +169,90 @@ describe('Terrain materials', () => {
     expect(againstArrow.sim.level.terrain.isSolidAt(88, 72)).toBe(true);
   });
 
+  it('a miner carves a diagonal tunnel down in its facing direction', () => {
+    const terrain = new Terrain(240, 240, 4);
+    terrain.fillRect(0, 88, 240, 152); // deep dirt mass
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 240,
+        height: 240,
+        spawn: { x: 60, y: 72 },
+        exit: { x: 8, y: 230, width: 1, height: 1 }, // unreachable
+        terrain,
+      }),
+    );
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    const startX = lemming.x;
+    const startY = lemming.y;
+    expect(sim.assignSkill(lemming.id, 'miner')).toBe(true);
+
+    for (let i = 0; i < 240; i += 1) sim.step(16);
+
+    expect(lemming.state).toBe('miner');
+    expect(lemming.y).toBeGreaterThan(startY + 30); // descended…
+    expect(lemming.x - startX).toBeGreaterThan(25); // …while advancing forward
+    // The tunnel mouth behind it is open.
+    expect(terrain.isSolidAt(startX + 8, startY + 10)).toBe(false);
+  });
+
+  it('a miner stops on steel with a clank', () => {
+    const terrain = new Terrain(240, 240, 4);
+    terrain.fillRect(0, 88, 240, 32); // dirt band
+    terrain.fillRect(0, 120, 240, 24, MATERIAL.steel); // steel base
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 240,
+        height: 240,
+        spawn: { x: 60, y: 72 },
+        exit: { x: 8, y: 230, width: 1, height: 1 },
+        terrain,
+      }),
+    );
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    sim.assignSkill(lemming.id, 'miner');
+
+    const kinds: string[] = [];
+    for (let i = 0; i < 400; i += 1) {
+      sim.step(16);
+      kinds.push(...sim.drainEvents().map((e) => e.kind));
+    }
+
+    expect(kinds).toContain('clank');
+    expect(lemming.state).not.toBe('miner');
+    // The steel base is untouched.
+    for (let x = 2; x < 240; x += 4) {
+      expect(terrain.isSolidAt(x, 130)).toBe(true);
+    }
+  });
+
+  it('a miner that breaks through into a cavity falls', () => {
+    const terrain = new Terrain(240, 400, 4);
+    terrain.fillRect(0, 88, 240, 32); // a floor slab with open air beneath
+    terrain.fillRect(0, 380, 240, 20); // ground far below
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 240,
+        height: 400,
+        spawn: { x: 60, y: 72 },
+        exit: { x: 8, y: 390, width: 1, height: 1 },
+        terrain,
+      }),
+    );
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    sim.assignSkill(lemming.id, 'miner');
+
+    let everFell = false;
+    for (let i = 0; i < 600; i += 1) {
+      sim.step(16);
+      if (lemming.state === 'faller') everFell = true;
+    }
+
+    expect(everFell).toBe(true);
+  });
+
   it('a bomber crater erases dirt but leaves steel intact', () => {
     const terrain = new Terrain(120, 160, 4);
     terrain.fillRect(0, 72, 120, 16); // dirt floor
@@ -260,6 +345,7 @@ describe('GameSimulation', () => {
           blocker: 0,
           builder: 0,
           basher: 0,
+          miner: 0,
           digger: 1,
         },
       }),

@@ -85,11 +85,23 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
       l.actionTimerMs = 0;
     },
   },
+  miner: {
+    id: 'miner',
+    label: 'Miner',
+    icon: 'M',
+    hotkey: '7',
+    // Swings a pick on a diagonal — needs to start grounded like a digger.
+    canAssign: (l) => isInterruptible(l),
+    onAssign: (l) => {
+      l.state = 'miner';
+      l.actionTimerMs = 0;
+    },
+  },
   digger: {
     id: 'digger',
     label: 'Digger',
     icon: 'D',
-    hotkey: '7',
+    hotkey: '8',
     // Diggers must start on solid ground to bite downward.
     canAssign: (l) => isInterruptible(l),
     onAssign: (l) => {

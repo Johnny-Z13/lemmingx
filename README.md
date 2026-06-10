@@ -23,7 +23,7 @@ npm run build   # typecheck + production build
 
 - Lemmings walk, fall, and turn at walls automatically. Get enough of them to the
   exit to meet the **save quota** before the **timer** expires.
-- Pick a skill (click its button or press its hotkey **1–7**), then click a
+- Pick a skill (click its button or press its hotkey **1–8**), then click a
   lemming to assign it. The hovered lemming is ringed and its current job shown.
 - **Space** pause · **F** fast-forward (1×/2×/3×) · **N** nuke · **R** restart.
 - Clear a level to unlock **Next Level**.
@@ -38,7 +38,11 @@ npm run build   # typecheck + production build
 | 4 | Blocker | Plants and reverses any walker that bumps into it. |
 | 5 | Builder | Lays a short rising bridge of bricks ahead. |
 | 6 | Basher  | Carves horizontally through a wall. |
-| 7 | Digger  | Carves straight down. |
+| 7 | Miner   | Carves a diagonal tunnel down in its facing direction. |
+| 8 | Digger  | Carves straight down. |
+
+Steel plate is indestructible; one-way walls (chevroned) only carve along
+their arrow. Hitting either stops the worker with a metallic *clank*.
 
 ## Architecture
 

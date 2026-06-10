@@ -2,7 +2,8 @@ import type { Terrain } from './Terrain';
 
 /**
  * The eight classic skills. Two kinds:
- * - State skills replace what the lemming is doing (blocker/builder/basher/digger/bomber).
+ * - State skills replace what the lemming is doing (blocker/builder/basher/
+ *   miner/digger/bomber).
  * - Trait skills are permanent modifiers layered on top of normal walking/falling
  *   (climber/floater): a lemming can be a "climber walker" or a "floater faller".
  */
@@ -13,8 +14,10 @@ export type Skill =
   | 'blocker'
   | 'builder'
   | 'basher'
+  | 'miner'
   | 'digger';
 
+/** Classic Lemmings panel order — drives HUD button order and hotkeys 1–8. */
 export const ALL_SKILLS: readonly Skill[] = [
   'climber',
   'floater',
@@ -22,6 +25,7 @@ export const ALL_SKILLS: readonly Skill[] = [
   'blocker',
   'builder',
   'basher',
+  'miner',
   'digger',
 ] as const;
 
@@ -34,6 +38,7 @@ export type LemmingState =
   | 'blocker'
   | 'builder'
   | 'basher'
+  | 'miner' // carving a diagonal tunnel downward
   | 'digger'
   | 'exited'
   | 'dead';
