@@ -240,8 +240,10 @@ export class GameScene extends Phaser.Scene {
       sky.lineBetween(x, 0, x - 180, this.level.height);
     }
 
+    // A soft moon in the upper sky, placed relative to the level so it never
+    // lands on top of terrain in the upper-right corner of a given layout.
     sky.fillStyle(0x6ae1ff, 0.12);
-    sky.fillCircle(760, 96, 74);
+    sky.fillCircle(this.level.width * 0.8, this.level.height * 0.16, 74);
   }
 
   private drawWorld(): void {
@@ -256,9 +258,12 @@ export class GameScene extends Phaser.Scene {
 
   private drawTerrain(): void {
     this.terrainGraphics.clear();
-    this.terrainGraphics.fillStyle(0x2c7c66, 1);
+    // Shade by depth (fraction of level height) so terrain reads with a sense
+    // of "lower = deeper/darker" on any level layout, not just level 1.
+    const h = this.level.height;
     this.level.terrain.forEachSolidCell((x, y, width, height) => {
-      const shade = y > 460 ? 0x1f5f55 : y > 390 ? 0x297567 : 0x4d9674;
+      const depth = y / h;
+      const shade = depth > 0.85 ? 0x1f5f55 : depth > 0.72 ? 0x297567 : 0x4d9674;
       this.terrainGraphics.fillStyle(shade, 1);
       this.terrainGraphics.fillRect(x, y, width, height);
     });
