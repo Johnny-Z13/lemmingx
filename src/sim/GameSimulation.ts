@@ -16,6 +16,8 @@ const BASH_INTERVAL_MS = 70; // time between basher bites
 const BASH_REACH = 7; // how far ahead a basher carves per bite
 const MINE_INTERVAL_MS = 90; // time between miner pick swings
 const BOMBER_BLAST_RADIUS = 22;
+const HATCH_OPEN_MS = 900; // default door-opening time before the first spawn
+const TRAP_CYCLE_MS = 1400; // default kill-animation length before a trap re-arms
 
 export class GameSimulation {
   readonly level: LevelDefinition;
@@ -55,6 +57,9 @@ export class GameSimulation {
       selectedSkill: 'digger',
       outcome: 'running',
       nuking: false,
+      traps: (level.traps ?? []).map((def) => ({ def, phase: 'idle' as const, timerMs: 0 })),
+      hatchOpenMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
+      hatchTotalMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
     };
   }
 
@@ -65,17 +70,51 @@ export class GameSimulation {
     if (this.state.timeRemainingMs !== null) {
       this.state.timeRemainingMs = Math.max(0, this.state.timeRemainingMs - deltaMs);
     }
-    this.spawnTimerMs += deltaMs * (this.state.releaseRate / 50);
-    while (this.state.spawned < this.level.totalLemmings && this.spawnTimerMs >= this.level.spawnIntervalMs) {
-      this.spawnTimerMs -= this.level.spawnIntervalMs;
-      this.spawnLemming();
+
+    // The hatch doors swing open first; lemmings only pour out once they have.
+    if (this.state.hatchOpenMs > 0) {
+      this.state.hatchOpenMs = Math.max(0, this.state.hatchOpenMs - deltaMs);
+    } else {
+      this.spawnTimerMs += deltaMs * (this.state.releaseRate / 50);
+      while (this.state.spawned < this.level.totalLemmings && this.spawnTimerMs >= this.level.spawnIntervalMs) {
+        this.spawnTimerMs -= this.level.spawnIntervalMs;
+        this.spawnLemming();
+      }
     }
 
     for (const lemming of this.state.lemmings) {
       this.updateLemming(lemming, deltaMs);
     }
+    this.updateTraps(deltaMs);
     this.resolveBlockers();
     this.updateOutcome();
+  }
+
+  /**
+   * Traps: an idle trap springs on the first live lemming inside its trigger
+   * box, killing it and playing its cycle; victims passing mid-cycle survive.
+   */
+  private updateTraps(deltaMs: number): void {
+    for (const trap of this.state.traps) {
+      if (trap.phase === 'killing') {
+        trap.timerMs -= deltaMs;
+        if (trap.timerMs <= 0) {
+          trap.phase = 'idle';
+          trap.timerMs = 0;
+        }
+        continue;
+      }
+      const { def } = trap;
+      const victim = this.state.lemmings.find(
+        (l) => l.state !== 'dead' && l.state !== 'exited' && this.bodyOverlapsBox(l, def.x, def.y, def.width, def.height),
+      );
+      if (victim) {
+        this.kill(victim, 'silent');
+        this.events.push({ kind: 'trap', x: def.x + def.width / 2, y: def.y + def.height / 2, trapKind: def.kind });
+        trap.phase = 'killing';
+        trap.timerMs = def.cycleMs ?? TRAP_CYCLE_MS;
+      }
+    }
   }
 
   /**
@@ -535,23 +574,21 @@ export class GameSimulation {
     return candidateY;
   }
 
+  /** Body (head-to-foot box) vs. an axis-aligned box. */
+  private bodyOverlapsBox(lemming: Lemming, x: number, y: number, width: number, height: number): boolean {
+    return (
+      lemming.x + BODY_HALF_WIDTH >= x &&
+      lemming.x - BODY_HALF_WIDTH <= x + width &&
+      lemming.y + FOOT_Y >= y &&
+      lemming.y + HEAD_Y <= y + height
+    );
+  }
+
   private isInHazard(lemming: Lemming): boolean {
     const hazards = this.level.hazards;
     if (!hazards || hazards.length === 0) return false;
-    // Approximate the body as a box from head to foot.
-    const left = lemming.x - BODY_HALF_WIDTH;
-    const right = lemming.x + BODY_HALF_WIDTH;
-    const top = lemming.y + HEAD_Y;
-    const bottom = lemming.y + FOOT_Y;
     for (const hazard of hazards) {
-      if (
-        right >= hazard.x &&
-        left <= hazard.x + hazard.width &&
-        bottom >= hazard.y &&
-        top <= hazard.y + hazard.height
-      ) {
-        return true;
-      }
+      if (this.bodyOverlapsBox(lemming, hazard.x, hazard.y, hazard.width, hazard.height)) return true;
     }
     return false;
   }

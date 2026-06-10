@@ -1,4 +1,4 @@
-import type { SimEventKind } from '../sim/types';
+import type { SimEventKind, TrapKind } from '../sim/types';
 
 /**
  * Tiny synthesized sound layer — every sound is generated from oscillators and
@@ -86,6 +86,30 @@ export class Sfx {
         break;
       case 'nuke':
         this.blip(140, 0.4, 'sawtooth', 0.8, 0, 60);
+        break;
+    }
+  }
+
+  /** Trap-specific kill sounds (the 'trap' event carries which machine fired). */
+  playTrap(kind: TrapKind | undefined): void {
+    if (this.muted || !this.ctx || !this.master) return;
+    switch (kind) {
+      case 'crusher':
+        // Heavy slam: deep thud + dull metal ring.
+        this.noise(0.18, 1.0, 320, true);
+        this.blip(70, 0.2, 'sine', 0.9);
+        break;
+      case 'zapper':
+        // Electric discharge: fast descending saw + crackle.
+        this.blip(1600, 0.16, 'sawtooth', 0.7, 0, 180);
+        this.noise(0.1, 0.5, 4200);
+        break;
+      case 'chomper':
+      default:
+        // Two quick snaps.
+        this.noise(0.05, 0.8, 1100);
+        this.noise(0.06, 0.8, 800);
+        this.blip(220, 0.07, 'square', 0.6, 0.05, 110);
         break;
     }
   }

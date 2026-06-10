@@ -66,6 +66,29 @@ export interface HazardZone extends Point {
   kind: HazardKind;
 }
 
+/**
+ * Animated single-victim traps (vs. hazards, which kill everything that
+ * touches them). A trap in `idle` kills the first lemming entering its trigger
+ * box, plays its kill animation for `cycleMs`, then re-arms — lemmings passing
+ * mid-cycle survive, exactly like the classic machines.
+ */
+export type TrapKind = 'crusher' | 'zapper' | 'chomper';
+
+export interface TrapDefinition extends Point {
+  width: number;
+  height: number;
+  kind: TrapKind;
+  /** Kill-animation duration before the trap re-arms. Default 1400ms. */
+  cycleMs?: number;
+}
+
+export interface TrapState {
+  def: TrapDefinition;
+  phase: 'idle' | 'killing';
+  /** Remaining ms of the current kill cycle (0 when idle). */
+  timerMs: number;
+}
+
 export interface LevelDefinition {
   /** Optional human-readable name shown in the HUD / level select. */
   name?: string;
@@ -76,6 +99,10 @@ export interface LevelDefinition {
   terrain: Terrain;
   /** Simulated death zones. Empty/omitted means no hazards. */
   hazards?: HazardZone[];
+  /** Animated single-victim traps. Empty/omitted means none. */
+  traps?: TrapDefinition[];
+  /** Hatch-opening duration before the first spawn. Omit for the default. */
+  hatchOpenMs?: number;
   spawnIntervalMs: number;
   totalLemmings: number;
   releaseRate: number;
@@ -103,12 +130,15 @@ export type SimEventKind =
   | 'bash'
   | 'build'
   | 'clank' // carve attempt hit steel / a one-way wall the wrong way
+  | 'trap' // a trap sprung on a victim (see trapKind)
   | 'nuke';
 
 export interface SimEvent {
   kind: SimEventKind;
   x: number;
   y: number;
+  /** Which machine sprung (only on 'trap' events). */
+  trapKind?: TrapKind;
 }
 
 export interface Lemming {
@@ -152,4 +182,10 @@ export interface SimulationState {
   outcome: 'running' | 'won' | 'lost';
   /** True once the nuke (mass self-destruct) has been triggered. */
   nuking: boolean;
+  /** Live trap states (parallel to level.traps). */
+  traps: TrapState[];
+  /** Remaining hatch-opening ms; spawning starts at 0. */
+  hatchOpenMs: number;
+  /** Total hatch-opening duration (for animation progress). */
+  hatchTotalMs: number;
 }

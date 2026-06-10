@@ -18,6 +18,7 @@ function makeFlatLevel(overrides: Partial<LevelDefinition> = {}): LevelDefinitio
     minReleaseRate: 1,
     maxReleaseRate: 99,
     targetSaved: 1,
+    hatchOpenMs: 0, // tests opt out of the hatch-opening delay
     skills: {
       climber: 10,
       floater: 10,
@@ -501,6 +502,50 @@ describe('GameSimulation', () => {
       all.push(...sim2.drainEvents().map((e) => e.kind));
     }
     expect(all).toContain('exit');
+  });
+
+  it('a trap kills the first lemming, then re-arms after its cycle', () => {
+    // Two lemmings, far apart: the first springs the trap and dies; the second
+    // arrives while the trap is mid-cycle and walks through unharmed.
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        totalLemmings: 2,
+        targetSaved: 1,
+        spawnIntervalMs: 1200,
+        traps: [{ x: 110, y: 60, width: 14, height: 28, kind: 'crusher', cycleMs: 4000 }],
+      }),
+    );
+    const kinds: { kind: string; trapKind?: string }[] = [];
+    for (let i = 0; i < 1200 && sim.state.outcome === 'running'; i += 1) {
+      sim.step(16);
+      kinds.push(...sim.drainEvents());
+    }
+
+    const trapEvents = kinds.filter((e) => e.kind === 'trap');
+    expect(trapEvents.length).toBe(1);
+    expect(trapEvents[0].trapKind).toBe('crusher');
+    expect(sim.state.lost).toBe(1);
+    expect(sim.state.saved).toBe(1);
+
+    // Same layout with a fast cycle: the trap re-arms and kills both.
+    const fast = new GameSimulation(
+      makeFlatLevel({
+        totalLemmings: 2,
+        targetSaved: 1,
+        spawnIntervalMs: 1200,
+        traps: [{ x: 110, y: 60, width: 14, height: 28, kind: 'zapper', cycleMs: 250 }],
+      }),
+    );
+    for (let i = 0; i < 1200 && fast.state.outcome === 'running'; i += 1) fast.step(16);
+    expect(fast.state.lost).toBe(2);
+  });
+
+  it('the hatch must finish opening before lemmings spawn', () => {
+    const sim = new GameSimulation(makeFlatLevel({ hatchOpenMs: 900 }));
+    for (let i = 0; i < 50; i += 1) sim.step(16); // 800ms
+    expect(sim.state.spawned).toBe(0);
+    for (let i = 0; i < 25; i += 1) sim.step(16); // 1200ms total
+    expect(sim.state.spawned).toBe(1);
   });
 
   it('nukeAll arms every live lemming with a fuse', () => {

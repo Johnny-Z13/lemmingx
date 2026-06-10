@@ -105,7 +105,8 @@ export class GameScene extends Phaser.Scene {
   /** Route sim events to sound + particle feedback. */
   private consumeEvents(events: SimEvent[]): void {
     for (const e of events) {
-      this.sfx.play(e.kind);
+      if (e.kind === 'trap') this.sfx.playTrap(e.trapKind);
+      else this.sfx.play(e.kind);
       switch (e.kind) {
         case 'dig':
           this.particles.burst(e.x, e.y, 4, { color: [0x4d9674, 0x297567], speed: 0.05, lifeMs: 420, size: 2 });
@@ -127,6 +128,14 @@ export class GameScene extends Phaser.Scene {
           break;
         case 'clank':
           this.particles.burst(e.x, e.y, 6, { color: [0xffffff, 0xffd96b, 0x9aa6c2], speed: 0.14, lifeMs: 320, size: 1.5 });
+          break;
+        case 'trap':
+          this.particles.burst(e.x, e.y, 14, {
+            color: e.trapKind === 'zapper' ? [0x8be9ff, 0xffffff, 0x6ae1ff] : [0xff5b7f, 0x5e6575, 0x2c333f],
+            speed: 0.13,
+            lifeMs: 550,
+            size: 2,
+          });
           break;
         case 'explode':
           this.particles.burst(e.x, e.y, 24, { color: [0xff7a3a, 0xffd96b, 0x5e6575, 0xff5b7f], speed: 0.22, lifeMs: 800, size: 3 });
@@ -307,9 +316,69 @@ export class GameScene extends Phaser.Scene {
     this.drawHatch();
     this.drawExit();
     this.drawHazards();
+    this.drawTraps();
     this.drawLemmings();
     this.fxGraphics.clear();
     this.particles.draw(this.fxGraphics);
+  }
+
+  private drawTraps(): void {
+    const g = this.terrainGraphics;
+    const t = this.sim.state.timeMs;
+    for (const trap of this.sim.state.traps) {
+      const { x, y, width, height, kind, cycleMs } = { cycleMs: 1400, ...trap.def };
+      // 0 → just sprung, 1 → re-armed; idle traps sit at 1.
+      const cycle = trap.phase === 'killing' ? 1 - trap.timerMs / cycleMs : 1;
+      if (kind === 'crusher') {
+        // Frame posts + a spiked block that slams down early in the cycle.
+        g.fillStyle(0x2c333f, 1);
+        g.fillRect(x - 3, y - 6, 3, height + 6);
+        g.fillRect(x + width, y - 6, 3, height + 6);
+        const drop = trap.phase === 'killing' ? (cycle < 0.25 ? cycle / 0.25 : 1 - (cycle - 0.25) / 0.75) : Math.sin(t / 500) * 0.04;
+        const blockY = y - 6 + drop * (height - 8);
+        g.fillStyle(0x8a93a6, 1);
+        g.fillRect(x - 1, blockY, width + 2, 10);
+        g.fillStyle(0x59617a, 1);
+        for (let sx = x; sx < x + width; sx += 5) {
+          g.fillTriangle(sx, blockY + 10, sx + 4, blockY + 10, sx + 2, blockY + 14);
+        }
+      } else if (kind === 'zapper') {
+        // Two tesla posts; an arc flickers across while killing.
+        g.fillStyle(0x2c333f, 1);
+        g.fillRect(x - 2, y, 4, height);
+        g.fillRect(x + width - 2, y, 4, height);
+        g.fillStyle(0x8be9ff, 0.9);
+        g.fillCircle(x, y + 2, 2.5);
+        g.fillCircle(x + width, y + 2, 2.5);
+        if (trap.phase === 'killing' || Math.floor(t / 700) % 4 === 0) {
+          const alpha = trap.phase === 'killing' ? 0.95 : 0.25;
+          g.lineStyle(1.5, 0x8be9ff, alpha);
+          let px = x;
+          let py = y + 3;
+          const segs = 5;
+          for (let s = 1; s <= segs; s += 1) {
+            const nx = x + (width / segs) * s;
+            const ny = y + 3 + (s === segs ? 0 : Math.sin(t / 30 + s * 7) * 4);
+            g.lineBetween(px, py, nx, ny);
+            px = nx;
+            py = ny;
+          }
+        }
+      } else {
+        // Chomper: a jaw of teeth rising from the floor, snapping while killing.
+        const open = trap.phase === 'killing' ? Math.abs(Math.sin(cycle * Math.PI * 6)) : 0.25 + Math.sin(t / 600) * 0.08;
+        const gape = open * (height * 0.6);
+        g.fillStyle(0x3a2c3f, 1);
+        g.fillRect(x, y + height - 6, width, 6);
+        g.fillStyle(0xd8e0ef, 1);
+        for (let tx = x; tx < x + width - 2; tx += 6) {
+          // Bottom teeth up, top teeth down with the jaw gap between.
+          g.fillTriangle(tx, y + height - 5, tx + 5, y + height - 5, tx + 2.5, y + height - 12 - 2);
+          const topY = y + height - 16 - gape;
+          g.fillTriangle(tx, topY, tx + 5, topY, tx + 2.5, topY + 7);
+        }
+      }
+    }
   }
 
   private drawTerrain(): void {
@@ -351,11 +420,13 @@ export class GameScene extends Phaser.Scene {
 
   private drawExit(): void {
     const exit = this.level.exit;
+    // Slow shimmer so the goal reads as alive.
+    const pulse = 0.75 + Math.sin(this.sim.state.timeMs / 420) * 0.2;
     this.terrainGraphics.fillStyle(0x111923, 0.92);
     this.terrainGraphics.fillRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
-    this.terrainGraphics.lineStyle(3, 0x78ffd6, 0.95);
+    this.terrainGraphics.lineStyle(3, 0x78ffd6, pulse);
     this.terrainGraphics.strokeRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
-    this.terrainGraphics.fillStyle(0x78ffd6, 0.22);
+    this.terrainGraphics.fillStyle(0x78ffd6, 0.12 + pulse * 0.14);
     this.terrainGraphics.fillRect(exit.x, exit.y, exit.width, exit.height);
     this.terrainGraphics.fillStyle(0xeff7ff, 0.92);
     this.terrainGraphics.fillTriangle(exit.x + 11, exit.y + 34, exit.x + 30, exit.y + 22, exit.x + 11, exit.y + 10);
@@ -364,6 +435,10 @@ export class GameScene extends Phaser.Scene {
   private drawHatch(): void {
     const hatchX = this.level.spawn.x - 28;
     const hatchY = this.level.spawn.y - 34;
+    const state = this.sim.state;
+    // 0 → shut, 1 → fully open.
+    const open = state.hatchTotalMs > 0 ? 1 - state.hatchOpenMs / state.hatchTotalMs : 1;
+
     this.terrainGraphics.fillStyle(0x101620, 0.96);
     this.terrainGraphics.fillRoundedRect(hatchX, hatchY, 58, 30, 5);
     this.terrainGraphics.lineStyle(3, 0xffd96b, 1);
@@ -372,8 +447,19 @@ export class GameScene extends Phaser.Scene {
     for (let x = hatchX + 10; x < hatchX + 52; x += 10) {
       this.terrainGraphics.lineBetween(x, hatchY + 4, x - 12, hatchY + 26);
     }
-    this.terrainGraphics.fillStyle(0xffd96b, 1);
-    this.terrainGraphics.fillTriangle(this.level.spawn.x - 8, hatchY + 30, this.level.spawn.x + 8, hatchY + 30, this.level.spawn.x, hatchY + 44);
+
+    // Trapdoor doors slide apart from the centre as the hatch opens.
+    const opening = 24;
+    const doorWidth = (opening / 2) * (1 - open);
+    if (doorWidth > 0.5) {
+      this.terrainGraphics.fillStyle(0xffd96b, 0.95);
+      this.terrainGraphics.fillRect(this.level.spawn.x - opening / 2, hatchY + 26, doorWidth, 5);
+      this.terrainGraphics.fillRect(this.level.spawn.x + opening / 2 - doorWidth, hatchY + 26, doorWidth, 5);
+    }
+    if (open >= 1) {
+      this.terrainGraphics.fillStyle(0xffd96b, 1);
+      this.terrainGraphics.fillTriangle(this.level.spawn.x - 8, hatchY + 30, this.level.spawn.x + 8, hatchY + 30, this.level.spawn.x, hatchY + 44);
+    }
   }
 
   private drawHazards(): void {
