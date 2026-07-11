@@ -34,8 +34,12 @@ npm run build   # typecheck + production build
 - Pick a skill (**1–8** or click), then click a lemming. Hover shows the current job.
 - **Hatch queue (Q)** — spend a skill charge to pre-order the next release
   (e.g. diggers first). **Backspace** pops the last queued skill.
-- **Landscape paint** — when a level has charges, use the water/sand/dirt/wood
-  buttons and drag to author terrain (stacked puzzles: dig → flood → float wood).
+- **Terrain toolbar** — when a level has charges (or always, in the Lab), the
+  second toolbar paints the living world: **Z** water · **X** sand · **C** dirt ·
+  **V** wood · **B** erase (Lab adds **M** bomb). Drag to pour; Esc returns to
+  skills (stacked puzzles: dig → flood → float wood).
+- **Emitters** — some levels have spouts that pour sand or water on their own
+  until their budget runs dry. Living terrain you don't control.
 - **Space** pause · **F** speed (1×/2×/3×) · **N** nuke · **R** restart · **Esc** select.
 - Pan big levels with **arrows**, edge scroll, or **right/middle-drag**; **minimap** jumps the camera.
 - **Traps** (crusher / zapper / chomper) kill one victim, then re-arm.
@@ -48,14 +52,14 @@ npm run build   # typecheck + production build
 |---|-------|------------|
 | 1 | First Steps | Bash (optional hatch-queue diggers) |
 | 2 | Bridge the Gap | Builders + living water + landscape water |
-| 3 | Hold the Line | Blocker + bomber (sand crater) |
+| 3 | Hold the Line | Blocker + bomber — or a poured sand ramp |
 | 4 | The Long March | Wide map / camera / multi-bash |
-| 5 | Steel Yourself | Dig under steel + sand debris |
-| 6 | Trap House | Traps |
+| 5 | Steel Yourself | Dig under steel + a sand spout duning the cap |
+| 6 | Trap House | Traps — sand charges can bury a machine |
 | 7 | Float the Timber | Dig → paint water → wood bridge |
-| 8 | Down and Out | Miner |
+| 8 | Down and Out | Miner, under a mountain sand pour |
 | 9 | The Gauntlet | Floater + climber |
-| 10 | Sandworld Symphony | Full toolkit finale |
+| 10 | Sandworld Symphony | Full toolkit + every terrain charge + a dune spout |
 
 ### Sand Lab
 
@@ -63,12 +67,9 @@ Always-unlocked Noita-lite sandbox from the level select:
 
 | Key | Tool |
 |:---:|------|
-| 1 | Paint sand |
-| 2 | Paint water |
-| 3 | Paint dirt |
-| 4 | Erase |
-| 5 | Bomb |
-| 6 | Assign skills |
+| Z/X/C/V/B | Paint water / sand / dirt / wood / erase |
+| M | Bomb |
+| 1–8 | Skills (click a lemming to assign) |
 
 Drag to paint. No quota — dig, flood, bomb, and shepherd the crew for fun.
 

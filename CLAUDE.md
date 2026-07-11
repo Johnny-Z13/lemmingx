@@ -85,14 +85,14 @@ some mid/late levels emit sand. Wood + landscape water is the Level 7 signature.
 |---|------|---------|
 | 1 | First Steps | Bash (+ optional hatch-queue diggers) |
 | 2 | Bridge the Gap | Builders + living water + landscape water charges |
-| 3 | Hold the Line | Blocker + bomber (sand crater) |
+| 3 | Hold the Line | Blocker + bomber (sand crater) — or sand-ramp charges |
 | 4 | The Long March | Wide level / camera / multi-bash |
-| 5 | Steel Yourself | Dig under steel + sand debris |
-| 6 | Trap House | Traps |
+| 5 | Steel Yourself | Dig under steel + sand debris + a cap-duning emitter |
+| 6 | Trap House | Traps — sand charges can bury one |
 | 7 | Float the Timber | Dig lip → paint water → wood bridge (builders = backup) |
-| 8 | Down and Out | Miner (tall level) |
+| 8 | Down and Out | Miner (tall level) + mountain sand emitter |
 | 9 | The Gauntlet | Floater + climber |
-| 10 | Sandworld Symphony | Full toolkit finale |
+| 10 | Sandworld Symphony | Full toolkit finale: all charges + dune emitter |
 
 Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 
@@ -101,7 +101,11 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 - `enqueueRelease(skill)` / `popReleaseQueue()` — hatch order puzzle (UI: **Q** / **Backspace**).
   Queued skills apply on spawn or once grounded (`pendingHatchSkill`).
 - `paintLandscape(x, y, r, kind)` — campaign charges in `level.landscape` /
-  `state.landscape` (`water|sand|dirt|wood|erase`). Lab paints freely.
+  `state.landscape` (`water|sand|dirt|wood|erase`). Lab paints freely. UI:
+  terrain toolbar, hotkeys **Z/X/C/V/B** (+ **M** bomb in the Lab).
+- `level.emitters` — deterministic material spouts (`EmitterDefinition`:
+  x/y/material/cellsPerSecond/budget), stepped between agents and the CA
+  settle. Live state in `state.emitters`; a blocked spout burns no budget.
 - Success % = `saved / totalLemmings` (HUD + end overlay). Quota is still
   `targetSaved` for win/lose.
 - Level factories return fresh mutable `Terrain` every start/restart.
