@@ -77,6 +77,7 @@ export class GameSimulation {
       outcome: 'running',
       nuking: false,
       traps: (level.traps ?? []).map((def) => ({ def, phase: 'idle' as const, timerMs: 0 })),
+      emitters: (level.emitters ?? []).map((def) => ({ def, budgetLeft: def.budget, accumulatorCells: 0 })),
       hatchOpenMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
       hatchTotalMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
       hatchQueue: [],
@@ -114,6 +115,7 @@ export class GameSimulation {
     }
     this.updateTraps(deltaMs);
     this.resolveBlockers();
+    this.stepEmitters(deltaMs);
 
     // Living terrain settles after agents carve / bomb.
     if (this.ca) {
@@ -185,6 +187,32 @@ export class GameSimulation {
         this.events.push({ kind: 'trap', x: def.x + def.width / 2, y: def.y + def.height / 2, trapKind: def.kind });
         trap.phase = 'killing';
         trap.timerMs = def.cycleMs ?? TRAP_CYCLE_MS;
+      }
+    }
+  }
+
+  /**
+   * Level-authored spouts pour material on a plain accumulator — fully
+   * deterministic, no RNG. An occupied spout cell blocks emission without
+   * burning budget; the accumulator is clamped so a long blockage doesn't
+   * burst-release when it clears.
+   */
+  private stepEmitters(deltaMs: number): void {
+    const terrain = this.level.terrain;
+    for (const emitter of this.state.emitters) {
+      if (emitter.budgetLeft <= 0) continue;
+      emitter.accumulatorCells += emitter.def.cellsPerSecond * (deltaMs / 1000);
+      const cellX = Math.floor(emitter.def.x / terrain.cellSize);
+      const cellY = Math.floor(emitter.def.y / terrain.cellSize);
+      while (emitter.accumulatorCells >= 1 && emitter.budgetLeft > 0) {
+        if (terrain.getCell(cellX, cellY) !== MATERIAL.empty) {
+          emitter.accumulatorCells = Math.min(emitter.accumulatorCells, 1);
+          break;
+        }
+        emitter.accumulatorCells -= 1;
+        terrain.setCell(cellX, cellY, emitter.def.material === 'sand' ? MATERIAL.sand : MATERIAL.water);
+        emitter.budgetLeft -= 1;
+        this.ca?.markWorldRect(emitter.def.x - 8, emitter.def.y - 8, 16, 16);
       }
     }
   }

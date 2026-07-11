@@ -90,6 +90,25 @@ export interface TrapState {
   timerMs: number;
 }
 
+/**
+ * A level-authored material spout: pours whole terrain cells at a fixed,
+ * deterministic rate (no RNG — the seeded CA scatters the pile as it settles).
+ */
+export interface EmitterDefinition extends Point {
+  material: 'sand' | 'water';
+  /** Whole cells emitted per second while the spout cell is empty. */
+  cellsPerSecond: number;
+  /** Total cells this emitter may produce; it goes quiet at 0. */
+  budget: number;
+}
+
+export interface EmitterState {
+  def: EmitterDefinition;
+  budgetLeft: number;
+  /** Fractional cells accrued toward the next emission. */
+  accumulatorCells: number;
+}
+
 export interface LevelDefinition {
   /** Optional human-readable name shown in the HUD / level select. */
   name?: string;
@@ -102,6 +121,8 @@ export interface LevelDefinition {
   hazards?: HazardZone[];
   /** Animated single-victim traps. Empty/omitted means none. */
   traps?: TrapDefinition[];
+  /** Material spouts (sand pours, springs). Empty/omitted means none. */
+  emitters?: EmitterDefinition[];
   /** Hatch-opening duration before the first spawn. Omit for the default. */
   hatchOpenMs?: number;
   spawnIntervalMs: number;
@@ -223,6 +244,8 @@ export interface SimulationState {
   nuking: boolean;
   /** Live trap states (parallel to level.traps). */
   traps: TrapState[];
+  /** Live emitter states (parallel to level.emitters). */
+  emitters: EmitterState[];
   /** Remaining hatch-opening ms; spawning starts at 0. */
   hatchOpenMs: number;
   /** Total hatch-opening duration (for animation progress). */
