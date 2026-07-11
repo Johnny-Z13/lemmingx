@@ -110,6 +110,18 @@ export function drawLemming(
   blk(g, ox, oy, BODY, bodyX, 4, bodyW, squash > 0.2 ? 3 : 4);
   blk(g, ox, oy, BODY_SHADE, bodyX, squash > 0.2 ? 6 : 7, bodyW, 1);
 
+  // --- Permanent trait badges: always visible, whatever the job ---
+  if (lemming.isSwimmer) {
+    blk(g, ox, oy, 0x2ee6c8, 1, 0, 4, 1); // teal swim-cap band through the hair
+  }
+  if (lemming.isClimber) {
+    blk(g, ox, oy, 0xffd24d, 0, 5, 1, 1); // yellow climbing gloves
+    blk(g, ox, oy, 0xffd24d, 5, 5, 1, 1);
+  }
+  if (lemming.isFloater) {
+    blk(g, ox, oy, PARACHUTE, dir === 1 ? 0 : 5, 4, 1, 2); // pink chute pack on the back
+  }
+
   // --- State-specific overlays + limbs ---
   switch (lemming.state) {
     case 'walker':

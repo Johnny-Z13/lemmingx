@@ -199,6 +199,17 @@ button:disabled {
   border-left: 1px solid var(--stroke);
 }
 
+.hud__bar-label {
+  align-self: center;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
 .hud__swatch {
   width: 16px;
   height: 9px;

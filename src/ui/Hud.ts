@@ -125,6 +125,7 @@ export class Hud {
 
     const tools = document.createElement('div');
     tools.className = 'hud__tools';
+    tools.innerHTML = '<span class="hud__bar-label">Crew</span>';
     for (const item of SKILLS) {
       const button = document.createElement('button');
       button.className = 'hud__tool';
@@ -151,6 +152,7 @@ export class Hud {
     // --- Terrain toolbar: paint the living world (campaign charges / Lab ∞) ---
     this.terrainBar = document.createElement('div');
     this.terrainBar.className = 'hud__tools hud__tools--terrain';
+    this.terrainBar.innerHTML = '<span class="hud__bar-label">Terrain</span>';
     for (const tool of TERRAIN_TOOLS) {
       if (tool.labOnly && !this.lab) continue;
       const button = document.createElement('button');
