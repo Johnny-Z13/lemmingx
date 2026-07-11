@@ -30,6 +30,7 @@ function makeLevel(terrain: Terrain, overrides: Partial<LevelDefinition> = {}): 
       basher: 0,
       miner: 0,
       digger: 0,
+      swimmer: 0,
     },
     terrain,
     ...overrides,
@@ -111,6 +112,7 @@ describe('sand CA', () => {
           basher: 0,
           miner: 0,
           digger: 0,
+          swimmer: 0,
         },
       }),
     );
@@ -128,7 +130,7 @@ describe('sand CA', () => {
     expect(sand).toBeGreaterThan(0);
   });
 
-  it('water cells drown a lemming', () => {
+  it('open water floats a lemming instead of drowning it', () => {
     const terrain = new Terrain(120, 80, 4);
     terrain.fillRect(0, 56, 120, 24);
     terrain.fillRect(40, 40, 40, 20, MATERIAL.water);
@@ -142,7 +144,7 @@ describe('sand CA', () => {
       }),
     );
     for (let i = 0; i < 400; i += 1) sim.step(16);
-    expect(sim.state.lost).toBe(1);
+    expect(sim.state.lost).toBe(0);
   });
 
   it('stability collapses unsupported dirt into sand', () => {
@@ -206,6 +208,7 @@ describe('hatch release queue', () => {
           basher: 0,
           miner: 0,
           digger: 2,
+          swimmer: 0,
         },
       }),
     );
@@ -233,6 +236,7 @@ describe('hatch release queue', () => {
           basher: 0,
           miner: 0,
           digger: 2,
+          swimmer: 0,
         },
       }),
     );

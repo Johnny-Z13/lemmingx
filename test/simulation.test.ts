@@ -28,6 +28,7 @@ function makeFlatLevel(overrides: Partial<LevelDefinition> = {}): LevelDefinitio
       basher: 10,
       miner: 10,
       digger: 10,
+      swimmer: 10,
     },
     terrain,
     ...overrides,
@@ -359,6 +360,7 @@ describe('GameSimulation', () => {
           basher: 0,
           miner: 0,
           digger: 1,
+          swimmer: 0,
         },
       }),
     );

@@ -41,6 +41,7 @@ export function createLevel3(): LevelDefinition {
       basher: 0,
       miner: 0,
       digger: 0,
+      swimmer: 0,
     },
     terrain,
   };

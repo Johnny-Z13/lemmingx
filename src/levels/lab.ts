@@ -50,6 +50,7 @@ export function createLabLevel(seed = (Date.now() & 0xffff) || 1): LevelDefiniti
       basher: 20,
       miner: 10,
       digger: 20,
+      swimmer: 10,
     },
     terrain,
   };

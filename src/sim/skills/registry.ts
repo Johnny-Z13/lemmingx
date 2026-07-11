@@ -114,6 +114,18 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
       l.actionTimerMs = 0;
     },
   },
+  swimmer: {
+    id: 'swimmer',
+    label: 'Swimmer',
+    icon: 'S',
+    hotkey: '9',
+    // Trait — assignable even to a lemming already treading water (the rescue).
+    canAssign: (l) => !l.isSwimmer && l.state !== 'blocker',
+    onAssign: (l) => {
+      l.isSwimmer = true;
+      if (l.state === 'treading') l.state = 'swimming';
+    },
+  },
 };
 
 export { isGrounded };

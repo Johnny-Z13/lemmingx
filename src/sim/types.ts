@@ -15,9 +15,10 @@ export type Skill =
   | 'builder'
   | 'basher'
   | 'miner'
-  | 'digger';
+  | 'digger'
+  | 'swimmer';
 
-/** Classic Lemmings panel order — drives HUD button order and hotkeys 1–8. */
+/** Classic Lemmings panel order — drives HUD button order and hotkeys 1–9. */
 export const ALL_SKILLS: readonly Skill[] = [
   'climber',
   'floater',
@@ -27,6 +28,7 @@ export const ALL_SKILLS: readonly Skill[] = [
   'basher',
   'miner',
   'digger',
+  'swimmer',
 ] as const;
 
 export type SkillInventory = Record<Skill, number>;
@@ -40,6 +42,8 @@ export type LemmingState =
   | 'basher'
   | 'miner' // carving a diagonal tunnel downward
   | 'digger'
+  | 'treading' // bobbing at a deep-water surface (safe but stuck)
+  | 'swimming' // swimmer trait crossing a water surface
   | 'shrug' // classic builder "oh no" after finishing / hitting a wall
   | 'exited'
   | 'dead';
@@ -175,7 +179,8 @@ export type SimEventKind =
   | 'assign'
   | 'exit'
   | 'splat' // fatal fall / off-bottom
-  | 'drown' // died in a hazard
+  | 'drown' // sealed under water/sand past the grace, or a hazard zone
+  | 'splash' // entered deep water (safe — water breaks falls)
   | 'explode'
   | 'dig'
   | 'bash'
@@ -208,6 +213,13 @@ export interface Lemming {
   isClimber: boolean;
   /** Permanent trait: opens a parachute, never dies from fall distance. */
   isFloater: boolean;
+  /** Permanent trait: crosses deep water instead of treading in place. */
+  isSwimmer: boolean;
+  /**
+   * How long the head has been sealed (water or solid, no air). Past the
+   * grace window the lemming drowns/suffocates — the only water/sand death.
+   */
+  sealedMs: number;
   /**
    * Bomber fuse in ms once armed, else null. Counts down regardless of state;
    * at zero the lemming explodes, carving terrain and dying.

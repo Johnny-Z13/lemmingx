@@ -8,6 +8,12 @@ import { ChunkStepper } from './ca/ChunkStepper';
 const WALK_SPEED = 26;
 const CLIMB_SPEED = 22;
 const FLOAT_FALL_SPEED = 40; // terminal velocity while parachuting
+const SWIM_SPEED = 20;
+const SINK_FALL_SPEED = 30; // armed bombers drop through water at this speed
+const BUOYANCY_SPEED = 60; // how fast a body settles onto its float line
+const SEALED_DEATH_MS = 1500; // grace before a sealed head drowns/suffocates
+const CHEST_Y = 2; // submersion probe: water here means "deep" (chest-high)
+const FLOAT_LINE = 2; // floating pins the waterline to lemming.y + FLOAT_LINE
 const GRAVITY = 360;
 const MAX_SAFE_FALL = 38;
 const BODY_HALF_WIDTH = 4;
@@ -291,6 +297,8 @@ export class GameSimulation {
       fallStartY: this.level.spawn.y,
       isClimber: false,
       isFloater: false,
+      isSwimmer: false,
+      sealedMs: 0,
       fuseMs: null,
       squashMs: 0,
       pendingHatchSkill: null,
@@ -409,18 +417,47 @@ export class GameSimulation {
       }
     }
 
-    // Hazards kill any lemming touching them, including blockers.
+    // Hazard zones (lava etc.) kill any lemming touching them, including blockers.
     if (this.isInHazard(lemming)) {
       this.kill(lemming, 'drown');
       return;
     }
 
-    if (lemming.state === 'blocker') return;
+    // Universal burial rule — the only water/sand death.
+    if (this.updateSealed(lemming, deltaMs)) return;
+
+    if (lemming.state === 'blocker') {
+      if (!this.waterAtChest(lemming)) return;
+      this.enterWater(lemming); // deep water washes a blocker off its post
+    }
 
     if (this.isInsideExit(lemming)) {
       lemming.state = 'exited';
       this.state.saved += 1;
       this.emit('exit', lemming.x, lemming.y);
+      return;
+    }
+
+    if (lemming.state === 'treading') {
+      this.updateTreading(lemming, deltaMs);
+      return;
+    }
+
+    if (lemming.state === 'swimming') {
+      this.updateSwimming(lemming, deltaMs);
+      return;
+    }
+
+    // Chest-deep water pulls any other job off its feet. Fallers splash via
+    // their own path, climbers are climbing OUT of it, and armed lemmings
+    // sink with the fuse burning (see the matrix).
+    if (
+      lemming.state !== 'faller' &&
+      lemming.state !== 'climber' &&
+      lemming.fuseMs === null &&
+      this.waterAtChest(lemming)
+    ) {
+      this.enterWater(lemming);
       return;
     }
 
@@ -676,8 +713,18 @@ export class GameSimulation {
   private updateFaller(lemming: Lemming, deltaMs: number): void {
     const dt = deltaMs / 1000;
     const floating = lemming.isFloater;
+    const inWater = this.waterAtChest(lemming);
 
-    if (floating) {
+    // Deep water catches the fall — splash in, never splat.
+    if (inWater && lemming.fuseMs === null) {
+      this.enterWater(lemming);
+      return;
+    }
+
+    if (inWater) {
+      // Armed: sinks through the water; the fuse keeps burning.
+      lemming.velocityY = Math.min(lemming.velocityY + GRAVITY * dt, SINK_FALL_SPEED);
+    } else if (floating) {
       // Parachute: capped descent speed, no fall damage on landing.
       lemming.velocityY = FLOAT_FALL_SPEED;
     } else {
@@ -687,7 +734,8 @@ export class GameSimulation {
 
     if (this.hasGroundBelow(lemming)) {
       const fallDistance = lemming.y - lemming.fallStartY;
-      if (!floating && fallDistance > MAX_SAFE_FALL) {
+      const feetInWater = this.level.terrain.isWaterAt(lemming.x, lemming.y + FOOT_Y - 2);
+      if (!floating && !inWater && !feetInWater && fallDistance > MAX_SAFE_FALL) {
         this.kill(lemming);
       } else {
         lemming.state = 'walker';
@@ -705,6 +753,179 @@ export class GameSimulation {
     }
   }
 
+  private waterAtChest(lemming: Lemming): boolean {
+    return this.level.terrain.isWaterAt(lemming.x, lemming.y + CHEST_Y);
+  }
+
+  /**
+   * Universal burial rule: a head sealed by water or solid (no air) for longer
+   * than the grace drowns/suffocates. Armed lemmings are exempt — the burning
+   * fuse decides their fate (underwater blasts are a tool, per the matrix).
+   */
+  private updateSealed(lemming: Lemming, deltaMs: number): boolean {
+    if (lemming.fuseMs !== null) {
+      lemming.sealedMs = 0;
+      return false;
+    }
+    const headY = lemming.y + HEAD_Y;
+    const sealed =
+      this.level.terrain.isWaterAt(lemming.x, headY) || this.level.terrain.isSolidAt(lemming.x, headY);
+    lemming.sealedMs = sealed ? lemming.sealedMs + deltaMs : 0;
+    if (lemming.sealedMs >= SEALED_DEATH_MS) {
+      this.kill(lemming, 'drown');
+      return true;
+    }
+    return false;
+  }
+
+  /** Drop into deep water: swimmers swim, everyone else treads. Never a splat. */
+  private enterWater(lemming: Lemming): void {
+    lemming.state = lemming.isSwimmer ? 'swimming' : 'treading';
+    lemming.velocityY = 0;
+    lemming.squashMs = 0;
+    this.emit('splash', lemming.x, lemming.y);
+  }
+
+  /**
+   * Top edge of the contiguous water column at the lemming's x, or null when
+   * neither chest nor feet are wet anymore (drained / carried clear).
+   */
+  private waterSurfaceY(lemming: Lemming): number | null {
+    const terrain = this.level.terrain;
+    let probeY = lemming.y + CHEST_Y;
+    if (!terrain.isWaterAt(lemming.x, probeY)) {
+      probeY = lemming.y + FOOT_Y - 2;
+      if (!terrain.isWaterAt(lemming.x, probeY)) return null;
+    }
+    const cs = terrain.cellSize;
+    let top = Math.floor(probeY / cs) * cs;
+    while (top - cs >= 0 && terrain.isWaterAt(lemming.x, top - cs / 2)) {
+      top -= cs;
+    }
+    return top;
+  }
+
+  /** Ease the body onto its float line (head above water, feet dangling). */
+  private applyBuoyancy(lemming: Lemming, surface: number, deltaMs: number): void {
+    const targetY = surface - FLOAT_LINE;
+    const maxMove = BUOYANCY_SPEED * (deltaMs / 1000);
+    const dy = targetY - lemming.y;
+    const step = Math.abs(dy) <= maxMove ? dy : Math.sign(dy) * maxMove;
+    // Never buoy the head up into solid — pinned under a ceiling stays sealed.
+    if (step < 0 && this.level.terrain.isSolidAt(lemming.x, lemming.y + step + HEAD_Y)) return;
+    lemming.y += step;
+  }
+
+  /**
+   * Try to leave the water at `dir`: a bank (or floating wood raft) whose
+   * standing height is within a step of the surface. Used by treaders (both
+   * sides — they grab anything) and swimmers (ahead).
+   */
+  private tryClimbOut(lemming: Lemming, dir: -1 | 1): boolean {
+    const surface = this.waterSurfaceY(lemming);
+    if (surface === null) return false;
+    // A ceiling flush to the water seals the pool — there is no "out" above,
+    // and without this check the stand-probe can tunnel onto the ceiling top.
+    if (this.level.terrain.isSolidAt(lemming.x, surface - 4)) return false;
+    const exitX = lemming.x + dir * (BODY_HALF_WIDTH + 2);
+    if (exitX < BODY_HALF_WIDTH || exitX > this.level.width - BODY_HALF_WIDTH) return false;
+    // Probe with the feet starting AT the waterline so a bank one step above
+    // the surface resolves to standing on it, not buried inside it.
+    const candidateY = this.findStandingY(exitX, surface - FOOT_Y);
+    const feetY = candidateY + FOOT_Y;
+    if (!this.level.terrain.isSolidAt(exitX, feetY + 1)) return false; // no footing
+    if (this.level.terrain.isSolidAt(exitX, feetY - 2)) return false; // feet still buried
+    if (Math.abs(feetY - surface) > STEP_HEIGHT + 2) return false; // bank out of reach
+    if (this.hitsWall(exitX, candidateY, dir)) return false;
+    lemming.x = exitX;
+    lemming.y = candidateY;
+    lemming.direction = dir;
+    lemming.state = 'walker';
+    return true;
+  }
+
+  /** A treading/swimming climber mounts an adjacent wall and climbs out. */
+  private mountWallFromWater(lemming: Lemming): boolean {
+    for (const dir of [lemming.direction, -lemming.direction as -1 | 1]) {
+      const wallX = lemming.x + dir * (BODY_HALF_WIDTH + 1);
+      if (
+        this.level.terrain.isSolidAt(wallX, lemming.y + HEAD_Y) &&
+        this.level.terrain.isSolidAt(wallX, lemming.y + 4)
+      ) {
+        lemming.direction = dir;
+        lemming.state = 'climber';
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Non-swimmer in deep water: bob in place, grab any exit within reach. */
+  private updateTreading(lemming: Lemming, deltaMs: number): void {
+    if (lemming.fuseMs !== null) {
+      this.beginFall(lemming); // armed: sinks (the faller path caps the speed)
+      return;
+    }
+    const surface = this.waterSurfaceY(lemming);
+    if (surface === null) {
+      // The water drained away beneath us.
+      if (this.hasGroundBelow(lemming)) {
+        lemming.state = 'walker';
+        lemming.y = this.findStandingY(lemming.x, lemming.y);
+      } else {
+        this.beginFall(lemming);
+      }
+      return;
+    }
+    this.applyBuoyancy(lemming, surface, deltaMs);
+
+    if (this.tryClimbOut(lemming, lemming.direction)) return;
+    if (this.tryClimbOut(lemming, -lemming.direction as -1 | 1)) return;
+    if (lemming.isClimber && this.mountWallFromWater(lemming)) return;
+    this.tryApplyPendingHatchSkill(lemming); // hatch-queued swimmers apply here
+  }
+
+  /** Swimmer trait: cross the surface, climb out banks, turn at walls. */
+  private updateSwimming(lemming: Lemming, deltaMs: number): void {
+    if (lemming.fuseMs !== null) {
+      this.beginFall(lemming);
+      return;
+    }
+    const surface = this.waterSurfaceY(lemming);
+    if (surface === null) {
+      if (this.hasGroundBelow(lemming)) {
+        lemming.state = 'walker';
+        lemming.y = this.findStandingY(lemming.x, lemming.y);
+      } else {
+        this.beginFall(lemming);
+      }
+      return;
+    }
+    this.applyBuoyancy(lemming, surface, deltaMs);
+
+    const nextX = lemming.x + SWIM_SPEED * (deltaMs / 1000) * lemming.direction;
+    if (nextX <= BODY_HALF_WIDTH || nextX >= this.level.width - BODY_HALF_WIDTH) {
+      lemming.direction *= -1;
+      return;
+    }
+    if (this.hitsWall(nextX, lemming.y, lemming.direction)) {
+      if (this.tryClimbOut(lemming, lemming.direction)) return;
+      if (lemming.isClimber && this.mountWallFromWater(lemming)) return;
+      lemming.direction *= -1;
+      return;
+    }
+    lemming.x = nextX;
+
+    // Swam into the shallows: stand up and wade on.
+    if (this.hasGroundBelow(lemming)) {
+      const candidateY = this.findStandingY(lemming.x, lemming.y);
+      if (!this.level.terrain.isWaterAt(lemming.x, candidateY + CHEST_Y)) {
+        lemming.state = 'walker';
+        lemming.y = candidateY;
+      }
+    }
+  }
+
   private walk(lemming: Lemming, deltaMs: number): void {
     const distance = WALK_SPEED * (deltaMs / 1000) * lemming.direction;
     const nextX = lemming.x + distance;
@@ -718,8 +939,12 @@ export class GameSimulation {
     if (this.hitsWall(nextX, lemming.y, lemming.direction)) {
       const climbedY = this.findStepUp(lemming, nextX);
       if (climbedY === null) {
-        // A climber scales the wall instead of turning around.
+        // A climber scales the wall instead of turning around. Snap to the
+        // probe position so the climb reads the wall it just detected — left
+        // at the old x it can sit a cell short, see "no wall", and pop-over
+        // straight into the interior.
         if (lemming.isClimber) {
+          lemming.x = nextX;
           lemming.state = 'climber';
           return;
         }
@@ -805,14 +1030,6 @@ export class GameSimulation {
   }
 
   private isInHazard(lemming: Lemming): boolean {
-    // Flowing water cells drown (living terrain).
-    if (
-      this.level.terrain.isWaterAt(lemming.x, lemming.y + FOOT_Y - 2) ||
-      this.level.terrain.isWaterAt(lemming.x, lemming.y) ||
-      this.level.terrain.isWaterAt(lemming.x, lemming.y + HEAD_Y)
-    ) {
-      return true;
-    }
     const hazards = this.level.hazards;
     if (!hazards || hazards.length === 0) return false;
     for (const hazard of hazards) {
