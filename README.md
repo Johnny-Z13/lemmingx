@@ -40,7 +40,8 @@ npm run build   # typecheck + production build
   skills (stacked puzzles: dig → flood → float wood).
 - **Emitters** — some levels have spouts that pour sand or water on their own
   until their budget runs dry. Living terrain you don't control.
-- **Space** pause · **F** speed (1×/2×/3×) · **N** nuke · **R** restart · **Esc** select.
+- **Space** pause · **F** speed (1×/2×/3×) · **N** nuke · **H** hide/show the
+  control bar · **R** restart · **Esc** select.
 - Pan big levels with **arrows**, edge scroll, or **right/middle-drag**; **minimap** jumps the camera.
 - **Traps** (crusher / zapper / chomper) kill one victim, then re-arm.
 - Chiptune **music** + SFX are synthesized at runtime. Music starts **muted**;
@@ -73,20 +74,38 @@ Always-unlocked Noita-lite sandbox from the level select:
 
 Drag to paint. No quota — dig, flood, bomb, and shepherd the crew for fun.
 
-### Skills
+### The Interaction Matrix
 
-| Hotkey | Skill   | Effect |
-|:------:|---------|--------|
-| 1 | Climber | Permanent: scales walls instead of turning. |
-| 2 | Floater | Permanent: parachute — no fatal fall damage. |
-| 3 | Bomber  | 5s fuse, then crater (may spray sand). |
-| 4 | Blocker | Plants; turns walkers that bump it. |
-| 5 | Builder | Rising brick bridge. |
-| 6 | Basher  | Carves horizontally. |
-| 7 | Miner   | Diagonal tunnel down. |
-| 8 | Digger  | Straight down. |
+Who can do what, where — the heart of the design. 🆕 marks behavior landing
+with the water update (in development): water no longer kills on contact;
+you only die **buried** (head sealed under water or sand for a beat).
 
-**Steel** never carves (clank). **One-way** walls only carve with the arrow.
+| # | Lemming | Ability | Works the terrain | Blocked by | In water | Endangered by |
+|---|---------|---------|-------------------|------------|----------|---------------|
+| — | Walker | Walks, steps ≤7px, turns at walls | Walks on any solid | Walls taller than a step | 🆕 Wades shallow; treads deep — bobs safely, grabs an exit or a wood raft | Falls >38px, traps, lava, 🆕 burial |
+| 1 | Climber | Permanent: scales vertical walls | Climbs any solid, steel included | Overhangs (falls off) | 🆕 Treads, then climbs out up an adjacent wall | Post-detach falls, traps |
+| 2 | Floater | Permanent: parachute, no fall death | — | — | 🆕 Gentle splashdown, then treads | Traps, lava, 🆕 burial |
+| 3 | Bomber | 5s fuse → sand-debris crater | Craters dirt/sand/wood; steel survives | Nothing (one-shot) | 🆕 **Sinks** — fuse burns on, underwater blast floods the crater | Itself |
+| 4 | Blocker | Plants; turns the crowd | Stands on any solid | — | 🆕 Deep water washes it off its post — treads, stops blocking | Traps, lava, 🆕 burial |
+| 5 | Builder | 14-brick rising bridge; dams water | Builds over anything | Wall ahead (shrug) | 🆕 Wades and keeps laying; deep water cancels → treads | Falls, traps, 🆕 burial |
+| 6 | Basher | Horizontal tunnel | Dirt/sand/wood; one-ways only along the arrow | Steel (clank) | 🆕 Wades and keeps bashing; deep → treads | Falls, traps, 🆕 burial |
+| 7 | Miner | Diagonal-down tunnel | Dirt/sand/wood/one-ways | Steel (clank) | 🆕 Same as basher | Falls, traps, 🆕 burial |
+| 8 | Digger | Straight-down shaft | Dirt/sand/wood/one-ways | Steel (clank) | 🆕 Digging into a flooded cavity = safe splashdown | Falls, traps, 🆕 burial |
+| 9 | 🆕 Swimmer | Permanent: crosses water surfaces | Exits banks within step height | Waterline walls (turns) | **Swims** | Burial (flooded ceilings), traps |
+
+And the terrain, from the swarm's side:
+
+| Material | Walk on? | Carvable? | Behavior | Danger |
+|----------|----------|-----------|----------|--------|
+| Dirt | yes | yes | static | — |
+| Steel | yes | never (clank) | static | — |
+| One-way L/R | yes | only along the arrow (bash); vertical work passes | static | — |
+| Sand | yes — settles into walkable slopes | yes | powder, pours and piles | 🆕 buries |
+| Water | no | flows | floats wood, 🆕 floats lemmings | 🆕 only if it seals you in |
+| Wood | yes | yes | falls in air, floats on water | — |
+
+Design source of truth:
+`docs/superpowers/specs/2026-07-11-water-reactive-lemmings-design.md`.
 
 ### Materials
 
