@@ -7,7 +7,8 @@ import type { LevelDefinition } from '../sim/types';
  * chomper, each with a long re-arm cycle. The crew is released at a high rate
  * so it travels as one tight mob: each trap claims its first victim, then the
  * rest stream past while the machine resets. Teaches traps + the release-rate
- * dial. No skills required — only nerve.
+ * dial. No skills required — only nerve. Four sand charges can bury a machine
+ * outright — the mound carries the crew above its trigger box.
  */
 export function createLevel6(): LevelDefinition {
   const terrain = new Terrain(1440, 540, 6);
@@ -25,6 +26,8 @@ export function createLevel6(): LevelDefinition {
       { x: 800, y: 402, width: 14, height: 28, kind: 'zapper', cycleMs: 5000 },
       { x: 1100, y: 402, width: 14, height: 28, kind: 'chomper', cycleMs: 5000 },
     ],
+    landscape: { sand: 4 },
+    caSeed: 66,
     spawnIntervalMs: 600,
     totalLemmings: 10,
     releaseRate: 90,

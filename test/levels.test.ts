@@ -117,6 +117,22 @@ describe('Level roster', () => {
     expect(sim.state.lost).toBeGreaterThanOrEqual(1); // the traps took someone
   });
 
+  it('level 6 (Trap House) — bury the crusher in sand and walk over it', () => {
+    // Two pours each side of the trigger merge into a wide berm — a single
+    // centred pyramid leaves its east slope inside the kill zone.
+    let poured = 0;
+    const sim = run(5, (s) => {
+      if (poured < 4 && s.state.timeMs > 1000 + poured * 400) {
+        if (s.paintLandscape(poured % 2 === 0 ? 498 : 516, 408, 16, 'sand')) poured += 1;
+      }
+    });
+    expectWon(sim);
+    expect(poured).toBe(4);
+    // The zapper and chomper may still take one victim each; the buried
+    // crusher must not — the bare mob-rush route loses three.
+    expect(sim.state.lost).toBeLessThanOrEqual(2);
+  });
+
   it('level 7 (Float the Timber) — builder backup across the trench (wood+water is the player route)', () => {
     let bridge1 = false;
     let bridge2 = false;
