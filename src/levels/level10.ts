@@ -21,8 +21,12 @@ export function createLevel10(): LevelDefinition {
   // Wall A: plain dirt.
   terrain.fillRect(760, 330, 26, 100);
 
-  // Water chasm: open the slab and fill with water below.
+  // Water chasm: open the slab and fill the pit with real living water,
+  // lipped underneath so it can't drain into the basement gallery.
   terrain.eraseRect(1040, 430, 60, 60);
+  terrain.fillRect(1034, 490, 6, 30); // west lip
+  terrain.fillRect(1100, 490, 6, 30); // east lip
+  terrain.fillRect(1040, 452, 60, 68, MATERIAL.water);
   // Raised landing shelf catching the two-stage bridge (see level 2).
   terrain.fillRect(1100, 400, 80, 30);
 
@@ -36,7 +40,6 @@ export function createLevel10(): LevelDefinition {
     height: 810,
     spawn: { x: 80, y: 406 },
     exit: { x: 2500, y: 476, width: 40, height: 44 },
-    hazards: [{ x: 1040, y: 500, width: 60, height: 40, kind: 'water' }],
     traps: [{ x: 480, y: 402, width: 14, height: 28, kind: 'crusher', cycleMs: 5000 }],
     spawnIntervalMs: 700,
     totalLemmings: 10,
