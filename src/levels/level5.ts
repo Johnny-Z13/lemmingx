@@ -8,13 +8,18 @@ import type { LevelDefinition } from '../sim/types';
  *
  * Intended solution: digger at x≈620 (any dirt west of the cap), crew follows
  * through the shaft and walks right to the exit.
+ *
+ * A spout east of the wall trickles sand into a dune on the steel cap —
+ * living terrain dressing the lock (kept clear of the dig route so the
+ * gallery below never silts shut).
  */
 export function createLevel5(): LevelDefinition {
   const terrain = new Terrain(1440, 540, 6);
 
-  // Main slab with a gallery + basement beneath.
+  // Main slab with a gallery + basement beneath. The gallery is a full cell
+  // taller than a lemming so a one-cell debris bump can't pinch it shut.
   terrain.fillRect(0, 430, 1440, 30); // dirt slab (430..460)
-  terrain.fillRect(0, 490, 1440, 50); // basement floor (490..540)
+  terrain.fillRect(0, 492, 1440, 48); // basement floor (492..540)
 
   // Steel wall on the slab + steel cap so you can't dig straight through it.
   terrain.fillRect(680, 330, 40, 100, MATERIAL.steel);
@@ -35,6 +40,7 @@ export function createLevel5(): LevelDefinition {
     timeLimitMs: 240000,
     caSeed: 55,
     sandEmitRatio: 0.4,
+    emitters: [{ x: 744, y: 300, material: 'sand', cellsPerSecond: 5, budget: 200 }],
     skills: {
       climber: 0,
       floater: 0,
