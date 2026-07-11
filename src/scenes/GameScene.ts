@@ -5,7 +5,7 @@ import type { Lemming, LevelDefinition, Skill } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import type { SimEvent } from '../sim/types';
-import { Hud } from '../ui/Hud';
+import { Hud, TERRAIN_TOOLS, type TerrainBrush } from '../ui/Hud';
 import { LevelSelect, type LevelCard } from '../ui/LevelSelect';
 import { Progress } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
@@ -19,8 +19,6 @@ import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../aud
 const ANIM_FPS = 12;
 /** Pixels: how close the cursor must be to a lemming to hover/select it. */
 const HOVER_RADIUS = 16;
-
-type LabBrush = 'sand' | 'water' | 'dirt' | 'erase' | 'bomb' | 'assign';
 
 export class GameScene extends Phaser.Scene {
   private level!: LevelDefinition;
@@ -48,9 +46,8 @@ export class GameScene extends Phaser.Scene {
   private winRecorded = false;
   private celebrateFired = false;
   private ambientAccMs = 0;
-  private labBrush: LabBrush = 'sand';
-  private labPainting = false;
-  private landscapeBrush: 'water' | 'sand' | 'dirt' | 'wood' | 'erase' | null = null;
+  private brush: TerrainBrush | null = null;
+  private painting = false;
 
   constructor() {
     super('GameScene');
@@ -65,27 +62,27 @@ export class GameScene extends Phaser.Scene {
     // Click-to-assign / lab paint. Left button only — right/middle drag-pan.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (pointer.button !== 0) return;
-      if (this.isLab()) {
-        this.labPainting = true;
-        this.applyLabBrush(pointer.worldX, pointer.worldY);
+      const brush = this.brush;
+      if (brush === 'bomb') {
+        this.applyBomb(pointer.worldX, pointer.worldY);
         return;
       }
-      if (this.landscapeBrush) {
-        this.labPainting = true;
-        this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, this.landscapeBrush);
+      if (brush) {
+        this.painting = true;
+        this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, brush);
         return;
       }
       this.assignSelectedSkill(pointer.worldX, pointer.worldY);
     });
     this.input.on('pointerup', () => {
-      this.labPainting = false;
+      this.painting = false;
     });
     this.input.mouse?.disableContextMenu();
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.pointerSeen = true;
-      if (this.labPainting && pointer.isDown) {
-        if (this.isLab()) this.applyLabBrush(pointer.worldX, pointer.worldY);
-        else if (this.landscapeBrush) this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, this.landscapeBrush);
+      const brush = this.brush;
+      if (this.painting && pointer.isDown && brush && brush !== 'bomb') {
+        this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, brush);
       }
       if (pointer.middleButtonDown() || pointer.rightButtonDown()) {
         const cam = this.cameras.main;
@@ -132,27 +129,12 @@ export class GameScene extends Phaser.Scene {
     return !!this.level?.sandLab;
   }
 
-  private applyLabBrush(worldX: number, worldY: number): void {
+  private applyBomb(worldX: number, worldY: number): void {
     if (!this.sim || this.sim.state.outcome !== 'running') return;
-    const r = this.labBrush === 'bomb' ? 28 : 14;
-    if (this.labBrush === 'bomb') {
-      this.sim.labBomb(worldX, worldY, r);
-      this.sfx.play('explode');
-      this.particles.burst(worldX, worldY, 20, { color: [0xff7a3a, 0xffd96b, 0xd4a84a], speed: 0.2, lifeMs: 700, size: 2.5 });
-      this.addShake(6);
-      this.labPainting = false; // one-shot
-      return;
-    }
-    if (this.labBrush === 'assign') {
-      this.assignSelectedSkill(worldX, worldY);
-      return;
-    }
-    const mat =
-      this.labBrush === 'sand' ? MATERIAL.sand :
-      this.labBrush === 'water' ? MATERIAL.water :
-      this.labBrush === 'dirt' ? MATERIAL.dirt :
-      MATERIAL.empty;
-    this.sim.paintCircle(worldX, worldY, r, mat);
+    this.sim.labBomb(worldX, worldY, 28);
+    this.sfx.play('explode');
+    this.particles.burst(worldX, worldY, 20, { color: [0xff7a3a, 0xffd96b, 0xd4a84a], speed: 0.2, lifeMs: 700, size: 2.5 });
+    this.addShake(6);
   }
 
   update(_time: number, delta: number): void {
@@ -318,8 +300,8 @@ export class GameScene extends Phaser.Scene {
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
       levelName: `${this.isLab() ? 'Lab' : `${this.levelIndex + 1}/${LEVEL_COUNT}`} · ${this.level.name ?? 'LemmingX'}`,
       hasNextLevel: !this.isLab() && this.levelIndex < LEVEL_COUNT - 1,
-      labBrush: this.isLab() ? this.labBrush : null,
-      landscapeBrush: this.isLab() ? null : this.landscapeBrush,
+      brush: this.brush,
+      hasTerrainTools: this.isLab() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
       minimap: scrolls
         ? {
             terrain: this.level.terrain,
@@ -369,18 +351,19 @@ export class GameScene extends Phaser.Scene {
     this.speed = 1;
     this.celebrateFired = false;
     this.ambientAccMs = 0;
-    this.landscapeBrush = null;
+    this.brush = this.isLab() ? 'sand' : null;
+    this.painting = false;
 
     this.hud?.destroy();
     this.hud = new Hud({
       onSelectSkill: (skill) => {
-        this.landscapeBrush = null;
+        this.brush = null;
         this.selectSkill(skill);
       },
       onEnqueueRelease: () => this.sim.enqueueRelease(this.sim.state.selectedSkill),
       onPopQueue: () => this.sim.popReleaseQueue(),
-      onSelectLandscape: (kind) => {
-        this.landscapeBrush = kind;
+      onSelectBrush: (kind) => {
+        this.brush = kind;
       },
       onNuke: () => this.triggerNuke(),
       onReleaseRate: (delta) => this.sim.changeReleaseRate(delta),
@@ -394,7 +377,7 @@ export class GameScene extends Phaser.Scene {
         this.applyAudioSettings(settings);
         saveAudioSettings(settings);
       },
-    }, this.audioSettings);
+    }, this.audioSettings, { lab: this.isLab() });
     this.hud.update(this.sim.state, this.hudView());
 
     this.music.play(this.levelIndex);
@@ -451,14 +434,7 @@ export class GameScene extends Phaser.Scene {
       if (this.selectOpen) return; // the level select owns the keyboard
       const key = event.key.toLowerCase();
 
-      if (this.isLab()) {
-        if (key === '1') { this.labBrush = 'sand'; return; }
-        if (key === '2') { this.labBrush = 'water'; return; }
-        if (key === '3') { this.labBrush = 'dirt'; return; }
-        if (key === '4') { this.labBrush = 'erase'; return; }
-        if (key === '5') { this.labBrush = 'bomb'; return; }
-        if (key === '6') { this.labBrush = 'assign'; return; }
-      } else if (key === 'q') {
+      if (key === 'q') {
         this.sim.enqueueRelease(this.sim.state.selectedSkill);
         return;
       } else if (key === 'backspace') {
@@ -466,10 +442,20 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      // Skill hotkeys (1–8) map to the registry's declared hotkeys (campaign).
+      // Terrain brush hotkeys (Z/X/C/V/B, Lab adds M) arm a paint tool.
+      const tool = TERRAIN_TOOLS.find((t) => t.hotkey === key);
+      if (tool && (!tool.labOnly || this.isLab())) {
+        const stock = tool.kind === 'bomb' ? (this.isLab() ? 1 : 0) : this.sim.state.landscape[tool.kind];
+        if (this.isLab() || stock > 0) {
+          this.brush = tool.kind;
+          return;
+        }
+      }
+
+      // Skill hotkeys (1–8) map to the registry's declared hotkeys.
       const skill = ALL_SKILLS.find((s) => SKILL_DEFS[s].hotkey === key);
-      if (skill && !this.isLab()) {
-        this.landscapeBrush = null;
+      if (skill) {
+        this.brush = null;
         this.selectSkill(skill);
         return;
       }
@@ -483,6 +469,11 @@ export class GameScene extends Phaser.Scene {
       } else if (key === 'r') {
         this.startLevel();
       } else if (key === 'escape' && !this.selectOpen) {
+        // First Esc disarms a campaign brush; the next one leaves the level.
+        if (this.brush && !this.isLab()) {
+          this.brush = null;
+          return;
+        }
         this.openLevelSelect();
       }
     });
@@ -543,7 +534,22 @@ export class GameScene extends Phaser.Scene {
     this.drawLemmings();
     this.fxGraphics.clear();
     this.particles.draw(this.fxGraphics);
+    this.drawBrushCursor();
     if (this.speed > 1 && !this.paused) this.drawFastForwardTint();
+  }
+
+  /** Tinted ring at the pointer while a terrain brush is armed. */
+  private drawBrushCursor(): void {
+    if (!this.brush || this.selectOpen) return;
+    const tool = TERRAIN_TOOLS.find((t) => t.kind === this.brush);
+    if (!tool) return;
+    const pointer = this.input.activePointer;
+    const radius = this.brush === 'bomb' ? 28 : 16;
+    const g = this.fxGraphics;
+    g.fillStyle(tool.color, 0.08);
+    g.fillCircle(pointer.worldX, pointer.worldY, radius);
+    g.lineStyle(1.5, tool.color, 0.85);
+    g.strokeCircle(pointer.worldX, pointer.worldY, radius);
   }
 
   /** Subtle speed lines while fast-forwarding. */

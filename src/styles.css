@@ -130,20 +130,6 @@ button:disabled {
   font-weight: 700;
 }
 
-.hud__landscape {
-  position: absolute;
-  top: 56px;
-  left: 14px;
-  display: flex;
-  gap: 6px;
-  pointer-events: auto;
-}
-
-.hud__landscape .hud__btn.is-active {
-  border-color: rgba(212, 168, 74, 0.9);
-  background: rgba(212, 168, 74, 0.25);
-}
-
 .hud__panel-pct {
   margin: 0 0 8px;
   font-size: 2.4rem;
@@ -190,6 +176,18 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.hud__tools--terrain {
+  padding-left: 10px;
+  border-left: 1px solid var(--stroke);
+}
+
+.hud__swatch {
+  width: 16px;
+  height: 9px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22) inset;
 }
 
 .hud__tool {

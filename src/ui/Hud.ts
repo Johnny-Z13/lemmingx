@@ -4,6 +4,24 @@ import { SKILL_DEFS } from '../sim/skills/registry';
 import { MATERIAL, type Terrain } from '../sim/Terrain';
 import type { AudioSettings } from '../audio/settings';
 
+/** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
+export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'erase' | 'bomb';
+
+export const TERRAIN_TOOLS: readonly {
+  kind: TerrainBrush;
+  label: string;
+  hotkey: string;
+  color: number;
+  labOnly?: boolean;
+}[] = [
+  { kind: 'water', label: 'Water', hotkey: 'z', color: 0x3a9fd8 },
+  { kind: 'sand', label: 'Sand', hotkey: 'x', color: 0xd4a84a },
+  { kind: 'dirt', label: 'Dirt', hotkey: 'c', color: 0x4d9674 },
+  { kind: 'wood', label: 'Wood', hotkey: 'v', color: 0xa67c52 },
+  { kind: 'erase', label: 'Erase', hotkey: 'b', color: 0x59617a },
+  { kind: 'bomb', label: 'Bomb', hotkey: 'm', color: 0xff7a3a, labOnly: true },
+] as const;
+
 export type HudEvents = {
   onSelectSkill: (skill: Skill) => void;
   /** Pre-load hatch queue with selected skill (consumes stock). */
@@ -18,8 +36,8 @@ export type HudEvents = {
   onLevelSelect?: () => void;
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
   onAudioChange?: (settings: AudioSettings) => void;
-  /** Select a landscape paint tool (campaign sandworld). */
-  onSelectLandscape?: (kind: 'water' | 'sand' | 'dirt' | 'wood' | 'erase') => void;
+  /** Arm a terrain paint brush (campaign charges / Lab infinite). */
+  onSelectBrush?: (kind: TerrainBrush) => void;
 };
 
 /** Everything the minimap needs to draw one frame, in level coordinates. */
@@ -39,9 +57,10 @@ export interface HudView {
   hoveredJob: string | null;
   levelName: string;
   hasNextLevel: boolean;
-  labBrush: string | null;
-  /** Campaign landscape brush, or null. */
-  landscapeBrush: string | null;
+  /** Armed terrain brush, or null when assigning skills. */
+  brush: TerrainBrush | null;
+  /** Whether this level exposes the terrain toolbar at all. */
+  hasTerrainTools: boolean;
   minimap: MinimapData | null;
 }
 
@@ -74,7 +93,9 @@ export class Hud {
   private readonly speedButton: HTMLButtonElement;
   private readonly notice: HTMLDivElement;
   private readonly queueBar: HTMLDivElement;
-  private readonly landscapeBar: HTMLDivElement;
+  private readonly terrainButtons = new Map<TerrainBrush, HTMLButtonElement>();
+  private readonly terrainBar: HTMLDivElement;
+  private readonly lab: boolean;
   private readonly overlay: HTMLDivElement;
   private readonly minimap: HTMLCanvasElement;
   /** Offscreen terrain layer so the cell sweep runs at ~10 Hz, not 60. */
@@ -83,8 +104,9 @@ export class Hud {
   private readonly events: HudEvents;
   private readonly audio: AudioSettings;
 
-  constructor(events: HudEvents, audio?: AudioSettings) {
+  constructor(events: HudEvents, audio?: AudioSettings, opts?: { lab?: boolean }) {
     this.events = events;
+    this.lab = opts?.lab ?? false;
     this.audio = audio ?? { musicMuted: true, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
     this.root.className = 'hud';
@@ -123,6 +145,28 @@ export class Hud {
     unqueueBtn.className = 'hud__btn';
     tools.append(queueBtn, unqueueBtn);
 
+    // --- Terrain toolbar: paint the living world (campaign charges / Lab ∞) ---
+    this.terrainBar = document.createElement('div');
+    this.terrainBar.className = 'hud__tools hud__tools--terrain';
+    for (const tool of TERRAIN_TOOLS) {
+      if (tool.labOnly && !this.lab) continue;
+      const button = document.createElement('button');
+      button.className = 'hud__tool';
+      button.type = 'button';
+      button.title = `${tool.label} (${tool.hotkey.toUpperCase()})`;
+      button.setAttribute('aria-label', tool.label);
+      button.innerHTML =
+        `<span class="hud__hotkey">${tool.hotkey.toUpperCase()}</span>` +
+        `<span class="hud__swatch"></span>` +
+        `<span class="hud__tool-name">${tool.label}</span>` +
+        `<span class="hud__stock">0</span>`;
+      (button.querySelector('.hud__swatch') as HTMLSpanElement).style.background =
+        `#${tool.color.toString(16).padStart(6, '0')}`;
+      button.addEventListener('click', () => events.onSelectBrush?.(tool.kind));
+      this.terrainBar.append(button);
+      this.terrainButtons.set(tool.kind, button);
+    }
+
     const controls = document.createElement('div');
     controls.className = 'hud__controls';
 
@@ -150,7 +194,7 @@ export class Hud {
     restartButton.className = 'hud__btn hud__restart';
 
     controls.append(release, this.pauseButton, this.speedButton, this.nukeButton, restartButton, this.makeAudioCluster());
-    bar.append(tools, controls);
+    bar.append(tools, this.terrainBar, controls);
     this.root.append(bar);
 
     // --- Floating notice (selected skill / hovered job) ---
@@ -161,10 +205,6 @@ export class Hud {
     this.queueBar = document.createElement('div');
     this.queueBar.className = 'hud__queue';
     this.root.append(this.queueBar);
-
-    this.landscapeBar = document.createElement('div');
-    this.landscapeBar.className = 'hud__landscape';
-    this.root.append(this.landscapeBar);
 
     // --- Minimap (scrolling levels only) ---
     this.minimap = document.createElement('canvas');
@@ -311,7 +351,7 @@ export class Hud {
     for (const [skill, button] of this.skillButtons) {
       const stock = button.querySelector('.hud__stock');
       if (stock) stock.textContent = String(state.skills[skill]);
-      button.classList.toggle('is-active', skill === state.selectedSkill && !view.landscapeBrush);
+      button.classList.toggle('is-active', skill === state.selectedSkill && !view.brush);
       button.disabled = state.skills[skill] <= 0 || !running;
     }
 
@@ -332,23 +372,17 @@ export class Hud {
       this.queueBar.innerHTML = '';
     }
 
-    // Landscape tools (campaign charges)
-    const land = state.landscape;
-    const landKinds = (['water', 'sand', 'dirt', 'wood', 'erase'] as const).filter((k) => land[k] > 0 || view.labBrush);
-    if (landKinds.some((k) => land[k] > 0) && !view.labBrush) {
-      this.landscapeBar.hidden = false;
-      this.landscapeBar.innerHTML = '';
-      for (const kind of (['water', 'sand', 'dirt', 'wood', 'erase'] as const)) {
-        if (land[kind] <= 0) continue;
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'hud__btn' + (view.landscapeBrush === kind ? ' is-active' : '');
-        b.textContent = `${kind} ${land[kind]}`;
-        b.addEventListener('click', () => this.events.onSelectLandscape?.(kind));
-        this.landscapeBar.append(b);
+    // Terrain toolbar (campaign charges / Lab infinite)
+    this.terrainBar.hidden = !view.hasTerrainTools;
+    if (view.hasTerrainTools) {
+      for (const [kind, button] of this.terrainButtons) {
+        const stockEl = button.querySelector('.hud__stock');
+        const infinite = this.lab || kind === 'bomb';
+        const stock = kind === 'bomb' ? 0 : state.landscape[kind];
+        if (stockEl) stockEl.textContent = infinite ? '∞' : String(stock);
+        button.classList.toggle('is-active', view.brush === kind);
+        button.disabled = !running || (!infinite && stock <= 0);
       }
-    } else {
-      this.landscapeBar.hidden = true;
     }
 
     this.notice.textContent = this.noticeText(state, view);
@@ -405,19 +439,11 @@ export class Hud {
 
   private noticeText(state: SimulationState, view: HudView): string {
     if (view.paused) return 'Paused';
-    if (view.labBrush) {
-      const labels: Record<string, string> = {
-        sand: 'Paint sand (1) — drag to pour',
-        water: 'Paint water (2)',
-        dirt: 'Paint dirt (3)',
-        erase: 'Erase (4)',
-        bomb: 'Bomb (5) — click to blast',
-        assign: 'Assign skill (6) — click a lemming',
-      };
-      return labels[view.labBrush] ?? 'Sand Lab';
-    }
-    if (view.landscapeBrush) {
-      return `Landscape: ${view.landscapeBrush} — click/drag to paint · Esc skills`;
+    if (view.brush) {
+      if (view.brush === 'bomb') return 'Bomb (M) — click to blast · Esc skills';
+      const tool = TERRAIN_TOOLS.find((t) => t.kind === view.brush);
+      const stock = this.lab ? '∞' : String(state.landscape[view.brush]);
+      return `${tool?.label ?? view.brush} ×${stock} — click/drag to paint · Esc skills`;
     }
     if (view.hoveredJob) return `${view.hoveredJob} — click to assign ${state.selectedSkill}`;
     return `${SKILL_DEFS[state.selectedSkill].label} — click lemming · Q = hatch queue · dbl-click skill = queue`;
