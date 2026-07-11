@@ -538,6 +538,7 @@ export class GameScene extends Phaser.Scene {
     this.drawHatch();
     this.drawExit();
     this.drawHazards();
+    this.drawEmitters();
     this.drawTraps();
     this.drawLemmings();
     this.fxGraphics.clear();
@@ -771,6 +772,24 @@ export class GameScene extends Phaser.Scene {
         g.fillStyle(0xffffff, isLava ? 0.35 : 0.25);
         const hx = hazard.x + ((Math.floor(this.sim.state.timeMs / 90) * 17) % Math.max(1, hazard.width - 4));
         g.fillRect(hx, hazard.y + 6, 2, 2);
+      }
+    }
+  }
+
+  private drawEmitters(): void {
+    const g = this.setpieceGraphics;
+    for (const emitter of this.sim.state.emitters) {
+      const { x, y, material } = emitter.def;
+      const color = material === 'sand' ? 0xd4a84a : 0x3a9fd8;
+      // Nozzle housing with a material-tinted lip.
+      g.fillStyle(0x2c333f, 1);
+      g.fillRect(x - 7, y - 12, 14, 8);
+      g.fillStyle(color, 0.9);
+      g.fillRect(x - 4, y - 5, 8, 3);
+      // Falling drip while the emitter still has budget.
+      if (emitter.budgetLeft > 0 && this.sim.state.outcome === 'running') {
+        g.fillStyle(color, 0.8);
+        g.fillRect(x - 1.5, y - 2 + ((this.sim.state.timeMs / 30) % 10), 3, 4);
       }
     }
   }
