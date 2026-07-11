@@ -4,7 +4,8 @@ import type { LevelDefinition } from '../sim/types';
 /**
  * Level 10 — "Sandworld Symphony".
  * Finale: crusher, bash, water chasm, steel-capped wall, dig into the basement.
- * Landscape water charges for sandworld experimentation on the chasm.
+ * Every terrain tool is stocked, and a spout builds a dune on the east slab
+ * the crew must cross.
  *
  * Intended solution: bash wall A (x≈760), two builders over the water
  * (x≈1010 then on the bridge), bash wall B (x≈1600), digger at x≈2310,
@@ -45,7 +46,8 @@ export function createLevel10(): LevelDefinition {
     targetSaved: 6,
     timeLimitMs: 360000,
     caSeed: 1010,
-    landscape: { water: 6 },
+    landscape: { water: 6, sand: 4, dirt: 2, wood: 2 },
+    emitters: [{ x: 2200, y: 250, material: 'sand', cellsPerSecond: 5, budget: 200 }],
     skills: {
       climber: 0,
       floater: 0,
