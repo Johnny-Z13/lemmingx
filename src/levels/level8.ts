@@ -10,6 +10,8 @@ import type { LevelDefinition } from '../sim/types';
  *
  * Intended solution: miner at x≈440 heading right; the shaft breaks into the
  * gallery and the crew walks to the exit.
+ *
+ * A high spout dusts the massif with sand while the miner works below.
  */
 export function createLevel8(): LevelDefinition {
   const terrain = new Terrain(1440, 810, 6);
@@ -34,6 +36,8 @@ export function createLevel8(): LevelDefinition {
     maxReleaseRate: 99,
     targetSaved: 8,
     timeLimitMs: 300000,
+    caSeed: 88,
+    emitters: [{ x: 900, y: 140, material: 'sand', cellsPerSecond: 5, budget: 200 }],
     skills: {
       climber: 0,
       floater: 2,
