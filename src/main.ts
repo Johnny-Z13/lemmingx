@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
+import { BUILD_TAG } from './version';
 import './styles.css';
+
+document.title = `LemmingX · ${BUILD_TAG}`;
 
 const GAME_WIDTH = 960;
 const GAME_HEIGHT = 540;

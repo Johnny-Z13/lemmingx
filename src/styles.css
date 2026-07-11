@@ -385,6 +385,15 @@ button:disabled {
   opacity: 0.75;
 }
 
+.select__build {
+  margin: -14px 0 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+
 .select__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

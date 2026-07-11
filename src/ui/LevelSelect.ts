@@ -1,4 +1,5 @@
 /** Full-screen DOM level-select: campaign cards + Sand Lab entry. */
+import { BUILD_TAG } from '../version';
 
 export interface LevelCard {
   index: number;
@@ -22,9 +23,11 @@ export class LevelSelect {
       <div class="select__panel">
         <h1 class="select__title">LemmingX</h1>
         <p class="select__sub">Campaign puzzles — or open the Sand Lab and dig freely.</p>
+        <p class="select__build"></p>
         <div class="select__grid"></div>
       </div>`;
     this.grid = this.root.querySelector('.select__grid') as HTMLDivElement;
+    (this.root.querySelector('.select__build') as HTMLParagraphElement).textContent = `build ${BUILD_TAG}`;
     document.body.append(this.root);
   }
 
