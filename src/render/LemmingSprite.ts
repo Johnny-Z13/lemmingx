@@ -33,6 +33,8 @@ const HAIR_BY_STATE: Record<string, number> = {
   basher: 0xffa24d,
   miner: 0xc4a06a,
   digger: 0xd696ff,
+  treading: 0x4ab6ff,
+  swimming: 0x2ee6c8,
   shrug: 0xff9ec8,
 };
 
@@ -137,6 +139,12 @@ export function drawLemming(
     case 'digger':
       drawDiggerArms(g, ox, oy, frame);
       break;
+    case 'treading':
+      drawTreading(g, ox, oy, frame);
+      break;
+    case 'swimming':
+      drawSwimming(g, ox, oy, dir, frame);
+      break;
     case 'shrug':
       drawShrugPose(g, ox, oy, frame);
       break;
@@ -237,6 +245,28 @@ function drawDiggerArms(g: Phaser.GameObjects.Graphics, ox: number, oy: number, 
   const scoop = Math.floor(frame / 1) % 2 === 0;
   blk(g, ox, oy, SKIN, 0, scoop ? 7 : 6, 2, 1);
   blk(g, ox, oy, SKIN, 4, scoop ? 6 : 7, 2, 1);
+}
+
+function drawTreading(g: Phaser.GameObjects.Graphics, ox: number, oy: number, frame: number): void {
+  // Alternating flail arms above the head; legs hidden under the waterline.
+  const up = Math.floor(frame / 2) % 2 === 0;
+  blk(g, ox, oy, SKIN, 0, up ? 0 : 2, 1, 2);
+  blk(g, ox, oy, SKIN, 5, up ? 2 : 0, 1, 2);
+  // Ripple ring at the waterline.
+  g.fillStyle(0x8ad4ff, 0.5);
+  g.fillRect(ox - 2 * PX, oy + 3 * PX + (up ? 0 : 1), 10 * PX, 1);
+}
+
+function drawSwimming(g: Phaser.GameObjects.Graphics, ox: number, oy: number, dir: number, frame: number): void {
+  // Stroke arm reaching ahead, kick splash behind.
+  const stroke = Math.floor(frame / 2) % 2 === 0;
+  const ax = dir === 1 ? (stroke ? 5 : 6) : stroke ? 0 : -1;
+  blk(g, ox, oy, SKIN, ax, stroke ? 3 : 5, 2, 1);
+  const kx = dir === 1 ? -2 : 7;
+  blk(g, ox, oy, 0x8ad4ff, kx, stroke ? 5 : 6, 1, 1);
+  // Wake line at the waterline.
+  g.fillStyle(0x8ad4ff, 0.5);
+  g.fillRect(ox - 2 * PX, oy + 3 * PX, 10 * PX, 1);
 }
 
 function drawParachute(g: Phaser.GameObjects.Graphics, ox: number, oy: number, frame: number): void {

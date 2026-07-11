@@ -97,6 +97,11 @@ export class Sfx {
       case 'drown':
         this.blip(300, 0.18, 'sine', 0.7, 0, 120);
         break;
+      case 'splash':
+        // Wet plop: soft low noise + a quick downward bloop.
+        this.noise(0.08, 0.45, 900, true);
+        this.blip(420, 0.09, 'sine', 0.5, 0, 240);
+        break;
       case 'explode':
         this.noise(0.25, 1.0, 500, true);
         this.blip(90, 0.22, 'sawtooth', 0.8);

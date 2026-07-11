@@ -31,7 +31,8 @@ npm run build   # typecheck + production build
 - Terrain is a **living pixel grid**: sand settles, water flows and drowns,
   **wood floats** on water. Bombers/digs can spray sand when a level enables it
   (always on in the Lab).
-- Pick a skill (**1–8** or click), then click a lemming. Hover shows the current job.
+- Pick a skill (**1–9** or click), then click a lemming. Hover shows the current
+  job. **Swimmer (9)** is assignable mid-water — rescue a treading lemming.
 - **Hatch queue (Q)** — spend a skill charge to pre-order the next release
   (e.g. diggers first). **Backspace** pops the last queued skill.
 - **Terrain toolbar** — when a level has charges (or always, in the Lab), the
@@ -76,9 +77,9 @@ Drag to paint. No quota — dig, flood, bomb, and shepherd the crew for fun.
 
 ### The Interaction Matrix
 
-Who can do what, where — the heart of the design. 🆕 marks behavior landing
-with the water update (in development): water no longer kills on contact;
-you only die **buried** (head sealed under water or sand for a beat).
+Who can do what, where — the heart of the design. 🆕 marks the water-update
+behaviors, now shipped: water no longer kills on contact; you only die
+**buried** (head sealed under water or sand for a beat).
 
 | # | Lemming | Ability | Works the terrain | Blocked by | In water | Endangered by |
 |---|---------|---------|-------------------|------------|----------|---------------|

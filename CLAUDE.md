@@ -73,7 +73,7 @@ docs/superpowers/       Design specs + plans (Sand hybrid USP locked here)
 | 2 | steel | indestructible (clank) |
 | 3/4 | one-way L/R | carve only with the arrow |
 | 5 | sand | powder; dig/bomb debris |
-| 6 | water | flows; drowns on overlap (not walk-solid) |
+| 6 | water | flows; floats lemmings (tread/swim); death only when sealed under it |
 | 7 | wood | falls in air; floats on water; water beside it on a floor seeps under and lifts it (bridge hook) |
 
 Campaign dig tunnels usually stay clear (`sandEmitRatio: 0` default). Lab and
@@ -109,6 +109,11 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 - Success % = `saved / totalLemmings` (HUD + end overlay). Quota is still
   `targetSaved` for win/lose.
 - Level factories return fresh mutable `Terrain` every start/restart.
+- Water model: chest-deep water → `treading` (safe, stuck) or `swimming`
+  (swimmer trait, hotkey 9, assignable mid-water). The only water/sand death
+  is the sealed-head rule (`SEALED_DEATH_MS`). Armed bombers sink instead;
+  blockers wash off; climbers self-rescue. See the README interaction matrix
+  and `docs/superpowers/specs/2026-07-11-water-reactive-lemmings-design.md`.
 
 ## Testing expectations
 
