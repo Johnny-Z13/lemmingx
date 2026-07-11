@@ -37,7 +37,9 @@ const HAIR_BY_STATE: Record<string, number> = {
 };
 
 /** One pixel unit. Body is ~8 wide x ~12 tall at this scale. */
-const PX = 1.5;
+const PX = 2;
+/** Mirror of the sim's FOOT_Y: collision feet sit at lemming.y + 14. */
+const FOOT_OFFSET = 14;
 
 /** A tiny helper: fill a pixel-block rect in local sprite space. */
 function blk(g: Phaser.GameObjects.Graphics, ox: number, oy: number, color: number, x: number, y: number, w: number, h: number): void {
@@ -60,7 +62,8 @@ export function drawLemming(
   // Landing squash: briefly squash the sprite toward the feet.
   const squash = lemming.squashMs > 0 ? Math.min(1, lemming.squashMs / 160) : 0;
   const ox = lemming.x - 4 * PX - squash * PX;
-  const oy = lemming.y - 9 * PX + squash * 3 * PX;
+  // Feet (block row 9 bottom = oy + 9·PX) rest on the sim's collision feet.
+  const oy = lemming.y + FOOT_OFFSET - 9 * PX + squash * 2;
 
   if (lemming.state === 'dead') {
     drawSplat(g, ox, oy, frame, lemming);
@@ -71,9 +74,9 @@ export function drawLemming(
   if (selected) {
     const pulse = 10 + Math.sin(frame * 0.6) * 1.5;
     g.lineStyle(2, 0xffffff, 0.9);
-    g.strokeCircle(lemming.x, lemming.y + 2, pulse);
+    g.strokeCircle(lemming.x, lemming.y + 4, pulse);
     g.lineStyle(1, 0x6ae1ff, 0.45);
-    g.strokeCircle(lemming.x, lemming.y + 2, pulse + 3);
+    g.strokeCircle(lemming.x, lemming.y + 4, pulse + 3);
   }
 
   const hair = HAIR_BY_STATE[lemming.state] ?? HAIR_DEFAULT;
@@ -149,7 +152,7 @@ export function drawLemming(
       g.fillRect(ox + 1 * PX, oy + 1 * PX, 4 * PX, 7 * PX);
     }
     const digit = Math.max(1, Math.ceil(lemming.fuseMs / 1000));
-    drawDigit(g, lemming.x, lemming.y - 16 - squash * 2, digit);
+    drawDigit(g, lemming.x, lemming.y - 12 - squash * 2, digit);
   }
 }
 

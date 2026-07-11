@@ -502,7 +502,7 @@ export class GameScene extends Phaser.Scene {
 
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'dead' || lemming.state === 'exited') continue;
-      const distanceSq = (lemming.x - worldX) ** 2 + (lemming.y - worldY) ** 2;
+      const distanceSq = (lemming.x - worldX) ** 2 + (lemming.y + 4 - worldY) ** 2;
       if (distanceSq < nearestDistanceSq) {
         nearest = lemming;
         nearestDistanceSq = distanceSq;
