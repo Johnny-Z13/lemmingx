@@ -5,6 +5,8 @@ import type { LevelDefinition } from '../sim/types';
  * Level 3 — "Hold the Line".
  * Plant a blocker at the wall face and arm a bomber — the crater sprays sand
  * debris that settles. Teaches blocker + bomber (and that bombers cost lives).
+ * Alternate: three landscape sand charges poured on the wall settle into a
+ * walkable ramp — nobody dies.
  */
 export function createLevel3(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
@@ -29,6 +31,7 @@ export function createLevel3(): LevelDefinition {
     timeLimitMs: 240000,
     caSeed: 33,
     sandEmitRatio: 0.55,
+    landscape: { sand: 3 },
     skills: {
       climber: 0,
       floater: 0,

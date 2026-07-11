@@ -73,6 +73,17 @@ describe('Level roster', () => {
     expect(sim.state.lost).toBeGreaterThanOrEqual(1); // the volunteer
   });
 
+  it('level 3 (Hold the Line) — sand charges ramp the wall, no lives spent', () => {
+    let poured = 0;
+    const sim = run(2, (s) => {
+      if (poured < 3 && s.state.timeMs > 1200 + poured * 400) {
+        if (s.paintLandscape(564, 392, 16, 'sand')) poured += 1;
+      }
+    });
+    expectWon(sim);
+    expect(sim.state.lost).toBe(0);
+  });
+
   it('level 4 (The Long March) — bash all three walls', () => {
     const bashed = [false, false, false];
     const walls = [800, 1600, 2400];
