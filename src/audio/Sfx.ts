@@ -65,9 +65,11 @@ export class Sfx {
         this.blip(880, 0.07, 'triangle', 0.7);
         break;
       case 'exit':
-        // Happy rising two-note "yippee".
-        this.blip(784, 0.08, 'square', 0.7);
-        this.blip(1175, 0.12, 'square', 0.7, 0.07);
+        // Bright home fanfare — arpeggio sparkle.
+        this.blip(784, 0.07, 'square', 0.75);
+        this.blip(988, 0.08, 'square', 0.7, 0.05);
+        this.blip(1175, 0.1, 'triangle', 0.8, 0.1);
+        this.blip(1568, 0.14, 'sine', 0.55, 0.16);
         break;
       case 'dig':
       case 'bash':
@@ -75,6 +77,14 @@ export class Sfx {
         break;
       case 'build':
         this.blip(523, 0.05, 'triangle', 0.5);
+        break;
+      case 'shrug':
+        // Sad little descending "oh no".
+        this.blip(420, 0.1, 'triangle', 0.55, 0, 220);
+        this.blip(280, 0.12, 'sine', 0.4, 0.08, 160);
+        break;
+      case 'land':
+        this.noise(0.04, 0.35, 600, true);
         break;
       case 'clank':
         // Metallic ping: a bright square hit with a fast ring-down.

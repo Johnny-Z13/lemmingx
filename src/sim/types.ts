@@ -40,6 +40,7 @@ export type LemmingState =
   | 'basher'
   | 'miner' // carving a diagonal tunnel downward
   | 'digger'
+  | 'shrug' // classic builder "oh no" after finishing / hitting a wall
   | 'exited'
   | 'dead';
 
@@ -112,6 +113,35 @@ export interface LevelDefinition {
   skills: SkillInventory;
   /** Optional level time limit in ms. Omit/0 for no limit. */
   timeLimitMs?: number;
+  /**
+   * Living-terrain CA. When omitted, defaults enable sand/water physics with
+   * a fixed seed so campaign play stays deterministic.
+   */
+  caEnabled?: boolean;
+  /** Seed for CA PRNG. Default 1. */
+  caSeed?: number;
+  /** CA passes per sim step. Default 3. */
+  caSubsteps?: number;
+  /**
+   * Fraction of dig debris grains to spray as sand near a carve (0–1).
+   * Default 0.5. Dig tunnels stay empty; sand falls in from around the bite.
+   */
+  sandEmitRatio?: number;
+  /**
+   * Dirt with fewer than this many solid neighbors becomes sand.
+   * 0 (default) disables collapse.
+   */
+  stabilityThreshold?: number;
+  /** Limited landscape paint charges for campaign sandworld puzzles. */
+  landscape?: {
+    water?: number;
+    sand?: number;
+    dirt?: number;
+    wood?: number;
+    erase?: number;
+  };
+  /** Sand Lab free-play arena (no quota pressure; paint tools on). */
+  sandLab?: boolean;
 }
 
 /**
@@ -129,6 +159,8 @@ export type SimEventKind =
   | 'dig'
   | 'bash'
   | 'build'
+  | 'shrug' // builder finished or hit a wall
+  | 'land' // survived a fall (soft thud / squash)
   | 'clank' // carve attempt hit steel / a one-way wall the wrong way
   | 'trap' // a trap sprung on a victim (see trapKind)
   | 'nuke';
@@ -160,6 +192,13 @@ export interface Lemming {
    * at zero the lemming explodes, carving terrain and dying.
    */
   fuseMs: number | null;
+  /** Remaining ms of landing squash/stretch (0 when idle). */
+  squashMs: number;
+  /**
+   * Skill prepaid via the hatch queue. Applied on spawn when possible, otherwise
+   * once the lemming is grounded (so queued diggers/bashers still work).
+   */
+  pendingHatchSkill: Skill | null;
 }
 
 export interface SimulationState {
@@ -188,4 +227,11 @@ export interface SimulationState {
   hatchOpenMs: number;
   /** Total hatch-opening duration (for animation progress). */
   hatchTotalMs: number;
+  /**
+   * Skills pre-loaded onto the next hatch releases (front = next spawn).
+   * Enqueueing consumes skill stock; spawn applies without a second consume.
+   */
+  hatchQueue: Skill[];
+  /** Remaining landscape paint charges (campaign sandworld tools). */
+  landscape: { water: number; sand: number; dirt: number; wood: number; erase: number };
 }

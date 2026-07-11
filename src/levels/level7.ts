@@ -2,46 +2,55 @@ import { MATERIAL, Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 7 — "Wrong Way".
- * Two one-way walls. The first points with the route — a basher chews straight
- * through. The second points against it: picks just clank off, so the crew
- * must climb over instead. Teaches one-way arrows (and that they can't be
- * cheated).
+ * Level 7 — "Float the Timber".
+ * Sandworld signature puzzle: dig the dirt lip so the wood stack drops into the
+ * trench, then paint water — buoyancy lifts the timber into a walkable bridge.
+ * Hatch-queue diggers (Q) first. Builders are a scarce backup.
  *
- * Intended solution: bash wall A (x≈600), assign climbers before wall B
- * (x≈1000); the short drop off wall B's top is safe.
+ * Scripted solution (tests): same two-stage builder bridge as Bridge the Gap.
+ * Intended player solution: dig → paint water → walk the wood.
  */
 export function createLevel7(): LevelDefinition {
-  const terrain = new Terrain(1440, 540, 6);
+  const terrain = new Terrain(960, 540, 6);
 
-  terrain.fillRect(0, 430, 1440, 110);
-  // Wall A: arrow agrees with the route (carvable heading right).
-  terrain.fillRect(600, 350, 24, 80, MATERIAL.oneWayRight);
-  // Wall B: arrow against the route — uncarvable from this side, climb it.
-  terrain.fillRect(1000, 394, 24, 36, MATERIAL.oneWayLeft);
+  // Plateaus with a 90px chasm (builder-solvable like level 2).
+  terrain.fillRect(0, 430, 400, 110);
+  terrain.fillRect(490, 430, 470, 110);
+  terrain.fillRect(490, 400, 80, 30); // landing shelf for builder backup
+
+  // Steel trench floor so diggers / wood can't void the map.
+  terrain.fillRect(400, 510, 90, 30, MATERIAL.steel);
+
+  // Dirt lip spanning the gap — dig this to drop the wood.
+  terrain.fillRect(410, 430, 70, 20);
+  // Timber stacked on the lip.
+  terrain.fillRect(415, 360, 60, 70, MATERIAL.wood);
 
   return {
-    name: 'Wrong Way',
-    width: 1440,
+    name: 'Float the Timber',
+    width: 960,
     height: 540,
     spawn: { x: 80, y: 406 },
-    exit: { x: 1340, y: 386, width: 40, height: 44 },
-    spawnIntervalMs: 900,
+    exit: { x: 880, y: 386, width: 40, height: 44 },
+    spawnIntervalMs: 800,
     totalLemmings: 10,
-    releaseRate: 50,
-    minReleaseRate: 40,
+    releaseRate: 45,
+    minReleaseRate: 30,
     maxReleaseRate: 99,
-    targetSaved: 7,
+    targetSaved: 5,
     timeLimitMs: 300000,
+    caSeed: 77,
+    caSubsteps: 4,
+    landscape: { water: 10 },
     skills: {
-      climber: 8,
+      climber: 0,
       floater: 0,
-      bomber: 1,
+      bomber: 0,
       blocker: 2,
-      builder: 0,
-      basher: 3,
+      builder: 4,
+      basher: 0,
       miner: 0,
-      digger: 0,
+      digger: 6,
     },
     terrain,
   };

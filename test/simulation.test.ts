@@ -254,7 +254,7 @@ describe('Terrain materials', () => {
     expect(everFell).toBe(true);
   });
 
-  it('a bomber crater erases dirt but leaves steel intact', () => {
+  it('a bomber crater leaves sand debris but leaves steel intact', () => {
     const terrain = new Terrain(120, 160, 4);
     terrain.fillRect(0, 72, 120, 16); // dirt floor
     terrain.fillRect(0, 88, 120, 16, MATERIAL.steel); // steel slab beneath
@@ -264,17 +264,24 @@ describe('Terrain materials', () => {
         height: 160,
         spawn: { x: 60, y: 56 },
         exit: { x: 5, y: 150, width: 1, height: 1 }, // unreachable
+        sandEmitRatio: 1,
         terrain,
       }),
     );
     sim.step(120);
     const lemming = sim.state.lemmings[0];
-    const before = terrain.solidCellCount();
     sim.assignSkill(lemming.id, 'bomber');
     for (let i = 0; i < 400; i += 1) sim.step(16);
+    sim.settleTerrain();
 
     expect(lemming.state).toBe('dead');
-    expect(terrain.solidCellCount()).toBeLessThan(before); // dirt crater carved
+    let sand = 0;
+    for (let y = 0; y < terrain.rows; y += 1) {
+      for (let x = 0; x < terrain.cols; x += 1) {
+        if (terrain.getCell(x, y) === MATERIAL.sand) sand += 1;
+      }
+    }
+    expect(sand).toBeGreaterThan(0);
     for (let x = 2; x < 120; x += 4) {
       expect(terrain.isSolidAt(x, 92)).toBe(true); // entire steel row intact
     }
@@ -466,21 +473,33 @@ describe('GameSimulation', () => {
     expect(floaty.state.lost).toBe(0);
   });
 
-  it('a bomber explodes after its fuse and carves a crater', () => {
+  it('a bomber explodes after its fuse and leaves sand debris', () => {
     const terrain = new Terrain(120, 120, 4);
     terrain.fillRect(0, 72, 120, 48);
     const sim = new GameSimulation(
-      makeFlatLevel({ width: 120, spawn: { x: 40, y: 56 }, exit: { x: 200, y: 0, width: 1, height: 1 }, terrain }),
+      makeFlatLevel({
+        width: 120,
+        spawn: { x: 40, y: 56 },
+        exit: { x: 200, y: 0, width: 1, height: 1 },
+        sandEmitRatio: 1,
+        terrain,
+      }),
     );
     sim.step(120);
     const lemming = sim.state.lemmings[0];
-    const before = terrain.solidCellCount();
     sim.assignSkill(lemming.id, 'bomber');
     // Run past the 5s fuse.
     for (let i = 0; i < 400; i += 1) sim.step(16);
+    sim.settleTerrain();
 
     expect(lemming.state).toBe('dead');
-    expect(terrain.solidCellCount()).toBeLessThan(before);
+    let sand = 0;
+    for (let y = 0; y < terrain.rows; y += 1) {
+      for (let x = 0; x < terrain.cols; x += 1) {
+        if (terrain.getCell(x, y) === MATERIAL.sand) sand += 1;
+      }
+    }
+    expect(sand).toBeGreaterThan(0);
   });
 
   it('emits drainable events for spawn, assign, dig and exit', () => {
@@ -561,5 +580,67 @@ describe('GameSimulation', () => {
     expect(armed).toBe(live.length);
     expect(sim.state.nuking).toBe(true);
     expect(live.every((l) => l.fuseMs !== null)).toBe(true);
+  });
+
+  it('refuses grounded jobs while falling, but still allows floater/bomber mid-air', () => {
+    // No floor under the spawn — the lemming is always a faller.
+    const terrain = new Terrain(120, 200, 4);
+    terrain.fillRect(0, 180, 120, 20);
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        width: 120,
+        height: 200,
+        spawn: { x: 40, y: 24 },
+        exit: { x: 200, y: 0, width: 1, height: 1 },
+        terrain,
+      }),
+    );
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    expect(lemming.state).toBe('faller');
+
+    expect(sim.assignSkill(lemming.id, 'digger')).toBe(false);
+    expect(sim.assignSkill(lemming.id, 'blocker')).toBe(false);
+    expect(sim.assignSkill(lemming.id, 'builder')).toBe(false);
+    expect(sim.assignSkill(lemming.id, 'basher')).toBe(false);
+    expect(sim.assignSkill(lemming.id, 'miner')).toBe(false);
+    expect(sim.state.skills.digger).toBe(10);
+
+    expect(sim.assignSkill(lemming.id, 'floater')).toBe(true);
+    expect(lemming.isFloater).toBe(true);
+    expect(sim.assignSkill(lemming.id, 'bomber')).toBe(true);
+    expect(lemming.fuseMs).not.toBeNull();
+  });
+
+  it('a finished builder shrugs before walking again', () => {
+    const sim = new GameSimulation(makeFlatLevel({ exit: { x: 200, y: 0, width: 1, height: 1 } }));
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    expect(sim.assignSkill(lemming.id, 'builder')).toBe(true);
+
+    const kinds: string[] = [];
+    for (let i = 0; i < 500; i += 1) {
+      sim.step(16);
+      kinds.push(...sim.drainEvents().map((e) => e.kind));
+      if (lemming.state === 'shrug') break;
+    }
+
+    expect(kinds).toContain('shrug');
+    expect(lemming.state).toBe('shrug');
+
+    for (let i = 0; i < 80; i += 1) sim.step(16);
+    expect(lemming.state).toBe('walker');
+  });
+
+  it('marks terrain dirty on carve and clears after consumeDirty', () => {
+    const terrain = new Terrain(80, 80, 4);
+    terrain.fillRect(0, 40, 80, 40);
+    expect(terrain.consumeDirty()).toBe(true);
+    expect(terrain.isDirty()).toBe(false);
+
+    terrain.carveRect(20, 40, 16, 16, 0);
+    expect(terrain.isDirty()).toBe(true);
+    expect(terrain.consumeDirty()).toBe(true);
+    expect(terrain.isDirty()).toBe(false);
   });
 });

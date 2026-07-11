@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
-import { createLevelAt, LEVEL_COUNT } from '../levels';
+import { createLevelAt, LEVEL_COUNT, SAND_LAB_INDEX } from '../levels';
 import { GameSimulation } from '../sim/GameSimulation';
 import type { Lemming, LevelDefinition, Skill } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import type { SimEvent } from '../sim/types';
 import { Hud } from '../ui/Hud';
-import { LevelSelect } from '../ui/LevelSelect';
+import { LevelSelect, type LevelCard } from '../ui/LevelSelect';
 import { Progress } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
 import { MATERIAL } from '../sim/Terrain';
@@ -20,11 +20,14 @@ const ANIM_FPS = 12;
 /** Pixels: how close the cursor must be to a lemming to hover/select it. */
 const HOVER_RADIUS = 16;
 
+type LabBrush = 'sand' | 'water' | 'dirt' | 'erase' | 'bomb' | 'assign';
+
 export class GameScene extends Phaser.Scene {
   private level!: LevelDefinition;
   private sim!: GameSimulation;
   private hud!: Hud;
   private terrainGraphics!: Phaser.GameObjects.Graphics;
+  private setpieceGraphics!: Phaser.GameObjects.Graphics;
   private actorGraphics!: Phaser.GameObjects.Graphics;
   private fxGraphics!: Phaser.GameObjects.Graphics;
   private animClockMs = 0;
@@ -43,6 +46,11 @@ export class GameScene extends Phaser.Scene {
   private levelSelect!: LevelSelect;
   private selectOpen = false;
   private winRecorded = false;
+  private celebrateFired = false;
+  private ambientAccMs = 0;
+  private labBrush: LabBrush = 'sand';
+  private labPainting = false;
+  private landscapeBrush: 'water' | 'sand' | 'dirt' | 'wood' | 'erase' | null = null;
 
   constructor() {
     super('GameScene');
@@ -54,15 +62,31 @@ export class GameScene extends Phaser.Scene {
     // Audio contexts need a user gesture; unlock on the first pointer/key.
     this.input.on('pointerdown', () => this.unlockAudio());
     this.input.keyboard?.on('keydown', () => this.unlockAudio());
-    // Click-to-assign is bound once here (reads the current sim each time), so
-    // restarting a level never strips the handler. Left button only — the
-    // right/middle buttons drag-pan the camera.
+    // Click-to-assign / lab paint. Left button only — right/middle drag-pan.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.button === 0) this.assignSelectedSkill(pointer.worldX, pointer.worldY);
+      if (pointer.button !== 0) return;
+      if (this.isLab()) {
+        this.labPainting = true;
+        this.applyLabBrush(pointer.worldX, pointer.worldY);
+        return;
+      }
+      if (this.landscapeBrush) {
+        this.labPainting = true;
+        this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, this.landscapeBrush);
+        return;
+      }
+      this.assignSelectedSkill(pointer.worldX, pointer.worldY);
+    });
+    this.input.on('pointerup', () => {
+      this.labPainting = false;
     });
     this.input.mouse?.disableContextMenu();
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       this.pointerSeen = true;
+      if (this.labPainting && pointer.isDown) {
+        if (this.isLab()) this.applyLabBrush(pointer.worldX, pointer.worldY);
+        else if (this.landscapeBrush) this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, this.landscapeBrush);
+      }
       if (pointer.middleButtonDown() || pointer.rightButtonDown()) {
         const cam = this.cameras.main;
         cam.scrollX -= pointer.position.x - pointer.prevPosition.x;
@@ -82,7 +106,7 @@ export class GameScene extends Phaser.Scene {
   private openLevelSelect(): void {
     this.selectOpen = true;
     this.music.stop();
-    const cards = Array.from({ length: LEVEL_COUNT }, (_, index) => {
+    const cards: LevelCard[] = Array.from({ length: LEVEL_COUNT }, (_, index) => {
       const def = createLevelAt(index);
       const result = this.progress.get(index);
       return {
@@ -93,7 +117,42 @@ export class GameScene extends Phaser.Scene {
         bestSavedPct: result.bestSavedPct,
       };
     });
+    cards.push({
+      index: SAND_LAB_INDEX,
+      name: 'Sand Lab',
+      unlocked: true,
+      completed: false,
+      bestSavedPct: 0,
+      sandLab: true,
+    });
     this.levelSelect.show(cards);
+  }
+
+  private isLab(): boolean {
+    return !!this.level?.sandLab;
+  }
+
+  private applyLabBrush(worldX: number, worldY: number): void {
+    if (!this.sim || this.sim.state.outcome !== 'running') return;
+    const r = this.labBrush === 'bomb' ? 28 : 14;
+    if (this.labBrush === 'bomb') {
+      this.sim.labBomb(worldX, worldY, r);
+      this.sfx.play('explode');
+      this.particles.burst(worldX, worldY, 20, { color: [0xff7a3a, 0xffd96b, 0xd4a84a], speed: 0.2, lifeMs: 700, size: 2.5 });
+      this.addShake(6);
+      this.labPainting = false; // one-shot
+      return;
+    }
+    if (this.labBrush === 'assign') {
+      this.assignSelectedSkill(worldX, worldY);
+      return;
+    }
+    const mat =
+      this.labBrush === 'sand' ? MATERIAL.sand :
+      this.labBrush === 'water' ? MATERIAL.water :
+      this.labBrush === 'dirt' ? MATERIAL.dirt :
+      MATERIAL.empty;
+    this.sim.paintCircle(worldX, worldY, r, mat);
   }
 
   update(_time: number, delta: number): void {
@@ -111,8 +170,13 @@ export class GameScene extends Phaser.Scene {
       const pct = (this.sim.state.saved / Math.max(1, this.sim.state.totalLemmings)) * 100;
       this.progress.recordWin(this.levelIndex, pct);
     }
+    if (this.sim.state.outcome === 'won' && !this.celebrateFired) {
+      this.celebrateFired = true;
+      this.fireWinCelebrate();
+    }
     this.animClockMs += delta;
     this.particles.update(this.paused ? 0 : delta * this.speed);
+    this.updateAmbient(delta);
     this.updateCamera(delta);
     this.updateHover();
     this.drawWorld();
@@ -149,44 +213,95 @@ export class GameScene extends Phaser.Scene {
       if (e.kind === 'trap') this.sfx.playTrap(e.trapKind);
       else this.sfx.play(e.kind);
       switch (e.kind) {
+        case 'assign':
+          this.particles.ring(e.x, e.y, 10, { color: [0xffffff, 0x6ae1ff, 0x5ef2a1], speed: 0.14, lifeMs: 320, size: 2 });
+          break;
         case 'dig':
-          this.particles.burst(e.x, e.y, 4, { color: [0x4d9674, 0x297567], speed: 0.05, lifeMs: 420, size: 2 });
+          this.particles.burst(e.x, e.y, 6, { color: [0x4d9674, 0x297567, 0xffe9c2], speed: 0.06, lifeMs: 420, size: 2 });
           break;
         case 'bash':
-          this.particles.burst(e.x, e.y, 5, { color: [0x4d9674, 0x297567, 0xffe9c2], speed: 0.09, spread: Math.PI, lifeMs: 380, size: 2 });
+          this.particles.burst(e.x, e.y, 7, { color: [0x4d9674, 0x297567, 0xffe9c2], speed: 0.11, spread: Math.PI, lifeMs: 400, size: 2.2 });
           break;
         case 'build':
-          this.particles.burst(e.x, e.y, 2, { color: 0x6ae1ff, speed: 0.04, lifeMs: 300, size: 1.5 });
+          this.particles.burst(e.x, e.y, 3, { color: [0x6ae1ff, 0xffffff], speed: 0.05, lifeMs: 340, size: 1.8, upward: true });
+          break;
+        case 'shrug':
+          this.particles.burst(e.x, e.y - 8, 4, { color: [0xff9ec8, 0xffffff], speed: 0.04, lifeMs: 500, size: 1.5, upward: true, gravity: -0.00005 });
+          break;
+        case 'land':
+          this.particles.burst(e.x, e.y, 5, { color: [0x9aa6c2, 0x4d9674], speed: 0.05, spread: Math.PI * 0.8, angle: -Math.PI / 2, lifeMs: 280, size: 1.5 });
           break;
         case 'exit':
-          this.particles.burst(e.x, e.y - 6, 12, { color: [0x78ffd6, 0x6ae1ff, 0xffffff], speed: 0.12, lifeMs: 700, size: 2.5, gravity: -0.0002, upward: true });
+          this.particles.burst(e.x, e.y - 6, 14, { color: [0x78ffd6, 0x6ae1ff, 0xffffff], speed: 0.14, lifeMs: 750, size: 2.5, gravity: -0.0002, upward: true });
+          this.addShake(2.5);
           break;
         case 'splat':
-          this.particles.burst(e.x, e.y + 8, 8, { color: [0xff5b7f, 0x5e6575], speed: 0.1, spread: Math.PI, angle: -Math.PI / 2, lifeMs: 500, size: 2 });
+          this.particles.burst(e.x, e.y + 8, 10, { color: [0xff5b7f, 0x5e6575], speed: 0.12, spread: Math.PI, angle: -Math.PI / 2, lifeMs: 550, size: 2.2 });
+          this.addShake(4);
           break;
         case 'drown':
-          this.particles.burst(e.x, e.y, 8, { color: [0x4ab6ff, 0xffffff], speed: 0.09, lifeMs: 500, size: 2, upward: true });
+          this.particles.burst(e.x, e.y, 10, { color: [0x4ab6ff, 0xffffff], speed: 0.1, lifeMs: 550, size: 2, upward: true });
           break;
         case 'clank':
-          this.particles.burst(e.x, e.y, 6, { color: [0xffffff, 0xffd96b, 0x9aa6c2], speed: 0.14, lifeMs: 320, size: 1.5 });
+          this.particles.burst(e.x, e.y, 8, { color: [0xffffff, 0xffd96b, 0x9aa6c2], speed: 0.16, lifeMs: 340, size: 1.6 });
+          this.addShake(1.5);
           break;
         case 'trap':
-          this.particles.burst(e.x, e.y, 14, {
+          this.particles.burst(e.x, e.y, 16, {
             color: e.trapKind === 'zapper' ? [0x8be9ff, 0xffffff, 0x6ae1ff] : [0xff5b7f, 0x5e6575, 0x2c333f],
-            speed: 0.13,
-            lifeMs: 550,
-            size: 2,
+            speed: 0.15,
+            lifeMs: 580,
+            size: 2.2,
           });
+          this.addShake(6);
           break;
         case 'explode':
-          this.particles.burst(e.x, e.y, 24, { color: [0xff7a3a, 0xffd96b, 0x5e6575, 0xff5b7f], speed: 0.22, lifeMs: 800, size: 3 });
+          this.particles.burst(e.x, e.y, 28, { color: [0xff7a3a, 0xffd96b, 0x5e6575, 0xff5b7f], speed: 0.26, lifeMs: 900, size: 3.2 });
+          this.particles.ring(e.x, e.y, 14, { color: [0xffd96b, 0xff7a3a], speed: 0.2, lifeMs: 500, size: 2 });
+          this.addShake(10);
           break;
         case 'nuke':
-          this.particles.burst(e.x, e.y, 16, { color: [0xff5b7f, 0xffd96b], speed: 0.18, lifeMs: 700, size: 3 });
+          this.particles.burst(e.x, e.y, 20, { color: [0xff5b7f, 0xffd96b], speed: 0.2, lifeMs: 750, size: 3 });
           this.music.duck(1500);
+          this.addShake(8);
+          break;
+        case 'spawn':
+          this.particles.burst(e.x, e.y, 3, { color: [0xffd96b, 0xffffff], speed: 0.04, lifeMs: 280, size: 1.4, upward: true });
           break;
       }
     }
+  }
+
+  private addShake(amount: number): void {
+    // Phaser camera shake: duration ms, intensity as fraction of viewport.
+    const intensity = Math.min(0.018, amount * 0.0018);
+    this.cameras.main.shake(160 + amount * 18, intensity);
+  }
+
+  /** Soft ambient sparkles at the exit so the goal always reads alive. */
+  private updateAmbient(deltaMs: number): void {
+    if (this.paused || this.sim.state.outcome !== 'running') return;
+    this.ambientAccMs += deltaMs * this.speed;
+    if (this.ambientAccMs < 220) return;
+    this.ambientAccMs = 0;
+    const exit = this.level.exit;
+    this.particles.burst(exit.x + exit.width * Math.random(), exit.y + 8 + Math.random() * 20, 1, {
+      color: [0x78ffd6, 0xffffff, 0x6ae1ff],
+      speed: 0.03,
+      lifeMs: 900,
+      size: 1.4,
+      gravity: -0.00015,
+      upward: true,
+    });
+  }
+
+  private fireWinCelebrate(): void {
+    const exit = this.level.exit;
+    const cx = exit.x + exit.width / 2;
+    const cy = exit.y + exit.height / 2;
+    this.particles.burst(cx, cy, 40, { color: [0x78ffd6, 0x6ae1ff, 0xffd96b, 0xffffff, 0x5ef2a1], speed: 0.22, lifeMs: 1200, size: 3, upward: true, gravity: 0.00015 });
+    this.particles.ring(cx, cy, 18, { color: [0x78ffd6, 0xffd96b], speed: 0.18, lifeMs: 700, size: 2.5 });
+    this.addShake(5);
   }
 
   /** Snapshot of scene-side display state the HUD needs each frame. */
@@ -201,8 +316,10 @@ export class GameScene extends Phaser.Scene {
       speed: this.speed,
       nukeReady: this.sim.state.outcome === 'running' && !this.sim.state.nuking,
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
-      levelName: `${this.levelIndex + 1}/${LEVEL_COUNT} · ${this.level.name ?? 'LemmingX'}`,
-      hasNextLevel: this.levelIndex < LEVEL_COUNT - 1,
+      levelName: `${this.isLab() ? 'Lab' : `${this.levelIndex + 1}/${LEVEL_COUNT}`} · ${this.level.name ?? 'LemmingX'}`,
+      hasNextLevel: !this.isLab() && this.levelIndex < LEVEL_COUNT - 1,
+      labBrush: this.isLab() ? this.labBrush : null,
+      landscapeBrush: this.isLab() ? null : this.landscapeBrush,
       minimap: scrolls
         ? {
             terrain: this.level.terrain,
@@ -234,6 +351,7 @@ export class GameScene extends Phaser.Scene {
   private startLevel(): void {
     this.level = createLevelAt(this.levelIndex);
     this.sim = new GameSimulation(this.level);
+    this.winRecorded = false;
 
     this.children.removeAll(true);
     this.cameras.main.setBounds(0, 0, this.level.width, this.level.height);
@@ -242,16 +360,28 @@ export class GameScene extends Phaser.Scene {
 
     this.addBackground();
     this.terrainGraphics = this.add.graphics();
+    this.setpieceGraphics = this.add.graphics();
     this.actorGraphics = this.add.graphics();
     this.fxGraphics = this.add.graphics();
 
     this.particles.clear();
     this.paused = false;
     this.speed = 1;
+    this.celebrateFired = false;
+    this.ambientAccMs = 0;
+    this.landscapeBrush = null;
 
     this.hud?.destroy();
     this.hud = new Hud({
-      onSelectSkill: (skill) => this.selectSkill(skill),
+      onSelectSkill: (skill) => {
+        this.landscapeBrush = null;
+        this.selectSkill(skill);
+      },
+      onEnqueueRelease: () => this.sim.enqueueRelease(this.sim.state.selectedSkill),
+      onPopQueue: () => this.sim.popReleaseQueue(),
+      onSelectLandscape: (kind) => {
+        this.landscapeBrush = kind;
+      },
       onNuke: () => this.triggerNuke(),
       onReleaseRate: (delta) => this.sim.changeReleaseRate(delta),
       onRestart: () => this.startLevel(),
@@ -285,7 +415,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Advance to the next level; from the finale, back to the level select. */
   private nextLevel(): void {
-    if (this.levelIndex + 1 >= LEVEL_COUNT) {
+    if (this.isLab() || this.levelIndex + 1 >= LEVEL_COUNT) {
       this.openLevelSelect();
       return;
     }
@@ -320,9 +450,26 @@ export class GameScene extends Phaser.Scene {
     kb.on('keydown', (event: KeyboardEvent) => {
       if (this.selectOpen) return; // the level select owns the keyboard
       const key = event.key.toLowerCase();
-      // Skill hotkeys (1–8) map to the registry's declared hotkeys.
+
+      if (this.isLab()) {
+        if (key === '1') { this.labBrush = 'sand'; return; }
+        if (key === '2') { this.labBrush = 'water'; return; }
+        if (key === '3') { this.labBrush = 'dirt'; return; }
+        if (key === '4') { this.labBrush = 'erase'; return; }
+        if (key === '5') { this.labBrush = 'bomb'; return; }
+        if (key === '6') { this.labBrush = 'assign'; return; }
+      } else if (key === 'q') {
+        this.sim.enqueueRelease(this.sim.state.selectedSkill);
+        return;
+      } else if (key === 'backspace') {
+        this.sim.popReleaseQueue();
+        return;
+      }
+
+      // Skill hotkeys (1–8) map to the registry's declared hotkeys (campaign).
       const skill = ALL_SKILLS.find((s) => SKILL_DEFS[s].hotkey === key);
-      if (skill) {
+      if (skill && !this.isLab()) {
+        this.landscapeBrush = null;
         this.selectSkill(skill);
         return;
       }
@@ -381,7 +528,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawWorld(): void {
-    this.drawTerrain();
+    // Terrain cells only when the bitmap changed — traps/hatch/exit animate
+    // every frame on their own layer so we don't re-sweep thousands of cells.
+    if (this.level.terrain.isDirty()) {
+      this.drawTerrain();
+      this.level.terrain.consumeDirty();
+    }
+    this.setpieceGraphics.clear();
     this.drawHatch();
     this.drawExit();
     this.drawHazards();
@@ -389,10 +542,22 @@ export class GameScene extends Phaser.Scene {
     this.drawLemmings();
     this.fxGraphics.clear();
     this.particles.draw(this.fxGraphics);
+    if (this.speed > 1 && !this.paused) this.drawFastForwardTint();
+  }
+
+  /** Subtle speed lines while fast-forwarding. */
+  private drawFastForwardTint(): void {
+    const cam = this.cameras.main;
+    const g = this.fxGraphics;
+    g.lineStyle(1, 0xffffff, 0.06 * this.speed);
+    for (let i = 0; i < 6; i += 1) {
+      const y = cam.scrollY + ((this.animClockMs * 0.2 * this.speed + i * 70) % cam.height);
+      g.lineBetween(cam.scrollX, y, cam.scrollX + cam.width, y - 12);
+    }
   }
 
   private drawTraps(): void {
-    const g = this.terrainGraphics;
+    const g = this.setpieceGraphics;
     const t = this.sim.state.timeMs;
     for (const trap of this.sim.state.traps) {
       const { x, y, width, height, kind, cycleMs } = { cycleMs: 1400, ...trap.def };
@@ -468,6 +633,26 @@ export class GameScene extends Phaser.Scene {
         }
         return;
       }
+      if (material === MATERIAL.sand) {
+        const speck = (Math.floor(x / width) + Math.floor(y / height)) % 2 === 0 ? 0xe8c56a : 0xd4a84a;
+        this.terrainGraphics.fillStyle(speck, 1);
+        this.terrainGraphics.fillRect(x, y, width, height);
+        return;
+      }
+      if (material === MATERIAL.wood) {
+        this.terrainGraphics.fillStyle(0xa67c52, 1);
+        this.terrainGraphics.fillRect(x, y, width, height);
+        this.terrainGraphics.fillStyle(0xc4a06a, 1);
+        this.terrainGraphics.fillRect(x, y, width, 1);
+        return;
+      }
+      if (material === MATERIAL.water) {
+        this.terrainGraphics.fillStyle(0x3a9fd8, 0.85);
+        this.terrainGraphics.fillRect(x, y, width, height);
+        this.terrainGraphics.fillStyle(0x8ad4ff, 0.35);
+        this.terrainGraphics.fillRect(x, y, width, Math.max(1, height / 3));
+        return;
+      }
       const depth = y / h;
       const shade = depth > 0.85 ? 0x1f5f55 : depth > 0.72 ? 0x297567 : 0x4d9674;
       this.terrainGraphics.fillStyle(shade, 1);
@@ -489,67 +674,103 @@ export class GameScene extends Phaser.Scene {
 
   private drawExit(): void {
     const exit = this.level.exit;
+    const g = this.setpieceGraphics;
+    const t = this.sim.state.timeMs;
     // Slow shimmer so the goal reads as alive.
-    const pulse = 0.75 + Math.sin(this.sim.state.timeMs / 420) * 0.2;
-    this.terrainGraphics.fillStyle(0x111923, 0.92);
-    this.terrainGraphics.fillRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
-    this.terrainGraphics.lineStyle(3, 0x78ffd6, pulse);
-    this.terrainGraphics.strokeRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
-    this.terrainGraphics.fillStyle(0x78ffd6, 0.12 + pulse * 0.14);
-    this.terrainGraphics.fillRect(exit.x, exit.y, exit.width, exit.height);
-    this.terrainGraphics.fillStyle(0xeff7ff, 0.92);
-    this.terrainGraphics.fillTriangle(exit.x + 11, exit.y + 34, exit.x + 30, exit.y + 22, exit.x + 11, exit.y + 10);
+    const pulse = 0.75 + Math.sin(t / 420) * 0.2;
+    // Soft outer glow halo.
+    g.fillStyle(0x78ffd6, 0.06 + pulse * 0.05);
+    g.fillCircle(exit.x + exit.width / 2, exit.y + exit.height / 2, 38 + pulse * 6);
+    g.fillStyle(0x111923, 0.92);
+    g.fillRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
+    g.lineStyle(3, 0x78ffd6, pulse);
+    g.strokeRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
+    // Inner light rays.
+    g.lineStyle(1.5, 0x78ffd6, 0.25 + pulse * 0.2);
+    const cx = exit.x + exit.width / 2;
+    const cy = exit.y + 10;
+    for (let i = 0; i < 5; i += 1) {
+      const a = -Math.PI / 2 + (i - 2) * 0.28 + Math.sin(t / 600 + i) * 0.05;
+      g.lineBetween(cx, cy, cx + Math.cos(a) * 22, cy + Math.sin(a) * 18);
+    }
+    g.fillStyle(0x78ffd6, 0.12 + pulse * 0.14);
+    g.fillRect(exit.x, exit.y, exit.width, exit.height);
+    g.fillStyle(0xeff7ff, 0.92);
+    g.fillTriangle(exit.x + 11, exit.y + 34, exit.x + 30, exit.y + 22, exit.x + 11, exit.y + 10);
   }
 
   private drawHatch(): void {
     const hatchX = this.level.spawn.x - 28;
     const hatchY = this.level.spawn.y - 34;
     const state = this.sim.state;
+    const g = this.setpieceGraphics;
     // 0 → shut, 1 → fully open.
     const open = state.hatchTotalMs > 0 ? 1 - state.hatchOpenMs / state.hatchTotalMs : 1;
 
-    this.terrainGraphics.fillStyle(0x101620, 0.96);
-    this.terrainGraphics.fillRoundedRect(hatchX, hatchY, 58, 30, 5);
-    this.terrainGraphics.lineStyle(3, 0xffd96b, 1);
-    this.terrainGraphics.strokeRoundedRect(hatchX, hatchY, 58, 30, 5);
-    this.terrainGraphics.lineStyle(2, 0xffd96b, 0.55);
+    // Soft warm glow under the hatch while closed / opening.
+    if (open < 1) {
+      g.fillStyle(0xffd96b, 0.08 + open * 0.1);
+      g.fillCircle(this.level.spawn.x, hatchY + 20, 28);
+    }
+
+    g.fillStyle(0x101620, 0.96);
+    g.fillRoundedRect(hatchX, hatchY, 58, 30, 5);
+    g.lineStyle(3, 0xffd96b, 1);
+    g.strokeRoundedRect(hatchX, hatchY, 58, 30, 5);
+    g.lineStyle(2, 0xffd96b, 0.55);
     for (let x = hatchX + 10; x < hatchX + 52; x += 10) {
-      this.terrainGraphics.lineBetween(x, hatchY + 4, x - 12, hatchY + 26);
+      g.lineBetween(x, hatchY + 4, x - 12, hatchY + 26);
     }
 
     // Trapdoor doors slide apart from the centre as the hatch opens.
     const opening = 24;
     const doorWidth = (opening / 2) * (1 - open);
     if (doorWidth > 0.5) {
-      this.terrainGraphics.fillStyle(0xffd96b, 0.95);
-      this.terrainGraphics.fillRect(this.level.spawn.x - opening / 2, hatchY + 26, doorWidth, 5);
-      this.terrainGraphics.fillRect(this.level.spawn.x + opening / 2 - doorWidth, hatchY + 26, doorWidth, 5);
+      g.fillStyle(0xffd96b, 0.95);
+      g.fillRect(this.level.spawn.x - opening / 2, hatchY + 26, doorWidth, 5);
+      g.fillRect(this.level.spawn.x + opening / 2 - doorWidth, hatchY + 26, doorWidth, 5);
     }
     if (open >= 1) {
-      this.terrainGraphics.fillStyle(0xffd96b, 1);
-      this.terrainGraphics.fillTriangle(this.level.spawn.x - 8, hatchY + 30, this.level.spawn.x + 8, hatchY + 30, this.level.spawn.x, hatchY + 44);
+      // Pulsing drop arrow once open.
+      const bob = Math.sin(state.timeMs / 280) * 2;
+      g.fillStyle(0xffd96b, 0.95);
+      g.fillTriangle(
+        this.level.spawn.x - 8,
+        hatchY + 30 + bob,
+        this.level.spawn.x + 8,
+        hatchY + 30 + bob,
+        this.level.spawn.x,
+        hatchY + 44 + bob,
+      );
     }
   }
 
   private drawHazards(): void {
     const hazards = this.level.hazards ?? [];
+    const g = this.setpieceGraphics;
     for (const hazard of hazards) {
       const isLava = hazard.kind === 'lava';
       const surface = isLava ? 0xff5b3a : 0x4ab6ff;
       const deep = isLava ? 0x6e1410 : 0x123a63;
       // Dark basin.
-      this.terrainGraphics.fillStyle(0x0a0d12, 0.85);
-      this.terrainGraphics.fillRect(hazard.x, hazard.y, hazard.width, hazard.height);
+      g.fillStyle(0x0a0d12, 0.85);
+      g.fillRect(hazard.x, hazard.y, hazard.width, hazard.height);
       // Molten/liquid body.
-      this.terrainGraphics.fillStyle(deep, 0.9);
-      this.terrainGraphics.fillRect(hazard.x, hazard.y + 6, hazard.width, hazard.height - 6);
+      g.fillStyle(deep, 0.9);
+      g.fillRect(hazard.x, hazard.y + 6, hazard.width, hazard.height - 6);
       // Animated-looking surface ripples (offset by a slow time wave).
       const t = this.sim.state.timeMs / 240;
-      this.terrainGraphics.fillStyle(surface, isLava ? 0.95 : 0.7);
+      g.fillStyle(surface, isLava ? 0.95 : 0.7);
       const step = 12;
       for (let x = hazard.x; x < hazard.x + hazard.width; x += step) {
         const wave = Math.sin((x + t) * 0.18) * 2;
-        this.terrainGraphics.fillRect(x, hazard.y + 4 + wave, step - 2, 4);
+        g.fillRect(x, hazard.y + 4 + wave, step - 2, 4);
+      }
+      // Occasional spark / bubble highlights.
+      if (Math.floor(this.sim.state.timeMs / 180) % 3 === 0) {
+        g.fillStyle(0xffffff, isLava ? 0.35 : 0.25);
+        const hx = hazard.x + ((Math.floor(this.sim.state.timeMs / 90) * 17) % Math.max(1, hazard.width - 4));
+        g.fillRect(hx, hazard.y + 6, 2, 2);
       }
     }
   }

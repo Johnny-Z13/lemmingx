@@ -87,6 +87,33 @@ export class Particles {
     }
   }
 
+  /** Spawn a ring of particles expanding outward (skill-assign pop). */
+  ring(
+    x: number,
+    y: number,
+    count: number,
+    opts: { color: number | number[]; speed?: number; lifeMs?: number; size?: number } = {
+      color: 0xffffff,
+    },
+  ): void {
+    const { color, speed = 0.12, lifeMs = 380, size = 2 } = opts;
+    for (let i = 0; i < count; i += 1) {
+      const a = (i / count) * Math.PI * 2;
+      const col = Array.isArray(color) ? color[i % color.length] : color;
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        lifeMs: lifeMs * (0.7 + Math.random() * 0.3),
+        maxLifeMs: lifeMs,
+        size: size * (0.7 + Math.random() * 0.5),
+        color: col,
+        gravity: 0,
+      });
+    }
+  }
+
   clear(): void {
     this.particles = [];
   }

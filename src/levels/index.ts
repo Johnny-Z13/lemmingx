@@ -9,11 +9,11 @@ import { createLevel7 } from './level7';
 import { createLevel8 } from './level8';
 import { createLevel9 } from './level9';
 import { createLevel10 } from './level10';
+import { createLabLevel } from './lab';
 
 /**
- * Ordered level roster. Each entry is a factory so a fresh, mutable terrain is
- * built every time a level starts (terrain is destroyed during play). Add new
- * levels by writing a `levelN.ts` and appending its factory here.
+ * Ordered campaign roster. Each entry is a factory so a fresh, mutable terrain is
+ * built every time a level starts (terrain is destroyed during play).
  */
 export const LEVELS: ReadonlyArray<() => LevelDefinition> = [
   createLevel1,
@@ -30,8 +30,14 @@ export const LEVELS: ReadonlyArray<() => LevelDefinition> = [
 
 export const LEVEL_COUNT = LEVELS.length;
 
-/** Build the level at `index`, clamped into range. */
+/** Index for the Sand Lab free-play arena (not part of campaign unlock chain). */
+export const SAND_LAB_INDEX = LEVEL_COUNT;
+
+/** Build the campaign level at `index`, or the Sand Lab when index === SAND_LAB_INDEX. */
 export function createLevelAt(index: number): LevelDefinition {
+  if (index === SAND_LAB_INDEX) return createLabLevel();
   const clamped = Math.max(0, Math.min(LEVELS.length - 1, index));
   return LEVELS[clamped]();
 }
+
+export { createLabLevel };

@@ -6,19 +6,20 @@ import type { AudioSettings } from '../audio/settings';
 
 export type HudEvents = {
   onSelectSkill: (skill: Skill) => void;
+  /** Pre-load hatch queue with selected skill (consumes stock). */
+  onEnqueueRelease?: () => void;
+  onPopQueue?: () => void;
   onNuke: () => void;
   onReleaseRate: (delta: number) => void;
   onRestart: () => void;
   onTogglePause: () => void;
   onCycleSpeed: () => void;
-  /** Advance to the next level (only meaningful from the win overlay). */
   onNext?: () => void;
-  /** Return to the level-select screen. */
   onLevelSelect?: () => void;
-  /** Center the camera at a level-space fraction (minimap click/drag). */
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
-  /** Music/SFX mute or volume changed via the HUD audio cluster. */
   onAudioChange?: (settings: AudioSettings) => void;
+  /** Select a landscape paint tool (campaign sandworld). */
+  onSelectLandscape?: (kind: 'water' | 'sand' | 'dirt' | 'wood' | 'erase') => void;
 };
 
 /** Everything the minimap needs to draw one frame, in level coordinates. */
@@ -33,12 +34,14 @@ export interface MinimapData {
 /** Extra read-only display info the scene feeds the HUD each frame. */
 export interface HudView {
   paused: boolean;
-  speed: number; // 1 = normal, 2/3 = fast-forward
+  speed: number;
   nukeReady: boolean;
-  hoveredJob: string | null; // label of the lemming under the cursor
+  hoveredJob: string | null;
   levelName: string;
   hasNextLevel: boolean;
-  /** null hides the minimap (level fits on one screen). */
+  labBrush: string | null;
+  /** Campaign landscape brush, or null. */
+  landscapeBrush: string | null;
   minimap: MinimapData | null;
 }
 
@@ -70,6 +73,8 @@ export class Hud {
   private readonly pauseButton: HTMLButtonElement;
   private readonly speedButton: HTMLButtonElement;
   private readonly notice: HTMLDivElement;
+  private readonly queueBar: HTMLDivElement;
+  private readonly landscapeBar: HTMLDivElement;
   private readonly overlay: HTMLDivElement;
   private readonly minimap: HTMLCanvasElement;
   /** Offscreen terrain layer so the cell sweep runs at ~10 Hz, not 60. */
@@ -80,7 +85,7 @@ export class Hud {
 
   constructor(events: HudEvents, audio?: AudioSettings) {
     this.events = events;
-    this.audio = audio ?? { musicMuted: false, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
+    this.audio = audio ?? { musicMuted: true, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
     this.root.className = 'hud';
 
@@ -107,9 +112,16 @@ export class Hud {
         `<span class="hud__tool-name">${item.label}</span>` +
         `<span class="hud__stock">0</span>`;
       button.addEventListener('click', () => events.onSelectSkill(item.skill));
+      button.addEventListener('dblclick', () => events.onEnqueueRelease?.());
       tools.append(button);
       this.skillButtons.set(item.skill, button);
     }
+
+    const queueBtn = this.makeButton('⬇ Queue (Q)', 'Add selected skill to hatch queue', () => events.onEnqueueRelease?.());
+    queueBtn.className = 'hud__btn';
+    const unqueueBtn = this.makeButton('⬆', 'Remove last from hatch queue', () => events.onPopQueue?.());
+    unqueueBtn.className = 'hud__btn';
+    tools.append(queueBtn, unqueueBtn);
 
     const controls = document.createElement('div');
     controls.className = 'hud__controls';
@@ -145,6 +157,14 @@ export class Hud {
     this.notice = document.createElement('div');
     this.notice.className = 'hud__notice';
     this.root.append(this.notice);
+
+    this.queueBar = document.createElement('div');
+    this.queueBar.className = 'hud__queue';
+    this.root.append(this.queueBar);
+
+    this.landscapeBar = document.createElement('div');
+    this.landscapeBar.className = 'hud__landscape';
+    this.root.append(this.landscapeBar);
 
     // --- Minimap (scrolling levels only) ---
     this.minimap = document.createElement('canvas');
@@ -232,6 +252,8 @@ export class Hud {
         data.terrain.forEachSolidCell((x, y, w, h, material) => {
           tctx.fillStyle =
             material === MATERIAL.steel ? '#8a93a6' :
+            material === MATERIAL.sand ? '#d4a84a' :
+            material === MATERIAL.water ? '#3a9fd8' :
             material === MATERIAL.dirt ? '#4d9674' : '#d9b84d';
           tctx.fillRect(x * scale, y * scale, Math.max(1, w * scale), Math.max(1, h * scale));
         });
@@ -270,13 +292,14 @@ export class Hud {
   }
 
   update(state: SimulationState, view: HudView): void {
-    // Status bar.
+    const pct = Math.round((state.saved / Math.max(1, state.totalLemmings)) * 100);
     const timer =
       state.timeRemainingMs !== null
         ? `<span class="hud__timer${state.timeRemainingMs < 15000 ? ' is-low' : ''}">⏱ ${formatTime(state.timeRemainingMs)}</span>`
         : '';
     this.statusBar.innerHTML =
       `<span class="hud__level">${view.levelName}</span>` +
+      `<span class="hud__stat hud__stat--pct">Success <strong>${pct}%</strong></span>` +
       `<span class="hud__stat">Saved <strong>${state.saved}/${state.targetSaved}</strong></span>` +
       `<span class="hud__stat">Out <strong>${state.spawned}/${state.totalLemmings}</strong></span>` +
       `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>` +
@@ -288,7 +311,7 @@ export class Hud {
     for (const [skill, button] of this.skillButtons) {
       const stock = button.querySelector('.hud__stock');
       if (stock) stock.textContent = String(state.skills[skill]);
-      button.classList.toggle('is-active', skill === state.selectedSkill);
+      button.classList.toggle('is-active', skill === state.selectedSkill && !view.landscapeBrush);
       button.disabled = state.skills[skill] <= 0 || !running;
     }
 
@@ -297,6 +320,36 @@ export class Hud {
     this.pauseButton.textContent = view.paused ? '▶' : '▮▮';
     this.speedButton.textContent = view.speed > 1 ? `▶▶ ${view.speed}×` : '▶ 1×';
     this.speedButton.classList.toggle('is-active', view.speed > 1);
+
+    // Hatch queue strip
+    if (state.hatchQueue.length > 0) {
+      this.queueBar.hidden = false;
+      this.queueBar.innerHTML =
+        '<span class="hud__queue-label">Hatch queue</span>' +
+        state.hatchQueue.map((s) => `<span class="hud__queue-chip">${SKILL_DEFS[s].label}</span>`).join('');
+    } else {
+      this.queueBar.hidden = true;
+      this.queueBar.innerHTML = '';
+    }
+
+    // Landscape tools (campaign charges)
+    const land = state.landscape;
+    const landKinds = (['water', 'sand', 'dirt', 'wood', 'erase'] as const).filter((k) => land[k] > 0 || view.labBrush);
+    if (landKinds.some((k) => land[k] > 0) && !view.labBrush) {
+      this.landscapeBar.hidden = false;
+      this.landscapeBar.innerHTML = '';
+      for (const kind of (['water', 'sand', 'dirt', 'wood', 'erase'] as const)) {
+        if (land[kind] <= 0) continue;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'hud__btn' + (view.landscapeBrush === kind ? ' is-active' : '');
+        b.textContent = `${kind} ${land[kind]}`;
+        b.addEventListener('click', () => this.events.onSelectLandscape?.(kind));
+        this.landscapeBar.append(b);
+      }
+    } else {
+      this.landscapeBar.hidden = true;
+    }
 
     this.notice.textContent = this.noticeText(state, view);
     this.notice.hidden = state.outcome !== 'running';
@@ -321,10 +374,11 @@ export class Hud {
     this.overlay.innerHTML = `
       <div class="hud__panel ${won ? 'is-win' : 'is-lose'}">
         <h1>${won ? 'Level Cleared!' : 'Out of Lemmings'}</h1>
+        <p class="hud__panel-pct">${pct}%</p>
         <p class="hud__panel-sub">${won ? 'You met the rescue quota.' : 'Not enough made it home.'}</p>
         <div class="hud__panel-stats">
           <span>Saved <strong>${state.saved}/${state.targetSaved}</strong></span>
-          <span>Rescued <strong>${pct}%</strong></span>
+          <span>Home <strong>${state.saved}/${state.totalLemmings}</strong></span>
           <span>Lost <strong>${state.lost}</strong></span>
         </div>
         <div class="hud__panel-actions"></div>
@@ -351,7 +405,21 @@ export class Hud {
 
   private noticeText(state: SimulationState, view: HudView): string {
     if (view.paused) return 'Paused';
+    if (view.labBrush) {
+      const labels: Record<string, string> = {
+        sand: 'Paint sand (1) — drag to pour',
+        water: 'Paint water (2)',
+        dirt: 'Paint dirt (3)',
+        erase: 'Erase (4)',
+        bomb: 'Bomb (5) — click to blast',
+        assign: 'Assign skill (6) — click a lemming',
+      };
+      return labels[view.labBrush] ?? 'Sand Lab';
+    }
+    if (view.landscapeBrush) {
+      return `Landscape: ${view.landscapeBrush} — click/drag to paint · Esc skills`;
+    }
     if (view.hoveredJob) return `${view.hoveredJob} — click to assign ${state.selectedSkill}`;
-    return `${SKILL_DEFS[state.selectedSkill].label} selected — click a lemming`;
+    return `${SKILL_DEFS[state.selectedSkill].label} — click lemming · Q = hatch queue · dbl-click skill = queue`;
   }
 }

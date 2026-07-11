@@ -97,9 +97,66 @@ button:disabled {
   color: var(--accent);
 }
 
-.hud__timer.is-low {
-  color: var(--danger);
-  animation: pulse-low 1s ease-in-out infinite;
+.hud__stat--pct strong {
+  color: #ffd96b;
+}
+
+.hud__queue {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  background: var(--panel);
+  transform: translateX(-50%);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+
+.hud__queue-label {
+  opacity: 0.7;
+  margin-right: 4px;
+}
+
+.hud__queue-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(106, 225, 255, 0.2);
+  color: #c9f4ff;
+  font-weight: 700;
+}
+
+.hud__landscape {
+  position: absolute;
+  top: 56px;
+  left: 14px;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.hud__landscape .hud__btn.is-active {
+  border-color: rgba(212, 168, 74, 0.9);
+  background: rgba(212, 168, 74, 0.25);
+}
+
+.hud__panel-pct {
+  margin: 0 0 8px;
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #ffd96b;
+  letter-spacing: 0.04em;
+}
+
+.hud__status:has(.hud__timer.is-low) {
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(255, 91, 127, 0.35),
+    0 0 24px rgba(255, 91, 127, 0.18);
 }
 
 @keyframes pulse-low {
@@ -152,6 +209,19 @@ button:disabled {
   border-color: rgba(106, 225, 255, 0.9);
   background: rgba(106, 225, 255, 0.22);
   box-shadow: 0 0 0 1px rgba(106, 225, 255, 0.5) inset;
+  animation: tool-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+@keyframes tool-pop {
+  from {
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 .hud__tool:disabled {
@@ -307,6 +377,12 @@ button:disabled {
   border-color: rgba(94, 242, 161, 0.5);
 }
 
+.select__card--lab {
+  border-color: rgba(212, 168, 74, 0.65);
+  background: rgba(212, 168, 74, 0.12);
+  grid-column: 1 / -1;
+}
+
 .select__num {
   font-size: 1.3rem;
   font-weight: 800;
@@ -398,6 +474,18 @@ button:disabled {
 
 .hud__panel.is-win {
   border-color: rgba(94, 242, 161, 0.55);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(94, 242, 161, 0.15);
+  animation: pop-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3), win-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes win-glow {
+  50% {
+    box-shadow:
+      0 30px 80px rgba(0, 0, 0, 0.5),
+      0 0 56px rgba(94, 242, 161, 0.28);
+  }
 }
 
 .hud__panel.is-lose {

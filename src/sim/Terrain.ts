@@ -1,7 +1,6 @@
 /**
- * Cell materials. Anything non-empty is solid for movement; carvability is a
- * separate question answered per-material (and, for one-way walls, per
- * carve direction — classic Lemmings arrows).
+ * Cell materials. Solids support walking; water is a flowing hazard (not solid).
+ * Carvability is separate (steel never; one-ways direction-aware; dirt/sand yes).
  */
 export const MATERIAL = {
   empty: 0,
@@ -9,6 +8,10 @@ export const MATERIAL = {
   steel: 2,
   oneWayLeft: 3,
   oneWayRight: 4,
+  sand: 5,
+  water: 6,
+  /** Buoyant solid — falls through air, rests on water (bridge material). */
+  wood: 7,
 } as const;
 
 export type Material = (typeof MATERIAL)[keyof typeof MATERIAL];
@@ -21,16 +24,24 @@ export interface CarveResult {
   blocked: boolean;
 }
 
-/** Direction of a carve: a basher's facing, or 0 for vertical/blast carves
- * (diggers, miners' downward component, bomber craters) which pass one-way
- * walls but never steel. */
+/** Direction of a carve: a basher's facing, or 0 for vertical/blast carves. */
 export type CarveDirection = -1 | 0 | 1;
 
+export type CarveLeaveAs = 'empty' | 'sand';
+
 function isCarvable(material: number, direction: CarveDirection): boolean {
-  if (material === MATERIAL.dirt) return true;
+  if (material === MATERIAL.dirt || material === MATERIAL.sand || material === MATERIAL.wood) return true;
   if (material === MATERIAL.oneWayLeft) return direction <= 0;
   if (material === MATERIAL.oneWayRight) return direction >= 0;
-  return false; // steel (empty cells are skipped before this check)
+  return false; // steel, water, empty
+}
+
+export function isLiquid(material: number): boolean {
+  return material === MATERIAL.water;
+}
+
+export function isWalkSolid(material: number): boolean {
+  return material !== MATERIAL.empty && !isLiquid(material);
 }
 
 export class Terrain {
@@ -40,6 +51,8 @@ export class Terrain {
   readonly cols: number;
   readonly rows: number;
   private readonly cells: Uint8Array;
+  /** Set whenever cells change; the renderer clears it after a redraw. */
+  private dirty = true;
 
   constructor(width: number, height: number, cellSize = 4) {
     this.width = width;
@@ -53,56 +66,132 @@ export class Terrain {
   clone(): Terrain {
     const next = new Terrain(this.width, this.height, this.cellSize);
     next.cells.set(this.cells);
+    next.dirty = true;
     return next;
+  }
+
+  isDirty(): boolean {
+    return this.dirty;
+  }
+
+  consumeDirty(): boolean {
+    const was = this.dirty;
+    this.dirty = false;
+    return was;
+  }
+
+  /** CA stepper calls this after swaps. */
+  touchDirty(): void {
+    this.dirty = true;
+  }
+
+  private markDirty(): void {
+    this.dirty = true;
+  }
+
+  getCell(cellX: number, cellY: number): Material {
+    if (!this.isCellInside(cellX, cellY)) return MATERIAL.empty;
+    return this.cells[this.index(cellX, cellY)] as Material;
+  }
+
+  setCell(cellX: number, cellY: number, material: Material): void {
+    if (!this.isCellInside(cellX, cellY)) return;
+    this.cells[this.index(cellX, cellY)] = material;
+    this.markDirty();
+  }
+
+  swapCells(ax: number, ay: number, bx: number, by: number): void {
+    if (!this.isCellInside(ax, ay) || !this.isCellInside(bx, by)) return;
+    const ia = this.index(ax, ay);
+    const ib = this.index(bx, by);
+    const tmp = this.cells[ia];
+    this.cells[ia] = this.cells[ib];
+    this.cells[ib] = tmp;
+    this.markDirty();
   }
 
   fillRect(x: number, y: number, width: number, height: number, material: Material = MATERIAL.dirt): void {
     this.visitRect(x, y, width, height, (cellX, cellY) => {
       this.cells[this.index(cellX, cellY)] = material;
     });
+    this.markDirty();
   }
 
-  /** Unconditional erase — level authoring only. Gameplay destruction must go
-   * through carveRect/carveCircle so steel and one-way walls are respected. */
+  /** Unconditional erase — level authoring only. */
   eraseRect(x: number, y: number, width: number, height: number): void {
     this.visitRect(x, y, width, height, (cellX, cellY) => {
       this.cells[this.index(cellX, cellY)] = 0;
     });
+    this.markDirty();
   }
 
-  /** Material-aware destruction. Removes carvable cells in the rect; reports
-   * whether anything solid refused to go (for clank-and-cancel feedback). */
-  carveRect(x: number, y: number, width: number, height: number, direction: CarveDirection): CarveResult {
+  /**
+   * Material-aware destruction. `leaveAs` controls what carved cells become:
+   * empty (tunnels) or sand (bomb debris that then settles via CA).
+   */
+  carveRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    direction: CarveDirection,
+    leaveAs: CarveLeaveAs = 'empty',
+  ): CarveResult {
     const result: CarveResult = { carved: 0, blocked: false };
     this.visitRect(x, y, width, height, (cellX, cellY) => {
-      this.carveCell(cellX, cellY, direction, result);
+      this.carveCell(cellX, cellY, direction, result, leaveAs);
     });
     return result;
   }
 
-  /** Material-aware blast (bomber craters): erases dirt and one-way walls,
-   * never steel. */
-  carveCircle(x: number, y: number, radius: number): CarveResult {
+  /** Material-aware blast. Bomber uses leaveAs 'sand' for debris. */
+  carveCircle(x: number, y: number, radius: number, leaveAs: CarveLeaveAs = 'empty'): CarveResult {
     const result: CarveResult = { carved: 0, blocked: false };
     this.visitCircle(x, y, radius, (cellX, cellY) => {
-      this.carveCell(cellX, cellY, 0, result);
+      this.carveCell(cellX, cellY, 0, result, leaveAs);
     });
     return result;
   }
 
-  private carveCell(cellX: number, cellY: number, direction: CarveDirection, result: CarveResult): void {
+  /**
+   * Spray sand into empty cells near a world point (dig debris that falls
+   * without immediately refilling the tunnel the worker just carved).
+   */
+  emitSandDebris(worldX: number, worldY: number, count: number, pick: () => number): number {
+    let placed = 0;
+    const cs = this.cellSize;
+    const originX = Math.floor(worldX / cs);
+    const originY = Math.floor(worldY / cs);
+    for (let i = 0; i < count * 4 && placed < count; i += 1) {
+      const ox = originX + Math.floor(pick() * 7) - 3;
+      const oy = originY + Math.floor(pick() * 5) - 4; // bias upward into air
+      if (!this.isCellInside(ox, oy)) continue;
+      if (this.getCell(ox, oy) !== MATERIAL.empty) continue;
+      this.setCell(ox, oy, MATERIAL.sand);
+      placed += 1;
+    }
+    return placed;
+  }
+
+  private carveCell(
+    cellX: number,
+    cellY: number,
+    direction: CarveDirection,
+    result: CarveResult,
+    leaveAs: CarveLeaveAs,
+  ): void {
     const index = this.index(cellX, cellY);
     const material = this.cells[index];
-    if (material === MATERIAL.empty) return;
+    if (material === MATERIAL.empty || material === MATERIAL.water) return;
     if (isCarvable(material, direction)) {
-      this.cells[index] = MATERIAL.empty;
+      this.cells[index] = leaveAs === 'sand' ? MATERIAL.sand : MATERIAL.empty;
       result.carved += 1;
+      this.markDirty();
     } else {
       result.blocked = true;
     }
   }
 
-  /** Material at a world point; empty outside the bounds. */
   materialAt(x: number, y: number): Material {
     const cellX = Math.floor(x / this.cellSize);
     const cellY = Math.floor(y / this.cellSize);
@@ -114,6 +203,7 @@ export class Terrain {
     this.visitCircle(x, y, radius, (cellX, cellY) => {
       this.cells[this.index(cellX, cellY)] = 0;
     });
+    this.markDirty();
   }
 
   private visitCircle(x: number, y: number, radius: number, visitor: (cellX: number, cellY: number) => void): void {
@@ -144,19 +234,24 @@ export class Terrain {
     return this.isCellSolid(cellX, cellY);
   }
 
+  isWaterAt(x: number, y: number): boolean {
+    return this.materialAt(x, y) === MATERIAL.water;
+  }
+
   isCellSolid(cellX: number, cellY: number): boolean {
     if (!this.isCellInside(cellX, cellY)) return false;
-    return this.cells[this.index(cellX, cellY)] !== MATERIAL.empty;
+    return isWalkSolid(this.cells[this.index(cellX, cellY)]);
   }
 
   solidCellCount(): number {
     let count = 0;
     for (const cell of this.cells) {
-      if (cell !== MATERIAL.empty) count += 1;
+      if (isWalkSolid(cell)) count += 1;
     }
     return count;
   }
 
+  /** All non-empty cells (including water) for rendering. */
   forEachSolidCell(visitor: (x: number, y: number, width: number, height: number, material: Material) => void): void {
     for (let y = 0; y < this.rows; y += 1) {
       for (let x = 0; x < this.cols; x += 1) {

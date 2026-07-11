@@ -1,7 +1,9 @@
 import type { Lemming, LevelDefinition, SimEvent, SimEventKind, SimulationState, Skill } from './types';
 import type { SkillContext } from './skills/types';
-import { SKILL_DEFS, BOMBER_FUSE_MS } from './skills/registry';
+import { SKILL_DEFS } from './skills/registry';
 import { MATERIAL } from './Terrain';
+import { SeededRng } from './ca/SeededRng';
+import { ChunkStepper } from './ca/ChunkStepper';
 
 const WALK_SPEED = 26;
 const CLIMB_SPEED = 22;
@@ -18,6 +20,11 @@ const MINE_INTERVAL_MS = 90; // time between miner pick swings
 const BOMBER_BLAST_RADIUS = 22;
 const HATCH_OPEN_MS = 900; // default door-opening time before the first spawn
 const TRAP_CYCLE_MS = 1400; // default kill-animation length before a trap re-arms
+const SHRUG_MS = 720; // classic builder "oh no" pose duration
+const LAND_SQUASH_MS = 160;
+const DEFAULT_CA_SUBSTEPS = 3;
+/** Campaign default: no dig spray so scripted solutions stay stable. Lab overrides. */
+const DEFAULT_SAND_EMIT = 0;
 
 export class GameSimulation {
   readonly level: LevelDefinition;
@@ -25,6 +32,12 @@ export class GameSimulation {
   private nextLemmingId = 1;
   private spawnTimerMs = 0;
   private events: SimEvent[] = [];
+  private readonly caEnabled: boolean;
+  private readonly caSubsteps: number;
+  private readonly sandEmitRatio: number;
+  private readonly stabilityThreshold: number;
+  private readonly rng: SeededRng;
+  private readonly ca: ChunkStepper | null;
 
   /** Take and clear the events accumulated since the last drain (for FX/audio). */
   drainEvents(): SimEvent[] {
@@ -39,6 +52,12 @@ export class GameSimulation {
 
   constructor(level: LevelDefinition) {
     this.level = level;
+    this.caEnabled = level.caEnabled !== false;
+    this.caSubsteps = level.caSubsteps ?? DEFAULT_CA_SUBSTEPS;
+    this.sandEmitRatio = level.sandEmitRatio ?? DEFAULT_SAND_EMIT;
+    this.stabilityThreshold = level.stabilityThreshold ?? 0;
+    this.rng = new SeededRng(level.caSeed ?? 1);
+    this.ca = this.caEnabled ? new ChunkStepper(level.terrain, this.rng) : null;
     this.state = {
       width: level.width,
       height: level.height,
@@ -60,6 +79,14 @@ export class GameSimulation {
       traps: (level.traps ?? []).map((def) => ({ def, phase: 'idle' as const, timerMs: 0 })),
       hatchOpenMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
       hatchTotalMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
+      hatchQueue: [],
+      landscape: {
+        water: level.landscape?.water ?? 0,
+        sand: level.landscape?.sand ?? 0,
+        dirt: level.landscape?.dirt ?? 0,
+        wood: level.landscape?.wood ?? 0,
+        erase: level.landscape?.erase ?? 0,
+      },
     };
   }
 
@@ -87,7 +114,52 @@ export class GameSimulation {
     }
     this.updateTraps(deltaMs);
     this.resolveBlockers();
+
+    // Living terrain settles after agents carve / bomb.
+    if (this.ca) {
+      this.ca.step(this.caSubsteps, this.stabilityThreshold);
+    }
+
     this.updateOutcome();
+  }
+
+  /** Lab / tests: paint a material disc into the world. */
+  paintCircle(x: number, y: number, radius: number, material: number): void {
+    const cs = this.level.terrain.cellSize;
+    const minX = Math.floor((x - radius) / cs);
+    const maxX = Math.ceil((x + radius) / cs);
+    const minY = Math.floor((y - radius) / cs);
+    const maxY = Math.ceil((y + radius) / cs);
+    const r2 = radius * radius;
+    for (let cy = minY; cy <= maxY; cy += 1) {
+      for (let cx = minX; cx <= maxX; cx += 1) {
+        const wx = cx * cs + cs / 2;
+        const wy = cy * cs + cs / 2;
+        if ((wx - x) ** 2 + (wy - y) ** 2 <= r2) {
+          this.level.terrain.setCell(cx, cy, material as 0 | 1 | 2 | 3 | 4 | 5 | 6);
+        }
+      }
+    }
+    this.ca?.markWorldRect(x - radius, y - radius, radius * 2, radius * 2);
+  }
+
+  /** Lab: detonate a sand-debris bomb at a point. */
+  labBomb(x: number, y: number, radius = BOMBER_BLAST_RADIUS): void {
+    this.level.terrain.carveCircle(x, y, radius, 'sand');
+    this.ca?.markWorldRect(x - radius, y - radius, radius * 2, radius * 2);
+    this.emit('explode', x, y);
+  }
+
+  /** Expose CA settle for tests. */
+  settleTerrain(maxPasses = 400): number {
+    return this.ca?.settleUntilQuiet(maxPasses, this.stabilityThreshold) ?? 0;
+  }
+
+  private sprayDigDebris(x: number, y: number, carved: number): void {
+    if (!this.ca || carved <= 0 || this.sandEmitRatio <= 0) return;
+    const count = Math.max(1, Math.round(carved * this.sandEmitRatio));
+    this.level.terrain.emitSandDebris(x, y, count, () => this.rng.next());
+    this.ca.markWorldRect(x - 20, y - 24, 40, 40);
   }
 
   /**
@@ -127,9 +199,10 @@ export class GameSimulation {
     if (this.state.skills[skill] <= 0) return false;
 
     const def = SKILL_DEFS[skill];
-    if (!def.canAssign(lemming)) return false;
+    const ctx = this.skillContext();
+    if (!def.canAssign(lemming, ctx)) return false;
 
-    def.onAssign(lemming, this.skillContext());
+    def.onAssign(lemming, ctx);
     this.state.skills[skill] -= 1;
     this.emit('assign', lemming.x, lemming.y);
     return true;
@@ -178,7 +251,7 @@ export class GameSimulation {
   }
 
   private spawnLemming(): void {
-    this.state.lemmings.push({
+    const lemming: Lemming = {
       id: this.nextLemmingId,
       x: this.level.spawn.x,
       y: this.level.spawn.y,
@@ -191,10 +264,76 @@ export class GameSimulation {
       isClimber: false,
       isFloater: false,
       fuseMs: null,
-    });
+      squashMs: 0,
+      pendingHatchSkill: null,
+    };
+    this.state.lemmings.push(lemming);
     this.emit('spawn', this.level.spawn.x, this.level.spawn.y);
     this.nextLemmingId += 1;
     this.state.spawned += 1;
+
+    // Hatch queue: prepaid skill — apply now if possible, else on first grounded frame.
+    const queued = this.state.hatchQueue.shift();
+    if (queued) {
+      lemming.pendingHatchSkill = queued;
+      this.tryApplyPendingHatchSkill(lemming);
+    }
+  }
+
+  /** Apply a hatch-queued skill once the lemming can accept it (usually grounded). */
+  private tryApplyPendingHatchSkill(lemming: Lemming): void {
+    const skill = lemming.pendingHatchSkill;
+    if (!skill) return;
+    const def = SKILL_DEFS[skill];
+    if (!def.canAssign(lemming, this.skillContext())) return;
+    def.onAssign(lemming, this.skillContext());
+    lemming.pendingHatchSkill = null;
+    this.emit('assign', lemming.x, lemming.y);
+  }
+
+  /**
+   * Pre-load the hatch: consume one skill charge and append to the release
+   * queue so the next lemming(s) spawn already assigned (e.g. diggers first).
+   */
+  enqueueRelease(skill: Skill): boolean {
+    if (this.state.outcome !== 'running') return false;
+    if (this.state.skills[skill] <= 0) return false;
+    const remaining = this.level.totalLemmings - this.state.spawned;
+    if (this.state.hatchQueue.length >= remaining) return false;
+    this.state.skills[skill] -= 1;
+    this.state.hatchQueue.push(skill);
+    return true;
+  }
+
+  /** Cancel the last queued release and refund the skill. */
+  popReleaseQueue(): boolean {
+    const skill = this.state.hatchQueue.pop();
+    if (!skill) return false;
+    this.state.skills[skill] += 1;
+    return true;
+  }
+
+  /**
+   * Campaign landscape paint — consumes a charge from `state.landscape`.
+   * Returns false if that material has no charges left.
+   */
+  paintLandscape(
+    x: number,
+    y: number,
+    radius: number,
+    kind: 'water' | 'sand' | 'dirt' | 'wood' | 'erase',
+  ): boolean {
+    const stock = this.state.landscape[kind];
+    if (stock <= 0 && !this.level.sandLab) return false;
+    if (!this.level.sandLab) this.state.landscape[kind] -= 1;
+    const mat =
+      kind === 'water' ? MATERIAL.water :
+      kind === 'sand' ? MATERIAL.sand :
+      kind === 'dirt' ? MATERIAL.dirt :
+      kind === 'wood' ? MATERIAL.wood :
+      MATERIAL.empty;
+    this.paintCircle(x, y, radius, mat);
+    return true;
   }
 
   /**
@@ -215,10 +354,23 @@ export class GameSimulation {
     lemming.state = 'faller';
     lemming.fallStartY = lemming.y;
     lemming.velocityY = 0;
+    lemming.squashMs = 0;
+  }
+
+  /** Classic builder shrug — brief "oh no", then resume walking. */
+  private beginShrug(lemming: Lemming): void {
+    lemming.state = 'shrug';
+    lemming.actionTimerMs = SHRUG_MS;
+    lemming.velocityY = 0;
+    this.emit('shrug', lemming.x, lemming.y);
   }
 
   private updateLemming(lemming: Lemming, deltaMs: number): void {
     if (lemming.state === 'dead' || lemming.state === 'exited') return;
+
+    if (lemming.squashMs > 0) {
+      lemming.squashMs = Math.max(0, lemming.squashMs - deltaMs);
+    }
 
     // Bomber fuse counts down in every active state. At zero it explodes.
     if (lemming.fuseMs !== null) {
@@ -241,6 +393,15 @@ export class GameSimulation {
       lemming.state = 'exited';
       this.state.saved += 1;
       this.emit('exit', lemming.x, lemming.y);
+      return;
+    }
+
+    if (lemming.state === 'shrug') {
+      lemming.actionTimerMs -= deltaMs;
+      if (lemming.actionTimerMs <= 0) {
+        lemming.state = 'walker';
+        lemming.y = this.findStandingY(lemming.x, lemming.y);
+      }
       return;
     }
 
@@ -278,12 +439,20 @@ export class GameSimulation {
     }
 
     lemming.state = 'walker';
+    this.tryApplyPendingHatchSkill(lemming);
+    if (lemming.state !== 'walker') return;
     this.walk(lemming, deltaMs);
   }
 
-  /** Bomber detonation: carve a crater (steel survives) and kill the lemming. */
+  /** Bomber detonation: sand-debris crater (steel survives). */
   private explode(lemming: Lemming): void {
-    this.level.terrain.carveCircle(lemming.x, lemming.y + 4, BOMBER_BLAST_RADIUS);
+    this.level.terrain.carveCircle(lemming.x, lemming.y + 4, BOMBER_BLAST_RADIUS, 'sand');
+    this.ca?.markWorldRect(
+      lemming.x - BOMBER_BLAST_RADIUS,
+      lemming.y - BOMBER_BLAST_RADIUS,
+      BOMBER_BLAST_RADIUS * 2,
+      BOMBER_BLAST_RADIUS * 2,
+    );
     this.emit('explode', lemming.x, lemming.y);
     lemming.fuseMs = null;
     this.kill(lemming, 'silent');
@@ -314,6 +483,7 @@ export class GameSimulation {
     }
 
     this.level.terrain.carveRect(lemming.x - 8, lemming.y + FOOT_Y, 16, 5, 0);
+    this.sprayDigDebris(lemming.x, lemming.y + FOOT_Y, 8);
     // Descend with the bite and settle onto the new shaft floor (the carve can
     // clear slightly deeper than 4px when it straddles a cell row).
     lemming.y = this.findStandingY(lemming.x, lemming.y + 4);
@@ -327,16 +497,24 @@ export class GameSimulation {
 
   private updateBuilder(lemming: Lemming, deltaMs: number): void {
     if (lemming.buildSteps >= 14) {
-      lemming.state = 'walker';
+      this.beginShrug(lemming);
       return;
     }
 
     lemming.actionTimerMs += deltaMs;
     if (lemming.actionTimerMs >= 96) {
       lemming.actionTimerMs = 0;
+
+      // Head/torso blocked by a wall ahead → classic shrug (not own bricks).
+      if (this.hitsWall(lemming.x + lemming.direction * 4, lemming.y - 2, lemming.direction)) {
+        this.beginShrug(lemming);
+        return;
+      }
+
       const plankX = lemming.x + lemming.direction * (10 + lemming.buildSteps * 4);
       const plankY = lemming.y + FOOT_Y - 2 - lemming.buildSteps * 1.4;
       this.level.terrain.fillRect(plankX - 5, plankY, 10, 4);
+      this.ca?.markWorldRect(plankX - 5, plankY, 10, 4);
       lemming.x += lemming.direction * 3.2;
       lemming.y -= 1.2;
       lemming.buildSteps += 1;
@@ -374,6 +552,7 @@ export class GameSimulation {
       this.cancelOnUncarvable(lemming, frontX + lemming.direction * 2, lemming.y);
       return;
     }
+    this.sprayDigDebris(frontX + lemming.direction * 2, lemming.y, bite.carved);
     this.emit('bash', frontX + lemming.direction * 2, lemming.y);
     lemming.x += lemming.direction * 3;
 
@@ -429,6 +608,7 @@ export class GameSimulation {
       return;
     }
 
+    this.sprayDigDebris(frontX + lemming.direction * 3, lemming.y + FOOT_Y, swing.carved);
     this.emit('dig', frontX + lemming.direction * 3, lemming.y + FOOT_Y);
     lemming.x += lemming.direction * 3.4;
     lemming.y = this.findStandingY(lemming.x, lemming.y + 2);
@@ -485,6 +665,12 @@ export class GameSimulation {
         lemming.state = 'walker';
         lemming.velocityY = 0;
         lemming.y = this.findStandingY(lemming.x, lemming.y);
+        // Soft landing juice for falls that were more than a step.
+        if (fallDistance > STEP_HEIGHT) {
+          lemming.squashMs = LAND_SQUASH_MS;
+          this.emit('land', lemming.x, lemming.y + FOOT_Y);
+        }
+        this.tryApplyPendingHatchSkill(lemming);
       }
     } else if (lemming.y > this.level.height + 28) {
       this.kill(lemming);
@@ -591,6 +777,14 @@ export class GameSimulation {
   }
 
   private isInHazard(lemming: Lemming): boolean {
+    // Flowing water cells drown (living terrain).
+    if (
+      this.level.terrain.isWaterAt(lemming.x, lemming.y + FOOT_Y - 2) ||
+      this.level.terrain.isWaterAt(lemming.x, lemming.y) ||
+      this.level.terrain.isWaterAt(lemming.x, lemming.y + HEAD_Y)
+    ) {
+      return true;
+    }
     const hazards = this.level.hazards;
     if (!hazards || hazards.length === 0) return false;
     for (const hazard of hazards) {
@@ -610,6 +804,9 @@ export class GameSimulation {
   }
 
   private updateOutcome(): void {
+    // Sand Lab is free-play — no win/lose from quota.
+    if (this.level.sandLab) return;
+
     if (this.state.saved >= this.level.targetSaved) {
       this.state.outcome = 'won';
       return;

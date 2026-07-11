@@ -3,11 +3,8 @@ import type { LevelDefinition } from '../sim/types';
 
 /**
  * Level 3 — "Hold the Line".
- * A wall and nothing to carve it with: plant a blocker right at the wall's
- * face and arm it as a bomber — one brave volunteer blasts the way open for
- * everyone else. Teaches the blocker + bomber combo (and that bombers cost
- * lives). The blast circle only clears the wall when planted close, so
- * placement matters.
+ * Plant a blocker at the wall face and arm a bomber — the crater sprays sand
+ * debris that settles. Teaches blocker + bomber (and that bombers cost lives).
  */
 export function createLevel3(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
@@ -30,6 +27,8 @@ export function createLevel3(): LevelDefinition {
     maxReleaseRate: 99,
     targetSaved: 6,
     timeLimitMs: 240000,
+    caSeed: 33,
+    sandEmitRatio: 0.55,
     skills: {
       climber: 0,
       floater: 0,

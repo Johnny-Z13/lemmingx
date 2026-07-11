@@ -106,15 +106,16 @@ describe('Level roster', () => {
     expect(sim.state.lost).toBeGreaterThanOrEqual(1); // the traps took someone
   });
 
-  it('level 7 (Wrong Way) — bash the with-arrow wall, climb the against-arrow wall', () => {
-    let bashed = false;
+  it('level 7 (Float the Timber) — builder backup across the trench (wood+water is the player route)', () => {
+    let bridge1 = false;
+    let bridge2 = false;
     const sim = run(6, (s) => {
       for (const l of s.state.lemmings) {
-        if (!bashed && l.state === 'walker' && l.direction === 1 && l.x > 584 && l.x < 596) {
-          bashed = s.assignSkill(l.id, 'basher');
+        if (!bridge1 && l.state === 'walker' && l.direction === 1 && l.x > 378 && l.x < 392) {
+          bridge1 = s.assignSkill(l.id, 'builder');
         }
-        if (l.state === 'walker' && l.direction === 1 && !l.isClimber && l.x > 700 && l.x < 980) {
-          s.assignSkill(l.id, 'climber');
+        if (bridge1 && !bridge2 && l.state === 'walker' && l.direction === 1 && l.x > 424 && l.x < 438 && l.y < 424) {
+          bridge2 = s.assignSkill(l.id, 'builder');
         }
       }
     });
@@ -145,7 +146,7 @@ describe('Level roster', () => {
     expectWon(sim);
   });
 
-  it('level 10 (Last Lemming Standing) — the full toolkit chained', () => {
+  it('level 10 (Sandworld Symphony) — the full toolkit chained', () => {
     let bashA = false;
     let bridge1 = false;
     let bridge2 = false;

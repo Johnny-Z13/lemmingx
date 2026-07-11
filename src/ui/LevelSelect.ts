@@ -1,4 +1,4 @@
-/** Full-screen DOM level-select: a card per level with lock/best-% state. */
+/** Full-screen DOM level-select: campaign cards + Sand Lab entry. */
 
 export interface LevelCard {
   index: number;
@@ -6,6 +6,8 @@ export interface LevelCard {
   unlocked: boolean;
   completed: boolean;
   bestSavedPct: number;
+  /** Highlight as the free-play Sand Lab. */
+  sandLab?: boolean;
 }
 
 export class LevelSelect {
@@ -19,7 +21,7 @@ export class LevelSelect {
     this.root.innerHTML = `
       <div class="select__panel">
         <h1 class="select__title">LemmingX</h1>
-        <p class="select__sub">Pick a level — clear it to unlock the next.</p>
+        <p class="select__sub">Campaign puzzles — or open the Sand Lab and dig freely.</p>
         <div class="select__grid"></div>
       </div>`;
     this.grid = this.root.querySelector('.select__grid') as HTMLDivElement;
@@ -31,16 +33,18 @@ export class LevelSelect {
     for (const card of cards) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'select__card';
+      button.className = 'select__card' + (card.sandLab ? ' select__card--lab' : '');
       button.disabled = !card.unlocked;
       button.classList.toggle('is-completed', card.completed);
       const status = !card.unlocked
         ? '<span class="select__lock">🔒</span>'
-        : card.completed
-          ? `<span class="select__best">★ ${card.bestSavedPct}%</span>`
-          : '<span class="select__best select__best--new">NEW</span>';
+        : card.sandLab
+          ? '<span class="select__best select__best--new">FREE PLAY</span>'
+          : card.completed
+            ? `<span class="select__best">★ ${card.bestSavedPct}%</span>`
+            : '<span class="select__best select__best--new">NEW</span>';
       button.innerHTML =
-        `<span class="select__num">${card.index + 1}</span>` +
+        `<span class="select__num">${card.sandLab ? '◈' : card.index + 1}</span>` +
         `<span class="select__name">${card.name}</span>` +
         status;
       button.addEventListener('click', () => this.onPick(card.index));

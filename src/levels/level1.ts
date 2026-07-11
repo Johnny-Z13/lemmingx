@@ -3,10 +3,8 @@ import type { LevelDefinition } from '../sim/types';
 
 /**
  * Level 1 — "First Steps".
- * The gentlest possible puzzle. The whole crew spawns onto one long, safe floor
- * and can almost walk straight to the exit — but a low wall blocks the way. A
- * single basher tunnels through it (or a builder ramps over, or a digger drops
- * under). Generous skills and a forgiving quota; no hazards yet.
+ * Bash through the low wall (or dig under / build over). Optional: press Q to
+ * hatch-queue diggers so the first releases arrive already digging.
  */
 export function createLevel1(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
@@ -30,6 +28,7 @@ export function createLevel1(): LevelDefinition {
     maxReleaseRate: 99,
     targetSaved: 7,
     timeLimitMs: 180000,
+    caSeed: 11,
     skills: {
       climber: 0,
       floater: 0,

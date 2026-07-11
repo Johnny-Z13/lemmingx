@@ -35,10 +35,11 @@ export interface SkillDef {
   readonly hotkey: string;
   /**
    * Whether this lemming can receive the skill right now (e.g. a blocker can't
-   * become a climber mid-block, a floater trait can't be applied twice).
-   * Returns a reason string when refused (for future feedback), or null if OK.
+   * become a climber mid-block, a floater trait can't be applied twice,
+   * digger/blocker need feet on the ground). `ctx` is available for probes
+   * like `hasGroundBelow`.
    */
-  canAssign(lemming: Lemming): boolean;
+  canAssign(lemming: Lemming, ctx: SkillContext): boolean;
   /** Apply the skill to the lemming. Called only after canAssign passed. */
   onAssign(lemming: Lemming, ctx: SkillContext): void;
 }

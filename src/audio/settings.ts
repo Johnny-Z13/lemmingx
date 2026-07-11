@@ -10,7 +10,7 @@ export interface AudioSettings {
 const KEY = 'lemmingx.audio.v1';
 
 const DEFAULTS: AudioSettings = {
-  musicMuted: false,
+  musicMuted: true,
   musicVolume: 0.5,
   sfxMuted: false,
   sfxVolume: 0.5,

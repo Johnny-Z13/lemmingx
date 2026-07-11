@@ -3,10 +3,8 @@ import type { LevelDefinition } from '../sim/types';
 
 /**
  * Level 5 — "Steel Yourself".
- * A steel wall (with a steel-capped floor segment under it) blocks the road —
- * no carving through it. The route is down: dig through the dirt floor west
- * of the steel, drop into the gallery beneath, and walk under the wall to the
- * basement exit. Digging at the steel cap just clanks. Teaches steel.
+ * Dig through the dirt slab west of the steel cap into the gallery; sand
+ * debris from digging settles around the shaft. Steel clanks if you dig wrong.
  *
  * Intended solution: digger at x≈620 (any dirt west of the cap), crew follows
  * through the shaft and walks right to the exit.
@@ -35,6 +33,8 @@ export function createLevel5(): LevelDefinition {
     maxReleaseRate: 99,
     targetSaved: 7,
     timeLimitMs: 240000,
+    caSeed: 55,
+    sandEmitRatio: 0.4,
     skills: {
       climber: 0,
       floater: 0,

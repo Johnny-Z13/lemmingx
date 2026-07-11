@@ -6,12 +6,22 @@ export const BOMBER_FUSE_MS = 5000;
 
 /** A lemming that is mid-action (already a worker) generally can't take a new job. */
 function isInterruptible(lemming: Lemming): boolean {
-  return lemming.state === 'walker' || lemming.state === 'faller' || lemming.state === 'climber';
+  return (
+    lemming.state === 'walker' ||
+    lemming.state === 'faller' ||
+    lemming.state === 'climber' ||
+    lemming.state === 'shrug'
+  );
 }
 
 /** A lemming that has feet on the ground (for jobs that need to start grounded). */
 function isGrounded(lemming: Lemming, ctx: SkillContext): boolean {
   return ctx.hasGroundBelow(lemming);
+}
+
+/** State skills that plant/carve/build need feet on solid ground to start. */
+function canAssignGroundedJob(lemming: Lemming, ctx: SkillContext): boolean {
+  return isInterruptible(lemming) && isGrounded(lemming, ctx);
 }
 
 export const SKILL_DEFS: Record<Skill, SkillDef> = {
@@ -41,7 +51,7 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
     label: 'Bomber',
     icon: 'B',
     hotkey: '3',
-    // Can arm any live lemming that isn't already counting down.
+    // Can arm any live lemming that isn't already counting down (including mid-air).
     canAssign: (l) => l.fuseMs === null,
     onAssign: (l) => {
       l.fuseMs = BOMBER_FUSE_MS;
@@ -52,11 +62,8 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
     label: 'Blocker',
     icon: 'K',
     hotkey: '4',
-    // Must be grounded and currently interruptible (can't block in mid-air sensibly).
-    canAssign: (l) => isInterruptible(l),
-    onAssign: (l, ctx) => {
-      // Only plant if grounded; otherwise refuse silently (handled by canAssign at call site).
-      void ctx;
+    canAssign: (l, ctx) => canAssignGroundedJob(l, ctx),
+    onAssign: (l) => {
       l.state = 'blocker';
       l.velocityY = 0;
       l.actionTimerMs = 0;
@@ -67,7 +74,7 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
     label: 'Builder',
     icon: 'U',
     hotkey: '5',
-    canAssign: (l) => isInterruptible(l),
+    canAssign: (l, ctx) => canAssignGroundedJob(l, ctx),
     onAssign: (l) => {
       l.state = 'builder';
       l.buildSteps = 0;
@@ -79,7 +86,7 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
     label: 'Basher',
     icon: 'H',
     hotkey: '6',
-    canAssign: (l) => isInterruptible(l),
+    canAssign: (l, ctx) => canAssignGroundedJob(l, ctx),
     onAssign: (l) => {
       l.state = 'basher';
       l.actionTimerMs = 0;
@@ -90,8 +97,7 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
     label: 'Miner',
     icon: 'M',
     hotkey: '7',
-    // Swings a pick on a diagonal — needs to start grounded like a digger.
-    canAssign: (l) => isInterruptible(l),
+    canAssign: (l, ctx) => canAssignGroundedJob(l, ctx),
     onAssign: (l) => {
       l.state = 'miner';
       l.actionTimerMs = 0;
@@ -102,8 +108,7 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
     label: 'Digger',
     icon: 'D',
     hotkey: '8',
-    // Diggers must start on solid ground to bite downward.
-    canAssign: (l) => isInterruptible(l),
+    canAssign: (l, ctx) => canAssignGroundedJob(l, ctx),
     onAssign: (l) => {
       l.state = 'digger';
       l.actionTimerMs = 0;

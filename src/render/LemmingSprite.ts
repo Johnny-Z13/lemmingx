@@ -31,7 +31,9 @@ const HAIR_BY_STATE: Record<string, number> = {
   blocker: 0xff5b7f,
   builder: 0x6ae1ff,
   basher: 0xffa24d,
+  miner: 0xc4a06a,
   digger: 0xd696ff,
+  shrug: 0xff9ec8,
 };
 
 /** One pixel unit. Body is ~8 wide x ~12 tall at this scale. */
@@ -55,20 +57,23 @@ export function drawLemming(
   selected: boolean,
 ): void {
   const dir = lemming.direction;
-  // Local origin: we draw in a grid where (0,0) is top-left of the head, then
-  // translate so the body sits around the sim point. Feet at ~ +14 sim px.
-  const ox = lemming.x - 4 * PX;
-  const oy = lemming.y - 9 * PX;
+  // Landing squash: briefly squash the sprite toward the feet.
+  const squash = lemming.squashMs > 0 ? Math.min(1, lemming.squashMs / 160) : 0;
+  const ox = lemming.x - 4 * PX - squash * PX;
+  const oy = lemming.y - 9 * PX + squash * 3 * PX;
 
   if (lemming.state === 'dead') {
     drawSplat(g, ox, oy, frame, lemming);
     return;
   }
 
-  // Selection / hover ring under the feet.
+  // Selection / hover ring under the feet — pulses slightly.
   if (selected) {
+    const pulse = 10 + Math.sin(frame * 0.6) * 1.5;
     g.lineStyle(2, 0xffffff, 0.9);
-    g.strokeCircle(lemming.x, lemming.y + 2, 11);
+    g.strokeCircle(lemming.x, lemming.y + 2, pulse);
+    g.lineStyle(1, 0x6ae1ff, 0.45);
+    g.strokeCircle(lemming.x, lemming.y + 2, pulse + 3);
   }
 
   const hair = HAIR_BY_STATE[lemming.state] ?? HAIR_DEFAULT;
@@ -87,12 +92,18 @@ export function drawLemming(
   // --- Head ---
   blk(g, ox, oy, SKIN, 1, 1, 4, 3);
   blk(g, ox, oy, SKIN_SHADE, 1, 3, 4, 1);
-  // Eye (faces direction).
-  blk(g, ox, oy, EYE, dir === 1 ? 3 : 1, 2, 1, 1);
+  // Eye (faces direction). Shrug looks upward / worried.
+  if (lemming.state === 'shrug') {
+    blk(g, ox, oy, EYE, dir === 1 ? 3 : 1, 1, 1, 1);
+  } else {
+    blk(g, ox, oy, EYE, dir === 1 ? 3 : 1, 2, 1, 1);
+  }
 
-  // --- Body / smock ---
-  blk(g, ox, oy, BODY, 1, 4, 4, 4);
-  blk(g, ox, oy, BODY_SHADE, 1, 7, 4, 1);
+  // --- Body / smock (wider when squashed) ---
+  const bodyW = squash > 0.2 ? 5 : 4;
+  const bodyX = squash > 0.2 ? 0.5 : 1;
+  blk(g, ox, oy, BODY, bodyX, 4, bodyW, squash > 0.2 ? 3 : 4);
+  blk(g, ox, oy, BODY_SHADE, bodyX, squash > 0.2 ? 6 : 7, bodyW, 1);
 
   // --- State-specific overlays + limbs ---
   switch (lemming.state) {
@@ -123,18 +134,34 @@ export function drawLemming(
     case 'digger':
       drawDiggerArms(g, ox, oy, frame);
       break;
+    case 'shrug':
+      drawShrugPose(g, ox, oy, frame);
+      break;
     default:
       drawWalkLegs(g, ox, oy, 0, false);
   }
 
-  // --- Armed-bomber fuse flash: blink the body brighter as it counts down ---
+  // --- Armed-bomber fuse: blink + classic 5→1 countdown above the head ---
   if (lemming.fuseMs !== null && lemming.fuseMs > 0) {
     const blink = Math.floor(frame / 2) % 2 === 0;
     if (blink) {
       g.fillStyle(0xffffff, 0.5);
       g.fillRect(ox + 1 * PX, oy + 1 * PX, 4 * PX, 7 * PX);
     }
+    const digit = Math.max(1, Math.ceil(lemming.fuseMs / 1000));
+    drawDigit(g, lemming.x, lemming.y - 16 - squash * 2, digit);
   }
+}
+
+/** Classic "oh no" — both arms up, feet planted. */
+function drawShrugPose(g: Phaser.GameObjects.Graphics, ox: number, oy: number, frame: number): void {
+  const bob = Math.floor(frame / 2) % 2;
+  blk(g, ox, oy, SKIN, -1, 1 + bob, 2, 1);
+  blk(g, ox, oy, SKIN, 5, 1 + bob, 2, 1);
+  blk(g, ox, oy, SKIN, -1, 2 + bob, 1, 2);
+  blk(g, ox, oy, SKIN, 6, 2 + bob, 1, 2);
+  blk(g, ox, oy, SKIN_SHADE, 1, 8, 2, 1);
+  blk(g, ox, oy, SKIN_SHADE, 3, 8, 2, 1);
 }
 
 function drawWalkLegs(g: Phaser.GameObjects.Graphics, ox: number, oy: number, phase: number, climbing: boolean): void {
@@ -230,4 +257,31 @@ function drawSplat(g: Phaser.GameObjects.Graphics, ox: number, oy: number, frame
   g.fillRect(ox - 1 * PX, oy + 8 * PX, 8 * PX, 2 * PX);
   g.fillStyle(0xff5b7f, alpha * 0.6);
   g.fillRect(ox + 1 * PX, oy + 7 * PX, 4 * PX, 1 * PX);
+}
+
+/**
+ * Tiny 3×5 pixel digit drawn centered on (cx, cy). Used for the bomber fuse
+ * countdown (classic "5…4…3…2…1"). Segments are bitmasks for rows 0..4.
+ */
+const DIGIT_ROWS: Record<number, readonly number[]> = {
+  1: [0b010, 0b110, 0b010, 0b010, 0b111],
+  2: [0b111, 0b001, 0b111, 0b100, 0b111],
+  3: [0b111, 0b001, 0b111, 0b001, 0b111],
+  4: [0b101, 0b101, 0b111, 0b001, 0b001],
+  5: [0b111, 0b100, 0b111, 0b001, 0b111],
+};
+
+function drawDigit(g: Phaser.GameObjects.Graphics, cx: number, cy: number, digit: number): void {
+  const rows = DIGIT_ROWS[digit] ?? DIGIT_ROWS[5];
+  const ox = cx - 1.5 * PX;
+  const oy = cy - 2.5 * PX;
+  g.fillStyle(0xfff6d8, 1);
+  for (let row = 0; row < 5; row += 1) {
+    const bits = rows[row];
+    for (let col = 0; col < 3; col += 1) {
+      if (bits & (0b100 >> col)) {
+        g.fillRect(ox + col * PX, oy + row * PX, PX, PX);
+      }
+    }
+  }
 }

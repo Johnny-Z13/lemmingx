@@ -2,12 +2,9 @@ import { MATERIAL, Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 10 — "Last Lemming Standing".
- * The finale chains the whole toolkit on a tight budget: a crusher takes its
- * toll near the start, a wall needs bashing, a water chasm needs a two-stage
- * bridge, a second wall sits on a steel cap (bash it — digging is hopeless),
- * and the route ends with a dig down into the basement gallery that hides
- * the exit.
+ * Level 10 — "Sandworld Symphony".
+ * Finale: crusher, bash, water chasm, steel-capped wall, dig into the basement.
+ * Landscape water charges for sandworld experimentation on the chasm.
  *
  * Intended solution: bash wall A (x≈760), two builders over the water
  * (x≈1010 then on the bridge), bash wall B (x≈1600), digger at x≈2310,
@@ -33,7 +30,7 @@ export function createLevel10(): LevelDefinition {
   terrain.fillRect(1560, 430, 110, 60, MATERIAL.steel);
 
   return {
-    name: 'Last Lemming Standing',
+    name: 'Sandworld Symphony',
     width: 2880,
     height: 810,
     spawn: { x: 80, y: 406 },
@@ -47,6 +44,8 @@ export function createLevel10(): LevelDefinition {
     maxReleaseRate: 99,
     targetSaved: 6,
     timeLimitMs: 360000,
+    caSeed: 1010,
+    landscape: { water: 6 },
     skills: {
       climber: 0,
       floater: 0,
