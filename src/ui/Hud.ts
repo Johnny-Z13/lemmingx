@@ -86,6 +86,9 @@ function formatTime(ms: number): string {
 export class Hud {
   private readonly root: HTMLDivElement;
   private readonly statusBar: HTMLDivElement;
+  private readonly bar: HTMLDivElement;
+  private readonly collapseButton: HTMLButtonElement;
+  private collapsed = false;
   private readonly skillButtons = new Map<Skill, HTMLButtonElement>();
   private readonly releaseValue: HTMLSpanElement;
   private readonly nukeButton: HTMLButtonElement;
@@ -194,7 +197,10 @@ export class Hud {
     restartButton.className = 'hud__btn hud__restart';
 
     controls.append(release, this.pauseButton, this.speedButton, this.nukeButton, restartButton, this.makeAudioCluster());
-    bar.append(tools, this.terrainBar, controls);
+    this.collapseButton = this.makeButton('▾', 'Hide controls (H)', () => this.toggleCollapsed());
+    this.collapseButton.className = 'hud__btn hud__collapse';
+    bar.append(tools, this.terrainBar, controls, this.collapseButton);
+    this.bar = bar;
     this.root.append(bar);
 
     // --- Floating notice (selected skill / hovered job) ---
@@ -260,6 +266,14 @@ export class Hud {
     make('♪', 'musicMuted', 'musicVolume', 'Music');
     make('🔊', 'sfxMuted', 'sfxVolume', 'Sound effects');
     return cluster;
+  }
+
+  /** Collapse the bottom bar to a slim pill so it stops occluding gameplay. */
+  toggleCollapsed(): void {
+    this.collapsed = !this.collapsed;
+    this.bar.classList.toggle('is-collapsed', this.collapsed);
+    this.collapseButton.textContent = this.collapsed ? '▴' : '▾';
+    this.collapseButton.title = this.collapsed ? 'Show controls (H)' : 'Hide controls (H)';
   }
 
   private minimapJump(e: PointerEvent): void {

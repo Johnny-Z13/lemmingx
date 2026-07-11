@@ -178,6 +178,22 @@ button:disabled {
   gap: 6px;
 }
 
+.hud__collapse {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+}
+
+.hud__bar.is-collapsed {
+  width: auto;
+  padding: 4px;
+}
+
+.hud__bar.is-collapsed .hud__tools,
+.hud__bar.is-collapsed .hud__controls {
+  display: none;
+}
+
 .hud__tools--terrain {
   padding-left: 10px;
   border-left: 1px solid var(--stroke);

@@ -48,6 +48,9 @@ export class GameScene extends Phaser.Scene {
   private ambientAccMs = 0;
   private brush: TerrainBrush | null = null;
   private painting = false;
+  /** Last paid paint stamp, so campaign drags cost one charge per blob. */
+  private lastStampX = 0;
+  private lastStampY = 0;
 
   constructor() {
     super('GameScene');
@@ -69,7 +72,7 @@ export class GameScene extends Phaser.Scene {
       }
       if (brush) {
         this.painting = true;
-        this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, brush);
+        this.paintStamp(pointer.worldX, pointer.worldY, brush);
         return;
       }
       this.assignSelectedSkill(pointer.worldX, pointer.worldY);
@@ -82,7 +85,12 @@ export class GameScene extends Phaser.Scene {
       this.pointerSeen = true;
       const brush = this.brush;
       if (this.painting && pointer.isDown && brush && brush !== 'bomb') {
-        this.sim.paintLandscape(pointer.worldX, pointer.worldY, 16, brush);
+        // Campaign drags only stamp again after a full brush radius of travel,
+        // so one charge = one visible blob. The Lab sprays freely.
+        const dist = Math.hypot(pointer.worldX - this.lastStampX, pointer.worldY - this.lastStampY);
+        if (this.isLab() || dist >= 16) {
+          this.paintStamp(pointer.worldX, pointer.worldY, brush);
+        }
       }
       if (pointer.middleButtonDown() || pointer.rightButtonDown()) {
         const cam = this.cameras.main;
@@ -127,6 +135,23 @@ export class GameScene extends Phaser.Scene {
 
   private isLab(): boolean {
     return !!this.level?.sandLab;
+  }
+
+  /**
+   * One paid paint stamp. When the charges run out — on this stamp or before
+   * it — the brush disarms so clicks return to skill assignment instead of
+   * being swallowed by an empty tool.
+   */
+  private paintStamp(worldX: number, worldY: number, brush: Exclude<TerrainBrush, 'bomb'>): void {
+    const painted = this.sim.paintLandscape(worldX, worldY, 16, brush);
+    if (painted) {
+      this.lastStampX = worldX;
+      this.lastStampY = worldY;
+    }
+    if (!this.isLab() && this.sim.state.landscape[brush] <= 0) {
+      this.brush = null;
+      this.painting = false;
+    }
   }
 
   private applyBomb(worldX: number, worldY: number): void {
@@ -466,6 +491,8 @@ export class GameScene extends Phaser.Scene {
         this.cycleSpeed();
       } else if (key === 'n') {
         this.triggerNuke();
+      } else if (key === 'h') {
+        this.hud.toggleCollapsed();
       } else if (key === 'r') {
         this.startLevel();
       } else if (key === 'escape' && !this.selectOpen) {
