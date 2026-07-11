@@ -372,6 +372,44 @@ describe('GameSimulation', () => {
     expect(sim.assignSkill(lemming.id, 'digger')).toBe(false);
   });
 
+  it('open toolbox allows every skill, hatch queue, and terrain tool without consuming stock', () => {
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        openToolbox: true,
+        skills: {
+          climber: 0,
+          floater: 0,
+          bomber: 0,
+          blocker: 0,
+          builder: 0,
+          basher: 0,
+          miner: 0,
+          digger: 0,
+          swimmer: 0,
+        },
+      }),
+    );
+
+    expect(sim.enqueueRelease('swimmer')).toBe(true);
+    expect(sim.state.skills.swimmer).toBe(0);
+    expect(sim.popReleaseQueue()).toBe(true);
+    expect(sim.state.skills.swimmer).toBe(0);
+    expect(sim.paintLandscape(120, 40, 8, 'water')).toBe(true);
+    expect(sim.paintLandscape(140, 40, 8, 'wood')).toBe(true);
+    expect(sim.state.landscape.water).toBe(0);
+    expect(sim.state.landscape.wood).toBe(0);
+
+    sim.level.terrain.fillRect(156, 32, 12, 16, MATERIAL.steel);
+    expect(sim.paintLandscape(162, 40, 12, 'erase')).toBe(true);
+    expect(sim.level.terrain.materialAt(162, 40)).toBe(MATERIAL.steel);
+
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    expect(sim.assignSkill(lemming.id, 'climber')).toBe(true);
+    expect(lemming.isClimber).toBe(true);
+    expect(sim.state.skills.climber).toBe(0);
+  });
+
   it('release rate controls make lemmings spawn faster', () => {
     const slow = new GameSimulation(makeFlatLevel({ totalLemmings: 4, targetSaved: 4, releaseRate: 1 }));
     const fast = new GameSimulation(makeFlatLevel({ totalLemmings: 4, targetSaved: 4, releaseRate: 1 }));

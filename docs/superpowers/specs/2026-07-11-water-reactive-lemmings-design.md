@@ -1,7 +1,7 @@
 # Water-Reactive Lemmings + Interaction Matrix — Design
 
 **Date:** 2026-07-11
-**Status:** Draft — matrix approved as the design heart; levels redesign follows it
+**Status:** Accepted — simulation/render shipped; campaign redesign follows the matrix
 **Supersedes:** the "v1: water kills / drowns" decision in
 `2026-07-11-lemmingx-sand-hybrid-design.md` (that spec explicitly deferred
 "shallow water walkable later" — this is that revisit).

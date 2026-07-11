@@ -14,6 +14,8 @@ import { Particles } from '../render/Particles';
 import { Sfx } from '../audio/Sfx';
 import { Music } from '../audio/Music';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/settings';
+import { colorToCss, crewColor, crewLabel } from '../render/lemmingIdentity';
+import { loadUiSettings, saveUiSettings } from '../ui/settings';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -31,6 +33,7 @@ export class GameScene extends Phaser.Scene {
   private animClockMs = 0;
   private hoveredId: number | null = null;
   private paused = false;
+  private planning = false;
   private speed = 1;
   private levelIndex = 0;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
@@ -40,6 +43,8 @@ export class GameScene extends Phaser.Scene {
   private readonly sfx = new Sfx();
   private readonly music = new Music();
   private audioSettings = loadAudioSettings();
+  private uiSettings = loadUiSettings();
+  private readonly lemmingLabels = new Map<number, Phaser.GameObjects.Text>();
   private readonly progress = new Progress(localStorage);
   private levelSelect!: LevelSelect;
   private selectOpen = false;
@@ -48,7 +53,7 @@ export class GameScene extends Phaser.Scene {
   private ambientAccMs = 0;
   private brush: TerrainBrush | null = null;
   private painting = false;
-  /** Last paid paint stamp, so campaign drags cost one charge per blob. */
+  /** Last paint stamp, used to space stamps when a level has limited charges. */
   private lastStampX = 0;
   private lastStampY = 0;
 
@@ -62,7 +67,7 @@ export class GameScene extends Phaser.Scene {
     // Audio contexts need a user gesture; unlock on the first pointer/key.
     this.input.on('pointerdown', () => this.unlockAudio());
     this.input.keyboard?.on('keydown', () => this.unlockAudio());
-    // Click-to-assign / lab paint. Left button only — right/middle drag-pan.
+    // Click-to-assign / terrain paint. Left button only — right/middle drag-pan.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (pointer.button !== 0) return;
       const brush = this.brush;
@@ -85,10 +90,9 @@ export class GameScene extends Phaser.Scene {
       this.pointerSeen = true;
       const brush = this.brush;
       if (this.painting && pointer.isDown && brush && brush !== 'bomb') {
-        // Campaign drags only stamp again after a full brush radius of travel,
-        // so one charge = one visible blob. The Lab sprays freely.
+        // Limited tools stamp once per brush radius; open toolboxes spray freely.
         const dist = Math.hypot(pointer.worldX - this.lastStampX, pointer.worldY - this.lastStampY);
-        if (this.isLab() || dist >= 16) {
+        if (this.hasOpenToolbox() || dist >= 16) {
           this.paintStamp(pointer.worldX, pointer.worldY, brush);
         }
       }
@@ -137,10 +141,13 @@ export class GameScene extends Phaser.Scene {
     return !!this.level?.sandLab;
   }
 
+  private hasOpenToolbox(): boolean {
+    return this.level?.openToolbox === true || this.isLab();
+  }
+
   /**
-   * One paid paint stamp. When the charges run out — on this stamp or before
-   * it — the brush disarms so clicks return to skill assignment instead of
-   * being swallowed by an empty tool.
+   * Paint one terrain stamp. Limited levels disarm an exhausted brush so clicks
+   * return to skill assignment; open-toolbox campaign levels paint freely.
    */
   private paintStamp(worldX: number, worldY: number, brush: Exclude<TerrainBrush, 'bomb'>): void {
     const painted = this.sim.paintLandscape(worldX, worldY, 16, brush);
@@ -148,14 +155,14 @@ export class GameScene extends Phaser.Scene {
       this.lastStampX = worldX;
       this.lastStampY = worldY;
     }
-    if (!this.isLab() && this.sim.state.landscape[brush] <= 0) {
+    if (!this.hasOpenToolbox() && this.sim.state.landscape[brush] <= 0) {
       this.brush = null;
       this.painting = false;
     }
   }
 
   private applyBomb(worldX: number, worldY: number): void {
-    if (!this.sim || this.sim.state.outcome !== 'running') return;
+    if (!this.sim || this.sim.state.outcome !== 'running' || !this.hasOpenToolbox()) return;
     this.sim.labBomb(worldX, worldY, 28);
     this.sfx.play('explode');
     this.particles.burst(worldX, worldY, 20, { color: [0xff7a3a, 0xffd96b, 0xd4a84a], speed: 0.2, lifeMs: 700, size: 2.5 });
@@ -323,13 +330,16 @@ export class GameScene extends Phaser.Scene {
     const scrolls = this.level.width > this.scale.width || this.level.height > this.scale.height;
     return {
       paused: this.paused,
+      planning: this.planning,
       speed: this.speed,
-      nukeReady: this.sim.state.outcome === 'running' && !this.sim.state.nuking,
+      nukeReady: this.sim.state.outcome === 'running' && !this.planning && !this.sim.state.nuking,
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
       levelName: `${this.isLab() ? 'Lab' : `${this.levelIndex + 1}/${LEVEL_COUNT}`} · ${this.level.name ?? 'LemmingX'}`,
+      objective: this.level.objective ?? `Save ${this.level.targetSaved} lemmings.`,
+      hint: this.level.hint ?? 'Queue roles or reshape the terrain before release.',
       hasNextLevel: !this.isLab() && this.levelIndex < LEVEL_COUNT - 1,
       brush: this.brush,
-      hasTerrainTools: this.isLab() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
+      hasTerrainTools: this.hasOpenToolbox() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
       minimap: scrolls
         ? {
             terrain: this.level.terrain,
@@ -364,6 +374,7 @@ export class GameScene extends Phaser.Scene {
     this.winRecorded = false;
 
     this.children.removeAll(true);
+    this.lemmingLabels.clear();
     this.cameras.main.setBounds(0, 0, this.level.width, this.level.height);
     this.cameras.main.setBackgroundColor('#12171f');
     this.cameras.main.centerOn(this.level.spawn.x, this.level.spawn.y);
@@ -375,7 +386,8 @@ export class GameScene extends Phaser.Scene {
     this.fxGraphics = this.add.graphics();
 
     this.particles.clear();
-    this.paused = false;
+    this.planning = !this.isLab();
+    this.paused = this.planning;
     this.speed = 1;
     this.celebrateFired = false;
     this.ambientAccMs = 0;
@@ -388,6 +400,7 @@ export class GameScene extends Phaser.Scene {
         this.brush = null;
         this.selectSkill(skill);
       },
+      onStart: () => this.startRun(),
       onEnqueueRelease: () => this.sim.enqueueRelease(this.sim.state.selectedSkill),
       onPopQueue: () => this.sim.popReleaseQueue(),
       onSelectBrush: (kind) => {
@@ -405,7 +418,12 @@ export class GameScene extends Phaser.Scene {
         this.applyAudioSettings(settings);
         saveAudioSettings(settings);
       },
-    }, this.audioSettings, { lab: this.isLab() });
+      onDebugLabelsChange: (enabled) => this.setDebugLabels(enabled),
+    }, this.audioSettings, {
+      openToolbox: this.hasOpenToolbox(),
+      freePlay: this.isLab(),
+      debugLabels: this.uiSettings.debugLabels,
+    });
     this.hud.update(this.sim.state, this.hudView());
 
     this.music.play(this.levelIndex);
@@ -424,6 +442,12 @@ export class GameScene extends Phaser.Scene {
     this.music.setVolume(settings.musicVolume);
   }
 
+  private setDebugLabels(enabled: boolean): void {
+    this.uiSettings.debugLabels = enabled;
+    saveUiSettings(this.uiSettings);
+    this.hud?.setDebugLabels(enabled);
+  }
+
   /** Advance to the next level; from the finale, back to the level select. */
   private nextLevel(): void {
     if (this.isLab() || this.levelIndex + 1 >= LEVEL_COUNT) {
@@ -439,12 +463,22 @@ export class GameScene extends Phaser.Scene {
   }
 
   private triggerNuke(): void {
-    if (this.sim.state.outcome !== 'running' || this.sim.state.nuking) return;
+    if (this.planning || this.sim.state.outcome !== 'running' || this.sim.state.nuking) return;
     this.sim.nukeAll();
+  }
+
+  private startRun(): void {
+    if (!this.planning || this.sim.state.outcome !== 'running') return;
+    this.planning = false;
+    this.paused = false;
   }
 
   private togglePause(): void {
     if (this.sim.state.outcome !== 'running') return;
+    if (this.planning) {
+      this.startRun();
+      return;
+    }
     this.paused = !this.paused;
   }
 
@@ -470,17 +504,17 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      // Terrain brush hotkeys (Z/X/C/V/B, Lab adds M) arm a paint tool.
+      // Terrain brush hotkeys (Z/X/C/V/B, open toolbox adds M) arm a tool.
       const tool = TERRAIN_TOOLS.find((t) => t.hotkey === key);
-      if (tool && (!tool.labOnly || this.isLab())) {
-        const stock = tool.kind === 'bomb' ? (this.isLab() ? 1 : 0) : this.sim.state.landscape[tool.kind];
-        if (this.isLab() || stock > 0) {
+      if (tool && (!tool.openOnly || this.hasOpenToolbox())) {
+        const stock = tool.kind === 'bomb' ? 0 : this.sim.state.landscape[tool.kind];
+        if (this.hasOpenToolbox() || stock > 0) {
           this.brush = tool.kind;
           return;
         }
       }
 
-      // Skill hotkeys (1–8) map to the registry's declared hotkeys.
+      // Skill hotkeys (1–9) map to the registry's declared hotkeys.
       const skill = ALL_SKILLS.find((s) => SKILL_DEFS[s].hotkey === key);
       if (skill) {
         this.brush = null;
@@ -496,11 +530,13 @@ export class GameScene extends Phaser.Scene {
         this.triggerNuke();
       } else if (key === 'h') {
         this.hud.toggleCollapsed();
+      } else if (key === 'l') {
+        this.setDebugLabels(!this.uiSettings.debugLabels);
       } else if (key === 'r') {
         this.startLevel();
       } else if (key === 'escape' && !this.selectOpen) {
-        // First Esc disarms a campaign brush; the next one leaves the level.
-        if (this.brush && !this.isLab()) {
+        // First Esc disarms a brush; the next one leaves the level.
+        if (this.brush) {
           this.brush = null;
           return;
         }
@@ -833,9 +869,41 @@ export class GameScene extends Phaser.Scene {
   private drawLemmings(): void {
     this.actorGraphics.clear();
     const frame = this.animFrame();
+    const visibleLabels = new Set<number>();
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'exited') continue;
       drawLemming(this.actorGraphics, lemming, frame, lemming.id === this.hoveredId);
+
+      if (!this.uiSettings.debugLabels) continue;
+      visibleLabels.add(lemming.id);
+      let label = this.lemmingLabels.get(lemming.id);
+      if (!label) {
+        label = this.add.text(lemming.x, lemming.y - 24, '', {
+          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          fontSize: '9px',
+          fontStyle: 'bold',
+          color: '#ffffff',
+          backgroundColor: '#0d1117dd',
+          stroke: '#05070a',
+          strokeThickness: 1,
+        });
+        label.setOrigin(0.5, 1);
+        label.setPadding(3, 1, 3, 1);
+        label.setDepth(50);
+        this.lemmingLabels.set(lemming.id, label);
+      }
+      label.setVisible(true);
+      const labelY = lemming.y - 24 - ((lemming.id - 1) % 6) * 18;
+      const color = crewColor(lemming);
+      label.setPosition(lemming.x, labelY);
+      label.setText(crewLabel(lemming));
+      label.setColor(colorToCss(color));
+      this.actorGraphics.lineStyle(1, color, 0.35);
+      this.actorGraphics.lineBetween(lemming.x, lemming.y - 10, lemming.x, labelY + 1);
+    }
+
+    for (const [id, label] of this.lemmingLabels) {
+      if (!visibleLabels.has(id)) label.setVisible(false);
     }
   }
 

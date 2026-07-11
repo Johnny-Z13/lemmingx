@@ -1,11 +1,11 @@
 import type { Terrain } from './Terrain';
 
 /**
- * The eight classic skills. Two kinds:
+ * The eight classic skills plus Swimmer. Two kinds:
  * - State skills replace what the lemming is doing (blocker/builder/basher/
  *   miner/digger/bomber).
  * - Trait skills are permanent modifiers layered on top of normal walking/falling
- *   (climber/floater): a lemming can be a "climber walker" or a "floater faller".
+ *   (climber/floater/swimmer): traits stack with the current movement state.
  */
 export type Skill =
   | 'climber'
@@ -116,6 +116,10 @@ export interface EmitterState {
 export interface LevelDefinition {
   /** Optional human-readable name shown in the HUD / level select. */
   name?: string;
+  /** Player-facing mission shown before the hatch opens. */
+  objective?: string;
+  /** Short route cue; alternatives remain possible through the open toolbox. */
+  hint?: string;
   width: number;
   height: number;
   spawn: Point;
@@ -165,6 +169,8 @@ export interface LevelDefinition {
     wood?: number;
     erase?: number;
   };
+  /** Unlimited crew skills and terrain tools while campaign objectives remain active. */
+  openToolbox?: boolean;
   /** Sand Lab free-play arena (no quota pressure; paint tools on). */
   sandLab?: boolean;
 }
@@ -264,9 +270,9 @@ export interface SimulationState {
   hatchTotalMs: number;
   /**
    * Skills pre-loaded onto the next hatch releases (front = next spawn).
-   * Enqueueing consumes skill stock; spawn applies without a second consume.
+   * Limited toolboxes consume stock; open toolboxes queue without consuming.
    */
   hatchQueue: Skill[];
-  /** Remaining landscape paint charges (campaign sandworld tools). */
+  /** Remaining landscape paint charges for limited-toolbox levels. */
   landscape: { water: number; sand: number; dirt: number; wood: number; erase: number };
 }

@@ -24,6 +24,8 @@ export function createLevel9(): LevelDefinition {
 
   return {
     name: 'The Gauntlet',
+    objective: 'Get at least 6 through two fatal drops, steel, and a final trap.',
+    hint: 'Queue Floater and Climber traits before release; reshape emergencies.',
     width: 2400,
     height: 810,
     spawn: { x: 80, y: 126 },

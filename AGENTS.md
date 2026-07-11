@@ -1,4 +1,4 @@
-# CLAUDE.md — LemmingX
+# AGENTS.md — LemmingX
 
 Guidance for AI agents working in this repo.
 

@@ -24,6 +24,8 @@ export function createLabLevel(seed = (Date.now() & 0xffff) || 1): LevelDefiniti
 
   return {
     name: 'Sand Lab',
+    objective: 'Experiment freely with the swarm and living terrain.',
+    hint: 'Paint, flood, bomb, queue roles, and invent your own route.',
     width: 1280,
     height: 720,
     spawn: { x: 260, y: 380 },

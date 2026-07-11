@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import type { Lemming } from '../sim/types';
+import { crewColor } from './lemmingIdentity';
 
 /**
  * Procedural "cute retro pixel" lemming renderer.
@@ -18,25 +19,9 @@ const SKIN = 0xf2c9a0;
 const SKIN_SHADE = 0xd9a87f;
 const BODY = 0x4f74e3; // classic blue smock
 const BODY_SHADE = 0x3a59bd;
-const HAIR_DEFAULT = 0x5ef2a1; // green tuft, like the originals
 const EYE = 0x1a2030;
 const DEAD = 0x6a7283;
 const PARACHUTE = 0xff7aa8;
-
-/** Hair colour by state — the at-a-glance "job light". */
-const HAIR_BY_STATE: Record<string, number> = {
-  walker: HAIR_DEFAULT,
-  faller: 0xffe06b,
-  climber: 0xffd24d,
-  blocker: 0xff5b7f,
-  builder: 0x6ae1ff,
-  basher: 0xffa24d,
-  miner: 0xc4a06a,
-  digger: 0xd696ff,
-  treading: 0x4ab6ff,
-  swimming: 0x2ee6c8,
-  shrug: 0xff9ec8,
-};
 
 /** One pixel unit. Body is ~8 wide x ~12 tall at this scale. */
 const PX = 2;
@@ -81,7 +66,7 @@ export function drawLemming(
     g.strokeCircle(lemming.x, lemming.y + 4, pulse + 3);
   }
 
-  const hair = HAIR_BY_STATE[lemming.state] ?? HAIR_DEFAULT;
+  const hair = crewColor(lemming);
   const walkPhase = frame % 4; // 0..3 used for limb cycles
 
   // --- Floater parachute (drawn behind the body) ---

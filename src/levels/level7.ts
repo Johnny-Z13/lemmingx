@@ -3,9 +3,8 @@ import type { LevelDefinition } from '../sim/types';
 
 /**
  * Level 7 — "Float the Timber".
- * Sandworld signature puzzle: dig the dirt lip so the wood stack drops into the
- * trench, then paint water — buoyancy lifts the timber into a walkable bridge.
- * Hatch-queue diggers (Q) first. Builders are a scarce backup.
+ * Sandworld signature puzzle: erase the dirt lip so the wood stack drops into
+ * the trench, then paint water — buoyancy lifts the timber into a walkable bridge.
  *
  * Scripted solution (tests): same two-stage builder bridge as Bridge the Gap.
  * Intended player solution: dig → paint water → walk the wood.
@@ -28,6 +27,8 @@ export function createLevel7(): LevelDefinition {
 
   return {
     name: 'Float the Timber',
+    objective: 'Get at least 5 lemmings across the living trench.',
+    hint: 'Erase the dirt lip, flood beneath it, and float the wood into a bridge.',
     width: 960,
     height: 540,
     spawn: { x: 80, y: 406 },

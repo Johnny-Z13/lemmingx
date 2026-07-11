@@ -1,7 +1,7 @@
 import type { Lemming, LevelDefinition, SimEvent, SimEventKind, SimulationState, Skill } from './types';
 import type { SkillContext } from './skills/types';
 import { SKILL_DEFS } from './skills/registry';
-import { MATERIAL } from './Terrain';
+import { MATERIAL, type Material } from './Terrain';
 import { SeededRng } from './ca/SeededRng';
 import { ChunkStepper } from './ca/ChunkStepper';
 
@@ -132,7 +132,7 @@ export class GameSimulation {
   }
 
   /** Lab / tests: paint a material disc into the world. */
-  paintCircle(x: number, y: number, radius: number, material: number): void {
+  paintCircle(x: number, y: number, radius: number, material: Material): void {
     const cs = this.level.terrain.cellSize;
     const minX = Math.floor((x - radius) / cs);
     const maxX = Math.ceil((x + radius) / cs);
@@ -144,7 +144,10 @@ export class GameSimulation {
         const wx = cx * cs + cs / 2;
         const wy = cy * cs + cs / 2;
         if ((wx - x) ** 2 + (wy - y) ** 2 <= r2) {
-          this.level.terrain.setCell(cx, cy, material as 0 | 1 | 2 | 3 | 4 | 5 | 6);
+          // Steel is the campaign's one immutable rule, even with the open
+          // toolbox. Level authoring still has unconditional erase APIs.
+          if (this.level.terrain.getCell(cx, cy) === MATERIAL.steel) continue;
+          this.level.terrain.setCell(cx, cy, material);
         }
       }
     }
@@ -230,14 +233,14 @@ export class GameSimulation {
   assignSkill(lemmingId: number, skill: Skill): boolean {
     const lemming = this.state.lemmings.find((candidate) => candidate.id === lemmingId);
     if (!lemming || lemming.state === 'dead' || lemming.state === 'exited') return false;
-    if (this.state.skills[skill] <= 0) return false;
+    if (!this.hasOpenToolbox() && this.state.skills[skill] <= 0) return false;
 
     const def = SKILL_DEFS[skill];
     const ctx = this.skillContext();
     if (!def.canAssign(lemming, ctx)) return false;
 
     def.onAssign(lemming, ctx);
-    this.state.skills[skill] -= 1;
+    if (!this.hasOpenToolbox()) this.state.skills[skill] -= 1;
     this.emit('assign', lemming.x, lemming.y);
     return true;
   }
@@ -333,10 +336,10 @@ export class GameSimulation {
    */
   enqueueRelease(skill: Skill): boolean {
     if (this.state.outcome !== 'running') return false;
-    if (this.state.skills[skill] <= 0) return false;
+    if (!this.hasOpenToolbox() && this.state.skills[skill] <= 0) return false;
     const remaining = this.level.totalLemmings - this.state.spawned;
     if (this.state.hatchQueue.length >= remaining) return false;
-    this.state.skills[skill] -= 1;
+    if (!this.hasOpenToolbox()) this.state.skills[skill] -= 1;
     this.state.hatchQueue.push(skill);
     return true;
   }
@@ -345,13 +348,13 @@ export class GameSimulation {
   popReleaseQueue(): boolean {
     const skill = this.state.hatchQueue.pop();
     if (!skill) return false;
-    this.state.skills[skill] += 1;
+    if (!this.hasOpenToolbox()) this.state.skills[skill] += 1;
     return true;
   }
 
   /**
-   * Campaign landscape paint — consumes a charge from `state.landscape`.
-   * Returns false if that material has no charges left.
+   * Paint campaign terrain. Limited levels consume `state.landscape`; an open
+   * toolbox paints freely while keeping the campaign objective active.
    */
   paintLandscape(
     x: number,
@@ -360,8 +363,8 @@ export class GameSimulation {
     kind: 'water' | 'sand' | 'dirt' | 'wood' | 'erase',
   ): boolean {
     const stock = this.state.landscape[kind];
-    if (stock <= 0 && !this.level.sandLab) return false;
-    if (!this.level.sandLab) this.state.landscape[kind] -= 1;
+    if (stock <= 0 && !this.hasOpenToolbox()) return false;
+    if (!this.hasOpenToolbox()) this.state.landscape[kind] -= 1;
     const mat =
       kind === 'water' ? MATERIAL.water :
       kind === 'sand' ? MATERIAL.sand :
@@ -370,6 +373,10 @@ export class GameSimulation {
       MATERIAL.empty;
     this.paintCircle(x, y, radius, mat);
     return true;
+  }
+
+  private hasOpenToolbox(): boolean {
+    return this.level.openToolbox === true || this.level.sandLab === true;
   }
 
   /**

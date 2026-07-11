@@ -17,6 +17,8 @@ export function createLevel6(): LevelDefinition {
 
   return {
     name: 'Trap House',
+    objective: 'Get at least 6 lemmings through the three-machine corridor.',
+    hint: 'Send a tight wave while traps reset, or bury and bypass them.',
     width: 1440,
     height: 540,
     spawn: { x: 80, y: 406 },

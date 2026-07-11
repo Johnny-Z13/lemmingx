@@ -4,8 +4,8 @@ import type { LevelDefinition } from '../sim/types';
 /**
  * Level 2 — "Bridge the Gap".
  * Two plateaus separated by flowing water. Builders lay a two-stage bridge.
- * Teaches builders + living water (drowns on contact). A few landscape water
- * charges let you flood/experiment without breaking the builder route.
+ * Teaches builders + living water (wade/tread/swim; burial is the danger). A
+ * few landscape water charges let you experiment without breaking the route.
  *
  * Intended solution: builder at ~x385 heading right, second builder where the
  * first bridge ends (~x430), crew walks the bridge across.
@@ -19,11 +19,13 @@ export function createLevel2(): LevelDefinition {
   // Raised landing shelf: the two-stage bridge ends high, and this catches it
   // so the drop on the far side stays survivable.
   terrain.fillRect(490, 400, 80, 30);
-  // Living water in the chasm (also a drown hazard via material overlap).
+  // Deep water catches falls and leaves non-swimmers treading.
   terrain.fillRect(400, 490, 90, 50, MATERIAL.water);
 
   return {
     name: 'Bridge the Gap',
+    objective: 'Get at least 6 lemmings safely across the water gap.',
+    hint: 'Queue swimmers, build a bridge, or author a new crossing.',
     width: 960,
     height: 540,
     spawn: { x: 80, y: 406 },

@@ -35,9 +35,9 @@ export const SAND_LAB_INDEX = LEVEL_COUNT;
 
 /** Build the campaign level at `index`, or the Sand Lab when index === SAND_LAB_INDEX. */
 export function createLevelAt(index: number): LevelDefinition {
-  if (index === SAND_LAB_INDEX) return createLabLevel();
+  if (index === SAND_LAB_INDEX) return { ...createLabLevel(), openToolbox: true };
   const clamped = Math.max(0, Math.min(LEVELS.length - 1, index));
-  return LEVELS[clamped]();
+  return { ...LEVELS[clamped](), openToolbox: true };
 }
 
 export { createLabLevel };

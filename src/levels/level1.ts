@@ -17,6 +17,8 @@ export function createLevel1(): LevelDefinition {
 
   return {
     name: 'First Steps',
+    objective: 'Get at least 7 lemmings past the wall and into the exit.',
+    hint: 'Bash through, dig under, build over, or reshape the obstacle.',
     width: 960,
     height: 540,
     spawn: { x: 90, y: 410 },

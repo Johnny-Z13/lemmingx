@@ -28,21 +28,30 @@ npm run build   # typecheck + production build
   (localStorage).
 - Meet the **save quota** before the **timer** ends. Live **Success %** is
   `saved / total` (100% = everyone home). Quota can be lower than 100%.
-- Terrain is a **living pixel grid**: sand settles, water flows and drowns,
-  **wood floats** on water. Bombers/digs can spray sand when a level enables it
-  (always on in the Lab).
+- Every campaign level has the **open toolbox**: all crew skills, hatch-queue
+  ordering, water, sand, dirt, wood, erase, and bombs are unlimited. The level
+  geometry, quota, timer, traps, and emitters still provide the objective.
+- Campaign levels open in a **planning phase** with a goal and route hint. The
+  clock and hatch stay stopped while you queue roles or reshape terrain; press
+  **Space** or **Start run** when ready.
+- Terrain is a **living pixel grid**: sand settles, water flows and supports
+  wading/treading/swimming, and **wood floats** on water. Water or sand only
+  kills when it seals a lemming's head. Bombers/digs can spray sand when a
+  level enables it (always on in the Lab).
 - Pick a skill (**1–9** or click), then click a lemming. Hover shows the current
   job. **Swimmer (9)** is assignable mid-water — rescue a treading lemming.
-- **Hatch queue (Q)** — spend a skill charge to pre-order the next release
-  (e.g. diggers first). **Backspace** pops the last queued skill.
-- **Terrain toolbar** — when a level has charges (or always, in the Lab), the
-  second toolbar paints the living world: **Z** water · **X** sand · **C** dirt ·
-  **V** wood · **B** erase (Lab adds **M** bomb). Drag to pour; Esc returns to
-  skills (stacked puzzles: dig → flood → float wood).
+- Lemmings are colour-coded by their live job; armed bombers take the orange
+  role colour even while swimming or falling. Toggle persisted debug labels
+  with **Labels** or **L** to show `Name · Role · State` above every crew member.
+- **Hatch queue (Q)** — pre-order the next release (e.g. swimmers or diggers
+  first). **Backspace** pops the last queued skill.
+- **Terrain toolbar** — every level can paint the living world: **Z** water ·
+  **X** sand · **C** dirt · **V** wood · **B** erase · **M** bomb. Drag to pour;
+  Esc returns to skills (stacked puzzles: dig → flood → float wood).
 - **Emitters** — some levels have spouts that pour sand or water on their own
   until their budget runs dry. Living terrain you don't control.
 - **Space** pause · **F** speed (1×/2×/3×) · **N** nuke · **H** hide/show the
-  control bar · **R** restart · **Esc** select.
+  control bar · **L** debug labels · **R** restart · **Esc** select.
 - Pan big levels with **arrows**, edge scroll, or **right/middle-drag**; **minimap** jumps the camera.
 - **Traps** (crusher / zapper / chomper) kill one victim, then re-arm.
 - Chiptune **music** + SFX are synthesized at runtime. Music starts **muted**;
@@ -71,7 +80,7 @@ Always-unlocked Noita-lite sandbox from the level select:
 |:---:|------|
 | Z/X/C/V/B | Paint water / sand / dirt / wood / erase |
 | M | Bomb |
-| 1–8 | Skills (click a lemming to assign) |
+| 1–9 | Skills (click a lemming to assign) |
 
 Drag to paint. No quota — dig, flood, bomb, and shepherd the crew for fun.
 
@@ -113,10 +122,10 @@ Design source of truth:
 | Material | Role |
 |----------|------|
 | Dirt | Classic diggable ground |
-| Steel | Puzzle locks |
+| Steel | Immutable puzzle locks — brushes, bombs, and skills cannot remove it |
 | One-way | Directional carve |
 | Sand | Settling powder / dig-bomb debris |
-| Water | Flows; drowns lemmings |
+| Water | Flows; supports wading/treading/swimming; kills only by burial |
 | Wood | Falls in air; floats / lifts on water into walkable bridges |
 
 ## Architecture
@@ -145,8 +154,8 @@ CLAUDE.md             Agent-oriented project map
 ### Design notes
 
 - **Bitmap terrain** — carve/build are cell edits.
-- **State vs trait skills** — blockers/builders/etc. replace the job; climber/floater
-  are permanent modifiers (a climber-walker is fine).
+- **State vs trait skills** — blockers/builders/etc. replace the job;
+  climber/floater/swimmer are permanent modifiers (a climber-walker is fine).
 - **`SimEvent`s** — sim emits dig/exit/splat/…; scene drains them for audio/FX.
 - **Seeded CA** — same seed + inputs → same settle (tests, future lockstep).
 - **Level factories** — fresh terrain every start; each level has a scripted win

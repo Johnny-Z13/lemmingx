@@ -18,6 +18,8 @@ export function createLevel3(): LevelDefinition {
 
   return {
     name: 'Hold the Line',
+    objective: 'Get at least 6 lemmings through or over the thin wall.',
+    hint: 'Bomb a planted blocker, carve through, or pour a sand ramp.',
     width: 960,
     height: 540,
     spawn: { x: 80, y: 406 },

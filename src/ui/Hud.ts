@@ -12,18 +12,20 @@ export const TERRAIN_TOOLS: readonly {
   label: string;
   hotkey: string;
   color: number;
-  labOnly?: boolean;
+  openOnly?: boolean;
 }[] = [
   { kind: 'water', label: 'Water', hotkey: 'z', color: 0x3a9fd8 },
   { kind: 'sand', label: 'Sand', hotkey: 'x', color: 0xd4a84a },
   { kind: 'dirt', label: 'Dirt', hotkey: 'c', color: 0x4d9674 },
   { kind: 'wood', label: 'Wood', hotkey: 'v', color: 0xa67c52 },
   { kind: 'erase', label: 'Erase', hotkey: 'b', color: 0x59617a },
-  { kind: 'bomb', label: 'Bomb', hotkey: 'm', color: 0xff7a3a, labOnly: true },
+  { kind: 'bomb', label: 'Bomb', hotkey: 'm', color: 0xff7a3a, openOnly: true },
 ] as const;
 
 export type HudEvents = {
   onSelectSkill: (skill: Skill) => void;
+  /** Leave the pre-release planning phase and open the hatch clock. */
+  onStart?: () => void;
   /** Pre-load hatch queue with selected skill (consumes stock). */
   onEnqueueRelease?: () => void;
   onPopQueue?: () => void;
@@ -36,7 +38,8 @@ export type HudEvents = {
   onLevelSelect?: () => void;
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
   onAudioChange?: (settings: AudioSettings) => void;
-  /** Arm a terrain paint brush (campaign charges / Lab infinite). */
+  onDebugLabelsChange?: (enabled: boolean) => void;
+  /** Arm a terrain paint brush (limited charges or open-toolbox infinite). */
   onSelectBrush?: (kind: TerrainBrush) => void;
 };
 
@@ -52,10 +55,13 @@ export interface MinimapData {
 /** Extra read-only display info the scene feeds the HUD each frame. */
 export interface HudView {
   paused: boolean;
+  planning: boolean;
   speed: number;
   nukeReady: boolean;
   hoveredJob: string | null;
   levelName: string;
+  objective: string;
+  hint: string;
   hasNextLevel: boolean;
   /** Armed terrain brush, or null when assigning skills. */
   brush: TerrainBrush | null;
@@ -86,6 +92,9 @@ function formatTime(ms: number): string {
 export class Hud {
   private readonly root: HTMLDivElement;
   private readonly statusBar: HTMLDivElement;
+  private readonly mission: HTMLElement;
+  private readonly missionObjective: HTMLElement;
+  private readonly missionHint: HTMLParagraphElement;
   private readonly bar: HTMLDivElement;
   private readonly collapseButton: HTMLButtonElement;
   private collapsed = false;
@@ -94,11 +103,14 @@ export class Hud {
   private readonly nukeButton: HTMLButtonElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly speedButton: HTMLButtonElement;
+  private readonly debugLabelsButton: HTMLButtonElement;
   private readonly notice: HTMLDivElement;
   private readonly queueBar: HTMLDivElement;
   private readonly terrainButtons = new Map<TerrainBrush, HTMLButtonElement>();
   private readonly terrainBar: HTMLDivElement;
-  private readonly lab: boolean;
+  private readonly openToolbox: boolean;
+  private readonly freePlay: boolean;
+  private debugLabels: boolean;
   private readonly overlay: HTMLDivElement;
   private readonly minimap: HTMLCanvasElement;
   /** Offscreen terrain layer so the cell sweep runs at ~10 Hz, not 60. */
@@ -107,9 +119,15 @@ export class Hud {
   private readonly events: HudEvents;
   private readonly audio: AudioSettings;
 
-  constructor(events: HudEvents, audio?: AudioSettings, opts?: { lab?: boolean }) {
+  constructor(
+    events: HudEvents,
+    audio?: AudioSettings,
+    opts?: { openToolbox?: boolean; freePlay?: boolean; debugLabels?: boolean },
+  ) {
     this.events = events;
-    this.lab = opts?.lab ?? false;
+    this.openToolbox = opts?.openToolbox ?? false;
+    this.freePlay = opts?.freePlay ?? false;
+    this.debugLabels = opts?.debugLabels ?? false;
     this.audio = audio ?? { musicMuted: true, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
     this.root.className = 'hud';
@@ -118,6 +136,21 @@ export class Hud {
     this.statusBar = document.createElement('div');
     this.statusBar.className = 'hud__status';
     this.root.append(this.statusBar);
+
+    // --- Pre-release mission briefing; controls remain usable for planning. ---
+    this.mission = document.createElement('section');
+    this.mission.className = 'hud__mission';
+    this.mission.setAttribute('aria-label', 'Level briefing');
+    this.mission.innerHTML =
+      '<span class="hud__mission-kicker">Plan before release</span>' +
+      '<strong class="hud__mission-objective"></strong>' +
+      '<p class="hud__mission-hint"></p>';
+    this.missionObjective = this.mission.querySelector('.hud__mission-objective') as HTMLElement;
+    this.missionHint = this.mission.querySelector('.hud__mission-hint') as HTMLParagraphElement;
+    const startButton = this.makeButton('Start run', 'Start run (Space)', () => events.onStart?.());
+    startButton.className = 'hud__btn hud__primary hud__mission-start';
+    this.mission.append(startButton);
+    this.root.append(this.mission);
 
     // --- Bottom control bar ---
     const bar = document.createElement('div');
@@ -149,12 +182,12 @@ export class Hud {
     unqueueBtn.className = 'hud__btn';
     tools.append(queueBtn, unqueueBtn);
 
-    // --- Terrain toolbar: paint the living world (campaign charges / Lab ∞) ---
+    // --- Terrain toolbar: paint the living world (limited charges / open ∞) ---
     this.terrainBar = document.createElement('div');
     this.terrainBar.className = 'hud__tools hud__tools--terrain';
     this.terrainBar.innerHTML = '<span class="hud__bar-label">Terrain</span>';
     for (const tool of TERRAIN_TOOLS) {
-      if (tool.labOnly && !this.lab) continue;
+      if (tool.openOnly && !this.openToolbox) continue;
       const button = document.createElement('button');
       button.className = 'hud__tool';
       button.type = 'button';
@@ -198,7 +231,23 @@ export class Hud {
     const restartButton = this.makeButton('⟲ Restart', 'Restart (R)', events.onRestart);
     restartButton.className = 'hud__btn hud__restart';
 
-    controls.append(release, this.pauseButton, this.speedButton, this.nukeButton, restartButton, this.makeAudioCluster());
+    this.debugLabelsButton = this.makeButton('Labels', 'Toggle debug labels (L)', () => {
+      const enabled = !this.debugLabels;
+      this.setDebugLabels(enabled);
+      events.onDebugLabelsChange?.(enabled);
+    });
+    this.debugLabelsButton.className = 'hud__btn hud__debug-labels';
+    this.setDebugLabels(this.debugLabels);
+
+    controls.append(
+      release,
+      this.pauseButton,
+      this.speedButton,
+      this.nukeButton,
+      restartButton,
+      this.debugLabelsButton,
+      this.makeAudioCluster(),
+    );
     this.collapseButton = this.makeButton('▾', 'Hide controls (H)', () => this.toggleCollapsed());
     this.collapseButton.className = 'hud__btn hud__collapse';
     bar.append(tools, this.terrainBar, controls, this.collapseButton);
@@ -278,6 +327,13 @@ export class Hud {
     this.collapseButton.title = this.collapsed ? 'Show controls (H)' : 'Hide controls (H)';
   }
 
+  setDebugLabels(enabled: boolean): void {
+    this.debugLabels = enabled;
+    this.debugLabelsButton?.classList.toggle('is-active', enabled);
+    this.debugLabelsButton?.setAttribute('aria-pressed', String(enabled));
+    if (this.debugLabelsButton) this.debugLabelsButton.title = `Debug labels ${enabled ? 'on' : 'off'} (L)`;
+  }
+
   private minimapJump(e: PointerEvent): void {
     const rect = this.minimap.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
@@ -353,27 +409,40 @@ export class Hud {
       state.timeRemainingMs !== null
         ? `<span class="hud__timer${state.timeRemainingMs < 15000 ? ' is-low' : ''}">⏱ ${formatTime(state.timeRemainingMs)}</span>`
         : '';
-    this.statusBar.innerHTML =
-      `<span class="hud__level">${view.levelName}</span>` +
-      `<span class="hud__stat hud__stat--pct">Success <strong>${pct}%</strong></span>` +
-      `<span class="hud__stat">Saved <strong>${state.saved}/${state.targetSaved}</strong></span>` +
-      `<span class="hud__stat">Out <strong>${state.spawned}/${state.totalLemmings}</strong></span>` +
-      `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>` +
-      timer;
+    this.statusBar.innerHTML = this.freePlay
+      ? `<span class="hud__level">${view.levelName}</span>` +
+        '<span class="hud__stat hud__stat--pct"><strong>Free Play</strong></span>' +
+        `<span class="hud__stat">Crew <strong>${state.spawned}/${state.totalLemmings}</strong></span>` +
+        `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>`
+      : `<span class="hud__level">${view.levelName}</span>` +
+        `<span class="hud__stat hud__stat--pct">Success <strong>${pct}%</strong></span>` +
+        `<span class="hud__stat">Saved <strong>${state.saved}/${state.targetSaved}</strong></span>` +
+        `<span class="hud__stat">Out <strong>${state.spawned}/${state.totalLemmings}</strong></span>` +
+        `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>` +
+        timer;
+
+    this.mission.hidden = !view.planning;
+    if (view.planning) {
+      this.missionObjective.textContent = view.objective;
+      this.missionHint.textContent = view.hint;
+    }
 
     this.releaseValue.textContent = `Rate ${state.releaseRate}`;
 
     const running = state.outcome === 'running';
     for (const [skill, button] of this.skillButtons) {
       const stock = button.querySelector('.hud__stock');
-      if (stock) stock.textContent = String(state.skills[skill]);
+      if (stock) stock.textContent = this.openToolbox ? '∞' : String(state.skills[skill]);
       button.classList.toggle('is-active', skill === state.selectedSkill && !view.brush);
-      button.disabled = state.skills[skill] <= 0 || !running;
+      button.disabled = !running || (!this.openToolbox && state.skills[skill] <= 0);
     }
 
     this.nukeButton.disabled = !view.nukeReady;
-    this.pauseButton.classList.toggle('is-active', view.paused);
-    this.pauseButton.textContent = view.paused ? '▶' : '▮▮';
+    this.pauseButton.classList.toggle('is-active', view.paused && !view.planning);
+    this.pauseButton.textContent = view.planning ? 'Start' : view.paused ? '▶' : '▮▮';
+    const pauseLabel = view.planning ? 'Start run (Space)' : 'Pause / resume (Space)';
+    this.pauseButton.title = pauseLabel;
+    this.pauseButton.setAttribute('aria-label', pauseLabel);
     this.speedButton.textContent = view.speed > 1 ? `▶▶ ${view.speed}×` : '▶ 1×';
     this.speedButton.classList.toggle('is-active', view.speed > 1);
 
@@ -388,12 +457,12 @@ export class Hud {
       this.queueBar.innerHTML = '';
     }
 
-    // Terrain toolbar (campaign charges / Lab infinite)
+    // Terrain toolbar (limited charges / open infinite)
     this.terrainBar.hidden = !view.hasTerrainTools;
     if (view.hasTerrainTools) {
       for (const [kind, button] of this.terrainButtons) {
         const stockEl = button.querySelector('.hud__stock');
-        const infinite = this.lab || kind === 'bomb';
+        const infinite = this.openToolbox;
         const stock = kind === 'bomb' ? 0 : state.landscape[kind];
         if (stockEl) stockEl.textContent = infinite ? '∞' : String(stock);
         button.classList.toggle('is-active', view.brush === kind);
@@ -454,11 +523,12 @@ export class Hud {
   }
 
   private noticeText(state: SimulationState, view: HudView): string {
+    if (view.planning) return 'Queue roles or reshape terrain now — the clock is stopped.';
     if (view.paused) return 'Paused';
     if (view.brush) {
       if (view.brush === 'bomb') return 'Bomb (M) — click to blast · Esc skills';
       const tool = TERRAIN_TOOLS.find((t) => t.kind === view.brush);
-      const stock = this.lab ? '∞' : String(state.landscape[view.brush]);
+      const stock = this.openToolbox ? '∞' : String(state.landscape[view.brush]);
       return `${tool?.label ?? view.brush} ×${stock} — click/drag to paint · Esc skills`;
     }
     if (view.hoveredJob) return `${view.hoveredJob} — click to assign ${state.selectedSkill}`;

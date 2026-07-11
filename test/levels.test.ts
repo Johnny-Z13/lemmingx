@@ -30,11 +30,21 @@ describe('Level roster', () => {
     expect(LEVEL_COUNT).toBe(10);
   });
 
+  it('gives every campaign level the open toolbox and a player-facing briefing', () => {
+    for (let index = 0; index < LEVEL_COUNT; index += 1) {
+      const level = createLevelAt(index);
+      expect(level.openToolbox).toBe(true);
+      expect(level.objective?.length).toBeGreaterThan(20);
+      expect(level.hint?.length).toBeGreaterThan(20);
+    }
+  });
+
   it('level 1 (First Steps) — bash through the wall', () => {
+    let bashed = false;
     const sim = run(0, (s) => {
       for (const l of s.state.lemmings) {
-        if (l.state === 'walker' && l.direction === 1 && l.x > 544 && l.x < 556) {
-          s.assignSkill(l.id, 'basher');
+        if (!bashed && l.state === 'walker' && l.direction === 1 && l.x > 544 && l.x < 556) {
+          bashed = s.assignSkill(l.id, 'basher');
         }
       }
     });
