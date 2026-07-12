@@ -102,6 +102,10 @@ export class Sfx {
         this.noise(0.08, 0.45, 900, true);
         this.blip(420, 0.09, 'sine', 0.5, 0, 240);
         break;
+      case 'burn':
+        this.noise(0.18, 0.7, 1800);
+        this.blip(220, 0.16, 'sawtooth', 0.45, 0, 90);
+        break;
       case 'explode':
         this.noise(0.25, 1.0, 500, true);
         this.blip(90, 0.22, 'sawtooth', 0.8);

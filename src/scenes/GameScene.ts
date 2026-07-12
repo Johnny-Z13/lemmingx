@@ -11,11 +11,13 @@ import { Progress } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
 import { layoutLemmingCrowds, type LemmingDisplayPoint } from '../render/crowdLayout';
 import { MATERIAL } from '../sim/Terrain';
+import { EXPLOSION_TUNING } from '../sim/terrainTuning';
 import { Particles } from '../render/Particles';
 import { Sfx } from '../audio/Sfx';
 import { Music } from '../audio/Music';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/settings';
 import { colorToCss, crewColor, crewLabel } from '../render/lemmingIdentity';
+import { worldEntityLabels } from '../render/entityLabels';
 import { loadUiSettings, saveUiSettings } from '../ui/settings';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
@@ -47,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private audioSettings = loadAudioSettings();
   private uiSettings = loadUiSettings();
   private readonly lemmingLabels = new Map<number, Phaser.GameObjects.Text>();
+  private readonly entityLabels = new Map<string, Phaser.GameObjects.Text>();
   private readonly progress = new Progress(localStorage);
   private levelSelect!: LevelSelect;
   private selectOpen = false;
@@ -165,7 +168,7 @@ export class GameScene extends Phaser.Scene {
 
   private applyBomb(worldX: number, worldY: number): void {
     if (!this.sim || this.sim.state.outcome !== 'running' || !this.hasOpenToolbox()) return;
-    this.sim.labBomb(worldX, worldY, 28);
+    this.sim.labBomb(worldX, worldY);
     this.sfx.play('explode');
     this.particles.burst(worldX, worldY, 20, { color: [0xff7a3a, 0xffd96b, 0xd4a84a], speed: 0.2, lifeMs: 700, size: 2.5 });
     this.addShake(6);
@@ -174,7 +177,10 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.selectOpen || !this.sim) return; // frozen behind the level select
     const clamped = Math.min(delta, 33);
-    if (!this.paused) {
+    if (this.planning) {
+      // Planning freezes the run, not the living world the player is shaping.
+      this.sim.stepLivingTerrain();
+    } else if (!this.paused) {
       // Fast-forward runs extra sim sub-steps; rendering stays once per frame.
       for (let i = 0; i < this.speed; i += 1) {
         this.sim.step(clamped);
@@ -262,6 +268,10 @@ export class GameScene extends Phaser.Scene {
           break;
         case 'splash':
           this.particles.burst(e.x, e.y - 2, 9, { color: [0x8ad4ff, 0x3a9fd8, 0xffffff], speed: 0.12, spread: Math.PI * 0.9, angle: -Math.PI / 2, lifeMs: 420, size: 2 });
+          break;
+        case 'burn':
+          this.particles.burst(e.x, e.y, 18, { color: [0xff3d21, 0xff7a2d, 0xffd96b, 0x5e6575], speed: 0.16, lifeMs: 820, size: 2.8, upward: true });
+          this.addShake(4);
           break;
         case 'clank':
           this.particles.burst(e.x, e.y, 8, { color: [0xffffff, 0xffd96b, 0x9aa6c2], speed: 0.16, lifeMs: 340, size: 1.6 });
@@ -379,6 +389,7 @@ export class GameScene extends Phaser.Scene {
 
     this.children.removeAll(true);
     this.lemmingLabels.clear();
+    this.entityLabels.clear();
     this.lemmingDisplayPoints.clear();
     this.cameras.main.setBounds(0, 0, this.level.width, this.level.height);
     this.cameras.main.setBackgroundColor('#12171f');
@@ -396,7 +407,11 @@ export class GameScene extends Phaser.Scene {
     this.speed = 1;
     this.celebrateFired = false;
     this.ambientAccMs = 0;
-    this.brush = this.isLab() ? 'sand' : null;
+    const terrainOnlyChallenge =
+      !this.hasOpenToolbox() &&
+      !ALL_SKILLS.some((skill) => this.level.skills[skill] > 0) &&
+      (this.level.landscape?.fire ?? 0) > 0;
+    this.brush = this.isLab() ? 'sand' : terrainOnlyChallenge ? 'fire' : null;
     this.painting = false;
 
     this.hud?.destroy();
@@ -604,6 +619,7 @@ export class GameScene extends Phaser.Scene {
     this.drawHazards();
     this.drawEmitters();
     this.drawTraps();
+    this.drawEntityLabels();
     this.drawLemmings();
     this.fxGraphics.clear();
     this.particles.draw(this.fxGraphics);
@@ -617,7 +633,7 @@ export class GameScene extends Phaser.Scene {
     const tool = TERRAIN_TOOLS.find((t) => t.kind === this.brush);
     if (!tool) return;
     const pointer = this.input.activePointer;
-    const radius = this.brush === 'bomb' ? 28 : 16;
+    const radius = this.brush === 'bomb' ? EXPLOSION_TUNING.blastRadius : 16;
     const g = this.fxGraphics;
     g.fillStyle(tool.color, 0.08);
     g.fillCircle(pointer.worldX, pointer.worldY, radius);
@@ -724,6 +740,14 @@ export class GameScene extends Phaser.Scene {
         this.terrainGraphics.fillRect(x, y, width, height);
         this.terrainGraphics.fillStyle(0xc4a06a, 1);
         this.terrainGraphics.fillRect(x, y, width, 1);
+        return;
+      }
+      if (material === MATERIAL.fire) {
+        const flicker = (Math.floor(x / width) + Math.floor(y / height) + Math.floor(this.sim.state.timeMs / 70)) % 3;
+        this.terrainGraphics.fillStyle(flicker === 0 ? 0xffd96b : flicker === 1 ? 0xff7a2d : 0xff3d21, 0.95);
+        this.terrainGraphics.fillRect(x, y, width, height);
+        this.terrainGraphics.fillStyle(0xfff0a8, 0.75);
+        this.terrainGraphics.fillRect(x + 1, y, Math.max(1, width - 2), Math.max(1, height / 2));
         return;
       }
       if (material === MATERIAL.water) {
@@ -870,6 +894,46 @@ export class GameScene extends Phaser.Scene {
         g.fillStyle(color, 0.8);
         g.fillRect(x - 1.5, y - 2 + ((this.sim.state.timeMs / 30) % 10), 3, 4);
       }
+    }
+  }
+
+  private drawEntityLabels(): void {
+    const visible = new Set<string>();
+    if (this.uiSettings.debugLabels) {
+      for (const descriptor of worldEntityLabels(this.level, this.sim.state)) {
+        visible.add(descriptor.key);
+        let label = this.entityLabels.get(descriptor.key);
+        if (!label) {
+          label = this.add.text(descriptor.x, descriptor.y, '', {
+            fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+            fontSize: '9px',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            backgroundColor: '#0d1117dd',
+            stroke: '#05070a',
+            strokeThickness: 1,
+          });
+          label.setOrigin(0.5, 1);
+          label.setPadding(3, 1, 3, 1);
+          label.setDepth(49);
+          this.entityLabels.set(descriptor.key, label);
+        }
+        label.setVisible(true);
+        label.setPosition(descriptor.x, descriptor.y);
+        label.setText(descriptor.text);
+        label.setColor(colorToCss(descriptor.color));
+        this.setpieceGraphics.lineStyle(1, descriptor.color, 0.35);
+        this.setpieceGraphics.lineBetween(
+          descriptor.anchorX,
+          descriptor.anchorY,
+          descriptor.x,
+          descriptor.y + 1,
+        );
+      }
+    }
+
+    for (const [key, label] of this.entityLabels) {
+      if (!visible.has(key)) label.setVisible(false);
     }
   }
 

@@ -2,30 +2,25 @@ import { MATERIAL, Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 2 — "Bridge the Gap".
- * Two plateaus separated by flowing water. Builders lay a two-stage bridge.
- * Teaches builders + living water (wade/tread/swim; burial is the danger). A
- * few landscape water charges let you experiment without breaking the route.
+ * Level 2 — "The Deep End".
+ * A deep, steel-bottomed pool blocks the only route. This is a challenge-loadout
+ * stage: every rescue must be given the Swimmer trait before or during its tread.
  *
- * Intended solution: builder at ~x385 heading right, second builder where the
- * first bridge ends (~x430), crew walks the bridge across.
+ * Intended solution: queue swimmers before release, or click treaders in the pool.
  */
 export function createLevel2(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
 
-  // Left plateau and right plateau with a 90px chasm between.
-  terrain.fillRect(0, 430, 400, 110);
-  terrain.fillRect(490, 430, 470, 110);
-  // Raised landing shelf: the two-stage bridge ends high, and this catches it
-  // so the drop on the far side stays survivable.
-  terrain.fillRect(490, 400, 80, 30);
-  // Deep water catches falls and leaves non-swimmers treading.
-  terrain.fillRect(400, 490, 90, 50, MATERIAL.water);
+  // Banks sit flush with a 90px-deep pool so swimmers can climb out either side.
+  terrain.fillRect(0, 430, 380, 110);
+  terrain.fillRect(560, 430, 400, 110);
+  terrain.fillRect(380, 520, 180, 20, MATERIAL.steel);
+  terrain.fillRect(380, 430, 180, 90, MATERIAL.water);
 
   return {
-    name: 'Bridge the Gap',
-    objective: 'Get at least 6 lemmings safely across the water gap.',
-    hint: 'Queue swimmers, build a bridge, or author a new crossing.',
+    name: 'The Deep End',
+    objective: 'Give at least 6 lemmings the Swimmer trait and cross the deep pool.',
+    hint: 'This is a locked loadout: queue Swimmers before release or rescue treaders mid-pool.',
     width: 960,
     height: 540,
     spawn: { x: 80, y: 406 },
@@ -38,17 +33,17 @@ export function createLevel2(): LevelDefinition {
     targetSaved: 6,
     timeLimitMs: 240000,
     caSeed: 22,
-    landscape: { water: 3 },
+    openToolbox: false,
     skills: {
       climber: 0,
       floater: 0,
       bomber: 0,
-      blocker: 2,
-      builder: 4,
+      blocker: 0,
+      builder: 0,
       basher: 0,
       miner: 0,
       digger: 0,
-      swimmer: 2,
+      swimmer: 10,
     },
     terrain,
   };

@@ -167,6 +167,7 @@ export interface LevelDefinition {
     sand?: number;
     dirt?: number;
     wood?: number;
+    fire?: number;
     erase?: number;
   };
   /** Unlimited crew skills and terrain tools while campaign objectives remain active. */
@@ -187,6 +188,7 @@ export type SimEventKind =
   | 'splat' // fatal fall / off-bottom
   | 'drown' // sealed under water/sand past the grace, or a hazard zone
   | 'splash' // entered deep water (safe — water breaks falls)
+  | 'burn' // touched living fire
   | 'explode'
   | 'dig'
   | 'bash'
@@ -274,5 +276,5 @@ export interface SimulationState {
    */
   hatchQueue: Skill[];
   /** Remaining landscape paint charges for limited-toolbox levels. */
-  landscape: { water: number; sand: number; dirt: number; wood: number; erase: number };
+  landscape: { water: number; sand: number; dirt: number; wood: number; fire: number; erase: number };
 }

@@ -83,23 +83,25 @@ docs/superpowers/       Design specs + plans (Sand hybrid USP locked here)
 | 5 | sand | powder; dig/bomb debris |
 | 6 | water | flows; floats lemmings (tread/swim); death only when sealed under it |
 | 7 | wood | falls in air; floats on water; water beside it on a floor seeps under and lifts it (bridge hook) |
+| 8 | fire | non-solid; rises, burns wood, burns lemmings, and is extinguished by water/sand |
 
 Campaign dig tunnels usually stay clear (`sandEmitRatio: 0` default). Lab and
-some mid/late levels emit sand. Wood + landscape water is the Level 7 signature.
+some mid/late levels emit sand. Fire doors + a protected quencher tank are the
+Level 7 signature.
 
 ## Campaign roster (progressive intros)
 
 | # | Name | Teaches |
 |---|------|---------|
 | 1 | First Steps | Bash (+ optional hatch-queue diggers) |
-| 2 | Bridge the Gap | Builders + living water + terrain authoring |
+| 2 | The Deep End | Locked Swimmer loadout + deep crossing pool |
 | 3 | Hold the Line | Blocker + bomber (sand crater) — or sand-ramp charges |
 | 4 | The Long March | Wide level / camera / multi-bash |
 | 5 | Steel Yourself | Dig under steel + sand debris + a cap-duning emitter |
-| 6 | Trap House | Traps — sand charges can bury one |
-| 7 | Float the Timber | Dig lip → paint water → wood bridge (builders = backup) |
+| 6 | Trap House | Traps + a timed water spout filling the catwalk reservoir |
+| 7 | Trial by Fire | Locked Fire loadout + timber doors + quencher tank |
 | 8 | Down and Out | Miner (tall level) + mountain sand emitter |
-| 9 | The Gauntlet | Floater + climber |
+| 9 | The Gauntlet | Locked Floater/Climber loadout + two fatal drops |
 | 10 | Sandworld Symphony | Full toolkit finale: all charges + dune emitter |
 
 Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
@@ -113,31 +115,44 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
   It uses a separate seed-derived `releaseRng`, so random releases are
   reproducible and cannot perturb sand/water physics. The HUD shows the chosen
   role in `state.hatchQueue` rather than leaving a hidden "random" token.
-- `paintLandscape(x, y, r, kind)` — paints `water|sand|dirt|wood|erase`.
+- `paintLandscape(x, y, r, kind)` — paints `water|sand|dirt|wood|fire|erase`.
   Limited test/custom levels can use `level.landscape` / `state.landscape`;
   shipped levels paint freely through `openToolbox`. UI hotkeys are
-  **Z/X/C/V/B**, plus **M** for bomb.
-- `openToolbox` — shipped campaign levels set this at the roster boundary, so
-  every crew skill, hatch-queued role, terrain brush, and bomb is unlimited
-  while quota/timer outcomes remain active. Unit-test levels stay limited unless
-  they opt in.
+  **Z/X/C/V/G/B**, plus **M** for bomb. Fire may be a finite locked-loadout tool;
+  the point bomb remains open-toolbox-only.
+- `openToolbox` — campaign defaults to unlimited tools at the roster boundary,
+  but an explicit `openToolbox: false` is preserved for challenge-loadout stages.
+  Levels 2, 7, and 9 are locked so their canonical Swimmer, Fire, and
+  Floater/Climber mechanics are genuinely required.
+- `PLAYTEST_UNLOCK_ALL_LEVELS` in `progress.ts` is temporarily `true` so every
+  campaign layout is directly testable. Sequential progression remains covered
+  with `{ unlockAll: false }`; flip the constant off rather than deleting it.
 - Campaign levels start paused in a planning phase. `objective` and `hint` are
   shown while the player queues roles or reshapes terrain; Start/Space opens the
-  hatch and clock. Sand Lab skips planning and labels its status Free Play.
+  hatch and clock. `GameScene` still calls `stepLivingTerrain()` while planning,
+  so painted materials settle without advancing agents, traps, emitters, or time.
+  Sand Lab skips planning and labels its status Free Play.
 - Crew display identity stays render/UI-only: deterministic names, role/state
   labels, ten full uniform palettes, and matching HUD miniatures come from
   `render/lemmingIdentity.ts`. Armed bombers override the displayed role; a
   pending hatch skill displays its intended palette before grounding. The
   persisted Labels/L toggle must not enter sim state.
+- `render/entityLabels.ts` supplies render-only descriptors for the hatch,
+  exit, traps, hazards, and material spouts. `GameScene` owns the Phaser text;
+  keep label wording/status out of `SimulationState`.
 - `layoutLemmingCrowds(lemmings, timeMs)` — fans close stacks to 7.5px centres
   with deterministic per-ID jitter. `GameScene` uses the returned positions for
   sprites, labels, hover, and clicking only; terrain/minimap/sim use real positions.
-- The bottom toolbar is a `.hud__dock`: its collapse/expand button is the fixed
-  anchor and the panel grows upward. Do not reintroduce a permanent floating
-  instruction notice over gameplay.
+- The compact `.hud__dock` uses a top-right window-control cluster: a Lucide
+  hand is the drag handle and the adjacent minimise/maximise toggle is the fixed
+  anchor. Collapse/expand must preserve that button's exact screen coordinates.
+  Keep drag bounds on-screen and avoid permanent gameplay instructions.
 - Fatal falls emit `splat`; `GameScene` routes only that event to
   `Particles.bloodSplat()` (large transient spray + capped persistent stain).
-  Drowning, traps, and explosions retain separate feedback.
+  Drowning, burning, traps, and explosions retain separate feedback.
+- Explosion tuning lives in `sim/terrainTuning.ts`: both crew and landscape
+  bombs carve a 32px steel-safe crater, return 22% as sand debris, and seed live fire.
+  Fire stochastic behavior must use the CA `SeededRng`; never `Math.random`.
 - `level.emitters` — deterministic material spouts (`EmitterDefinition`:
   x/y/material/cellsPerSecond/budget), stepped between agents and the CA
   settle. Live state in `state.emitters`; a blocked spout burns no budget.
@@ -153,11 +168,13 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 ## Testing expectations
 
 - `test/simulation.test.ts` — core lemming / skill behavior
-- `test/ca.test.ts` — sand, water, wood, hatch queue, drowning
+- `test/ca.test.ts` — sand, water, wood, fire, hatch queue, drowning
 - `test/identity.test.ts` — role/palette mapping and queued display identity
 - `test/crowdLayout.test.ts` — render-only spacing, jitter, and ledge separation
 - `test/particles.test.ts` — transient and persistent fatal-fall feedback
 - `test/levels.test.ts` — one scripted win path per campaign level
+- `docs/level-design-review-and-solvability-test-plan.md` — roster diversity,
+  water placement rationale, coverage layers, and failure policy
 - After level or dig/bash/CA changes: run `npm test` before claiming done
 
 ## Design docs

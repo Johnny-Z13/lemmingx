@@ -4,6 +4,7 @@ import { SKILL_DEFS } from './skills/registry';
 import { MATERIAL, type Material } from './Terrain';
 import { SeededRng } from './ca/SeededRng';
 import { ChunkStepper } from './ca/ChunkStepper';
+import { EXPLOSION_TUNING, FIRE_TUNING } from './terrainTuning';
 
 const WALK_SPEED = 26;
 const CLIMB_SPEED = 22;
@@ -23,7 +24,6 @@ const STEP_HEIGHT = 7;
 const BASH_INTERVAL_MS = 70; // time between basher bites
 const BASH_REACH = 7; // how far ahead a basher carves per bite
 const MINE_INTERVAL_MS = 90; // time between miner pick swings
-const BOMBER_BLAST_RADIUS = 22;
 const HATCH_OPEN_MS = 900; // default door-opening time before the first spawn
 const TRAP_CYCLE_MS = 1400; // default kill-animation length before a trap re-arms
 const SHRUG_MS = 720; // classic builder "oh no" pose duration
@@ -82,7 +82,10 @@ export class GameSimulation {
       skills: { ...level.skills },
       timeMs: 0,
       timeRemainingMs: level.timeLimitMs && level.timeLimitMs > 0 ? level.timeLimitMs : null,
-      selectedSkill: 'digger',
+      selectedSkill:
+        level.openToolbox === false
+          ? ALL_SKILLS.find((skill) => level.skills[skill] > 0) ?? 'digger'
+          : 'digger',
       outcome: 'running',
       nuking: false,
       traps: (level.traps ?? []).map((def) => ({ def, phase: 'idle' as const, timerMs: 0 })),
@@ -95,6 +98,7 @@ export class GameSimulation {
         sand: level.landscape?.sand ?? 0,
         dirt: level.landscape?.dirt ?? 0,
         wood: level.landscape?.wood ?? 0,
+        fire: level.landscape?.fire ?? 0,
         erase: level.landscape?.erase ?? 0,
       },
     };
@@ -127,9 +131,7 @@ export class GameSimulation {
     this.stepEmitters(deltaMs);
 
     // Living terrain settles after agents carve / bomb.
-    if (this.ca) {
-      this.ca.step(this.caSubsteps, this.stabilityThreshold);
-    }
+    this.stepLivingTerrain();
 
     this.updateOutcome();
   }
@@ -157,16 +159,77 @@ export class GameSimulation {
     this.ca?.markWorldRect(x - radius, y - radius, radius * 2, radius * 2);
   }
 
-  /** Lab: detonate a sand-debris bomb at a point. */
-  labBomb(x: number, y: number, radius = BOMBER_BLAST_RADIUS): void {
-    this.level.terrain.carveCircle(x, y, radius, 'sand');
-    this.ca?.markWorldRect(x - radius, y - radius, radius * 2, radius * 2);
+  /** Landscape tool: detonate a large sand-debris crater and throw live fire. */
+  labBomb(x: number, y: number, radius = EXPLOSION_TUNING.blastRadius): void {
+    this.detonateTerrain(x, y, radius);
     this.emit('explode', x, y);
+  }
+
+  /** Paint flames only into air/fuel, never erasing inert terrain or water. */
+  private paintFireCircle(x: number, y: number, radius: number): void {
+    const terrain = this.level.terrain;
+    const cs = terrain.cellSize;
+    const minX = Math.floor((x - radius) / cs);
+    const maxX = Math.ceil((x + radius) / cs);
+    const minY = Math.floor((y - radius) / cs);
+    const maxY = Math.ceil((y + radius) / cs);
+    const r2 = radius * radius;
+    const air: Array<{ x: number; y: number; distanceSq: number }> = [];
+    const fuel: Array<{ x: number; y: number; distanceSq: number }> = [];
+    for (let cy = minY; cy <= maxY; cy += 1) {
+      for (let cx = minX; cx <= maxX; cx += 1) {
+        const wx = cx * cs + cs / 2;
+        const wy = cy * cs + cs / 2;
+        const distanceSq = (wx - x) ** 2 + (wy - y) ** 2;
+        if (distanceSq > r2) continue;
+        const material = terrain.getCell(cx, cy);
+        if (material === MATERIAL.empty) air.push({ x: cx, y: cy, distanceSq });
+        else if (material === MATERIAL.wood) fuel.push({ x: cx, y: cy, distanceSq });
+      }
+    }
+    const nearestFirst = (a: { distanceSq: number }, b: { distanceSq: number }) => a.distanceSq - b.distanceSq;
+    air.sort(nearestFirst);
+    fuel.sort(nearestFirst);
+    const seeds = [
+      ...fuel.slice(0, 1), // guarantee a click on timber actually catches
+      ...air.slice(0, Math.max(0, FIRE_TUNING.brushSeeds - Math.min(1, fuel.length))),
+    ];
+    for (const seed of seeds) terrain.setCell(seed.x, seed.y, MATERIAL.fire);
+    this.ca?.markWorldRect(x - radius, y - radius, radius * 2, radius * 2);
+  }
+
+  private detonateTerrain(x: number, y: number, radius: number): void {
+    const terrain = this.level.terrain;
+    const blast = terrain.carveCircle(x, y, radius);
+    const debris = Math.round(blast.carved * EXPLOSION_TUNING.debrisRatio);
+    terrain.emitSandDebris(x, y, debris, () => this.rng.next());
+    const cs = terrain.cellSize;
+    let placed = 0;
+    for (let attempt = 0; attempt < EXPLOSION_TUNING.fireSeeds * 8 && placed < EXPLOSION_TUNING.fireSeeds; attempt += 1) {
+      const angle = this.rng.next() * Math.PI * 2;
+      const distance = Math.sqrt(this.rng.next()) * radius * 1.1;
+      const cellX = Math.floor((x + Math.cos(angle) * distance) / cs);
+      const cellY = Math.floor((y - radius * 0.25 + Math.sin(angle) * distance) / cs);
+      if (terrain.getCell(cellX, cellY) !== MATERIAL.empty) continue;
+      terrain.setCell(cellX, cellY, MATERIAL.fire);
+      placed += 1;
+    }
+    const wakeRadius = radius * 1.2;
+    this.ca?.markWorldRect(x - wakeRadius, y - wakeRadius, wakeRadius * 2, wakeRadius * 2);
   }
 
   /** Expose CA settle for tests. */
   settleTerrain(maxPasses = 400): number {
     return this.ca?.settleUntilQuiet(maxPasses, this.stabilityThreshold) ?? 0;
+  }
+
+  /**
+   * Advance only the seeded living-terrain CA. The scene uses this during the
+   * pre-release planning phase so painted materials fall while the hatch,
+   * timer, traps, emitters, and lemmings remain frozen.
+   */
+  stepLivingTerrain(): number {
+    return this.ca?.step(this.caSubsteps, this.stabilityThreshold) ?? 0;
   }
 
   private sprayDigDebris(x: number, y: number, carved: number): void {
@@ -373,11 +436,15 @@ export class GameSimulation {
     x: number,
     y: number,
     radius: number,
-    kind: 'water' | 'sand' | 'dirt' | 'wood' | 'erase',
+    kind: 'water' | 'sand' | 'dirt' | 'wood' | 'fire' | 'erase',
   ): boolean {
     const stock = this.state.landscape[kind];
     if (stock <= 0 && !this.hasOpenToolbox()) return false;
     if (!this.hasOpenToolbox()) this.state.landscape[kind] -= 1;
+    if (kind === 'fire') {
+      this.paintFireCircle(x, y, radius);
+      return true;
+    }
     const mat =
       kind === 'water' ? MATERIAL.water :
       kind === 'sand' ? MATERIAL.sand :
@@ -394,10 +461,10 @@ export class GameSimulation {
 
   /**
    * Kill a lemming and record the loss (idempotent for already-dead). `cause`
-   * picks the feedback flavour: a splat (fall), a drown (hazard), or none (the
+   * picks the feedback flavour: a splat, drown, burn, or none (the
    * caller already emitted its own event, e.g. an explosion).
    */
-  private kill(lemming: Lemming, cause: 'splat' | 'drown' | 'silent' = 'splat'): void {
+  private kill(lemming: Lemming, cause: 'splat' | 'drown' | 'burn' | 'silent' = 'splat'): void {
     if (lemming.state === 'dead' || lemming.state === 'exited') return;
     lemming.state = 'dead';
     lemming.actionTimerMs = 0; // reset so the splat sprite can fade from now
@@ -440,6 +507,11 @@ export class GameSimulation {
     // Hazard zones (lava etc.) kill any lemming touching them, including blockers.
     if (this.isInHazard(lemming)) {
       this.kill(lemming, 'drown');
+      return;
+    }
+
+    if (this.touchesFire(lemming)) {
+      this.kill(lemming, 'burn');
       return;
     }
 
@@ -529,15 +601,9 @@ export class GameSimulation {
     this.walk(lemming, deltaMs);
   }
 
-  /** Bomber detonation: sand-debris crater (steel survives). */
+  /** Bomber detonation: large sand-debris crater, fire burst; steel survives. */
   private explode(lemming: Lemming): void {
-    this.level.terrain.carveCircle(lemming.x, lemming.y + 4, BOMBER_BLAST_RADIUS, 'sand');
-    this.ca?.markWorldRect(
-      lemming.x - BOMBER_BLAST_RADIUS,
-      lemming.y - BOMBER_BLAST_RADIUS,
-      BOMBER_BLAST_RADIUS * 2,
-      BOMBER_BLAST_RADIUS * 2,
-    );
+    this.detonateTerrain(lemming.x, lemming.y + 4, EXPLOSION_TUNING.blastRadius);
     this.emit('explode', lemming.x, lemming.y);
     lemming.fuseMs = null;
     this.kill(lemming, 'silent');
@@ -775,6 +841,15 @@ export class GameSimulation {
 
   private waterAtChest(lemming: Lemming): boolean {
     return this.level.terrain.isWaterAt(lemming.x, lemming.y + CHEST_Y);
+  }
+
+  private touchesFire(lemming: Lemming): boolean {
+    const terrain = this.level.terrain;
+    return (
+      terrain.isFireAt(lemming.x, lemming.y + HEAD_Y) ||
+      terrain.isFireAt(lemming.x, lemming.y + 3) ||
+      terrain.isFireAt(lemming.x, lemming.y + FOOT_Y - 2)
+    );
   }
 
   /**

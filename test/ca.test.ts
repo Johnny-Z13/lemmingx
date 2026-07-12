@@ -73,6 +73,29 @@ describe('sand CA', () => {
     expect(build()).toEqual(build());
   });
 
+  it.each([
+    ['sand', MATERIAL.sand],
+    ['water', MATERIAL.water],
+  ] as const)('painted %s falls when only living terrain advances', (kind, material) => {
+    const terrain = new Terrain(80, 80, 4);
+    terrain.fillRect(0, 60, 80, 20);
+    const sim = new GameSimulation(makeLevel(terrain, { openToolbox: true }));
+
+    expect(sim.paintLandscape(40, 16, 8, kind)).toBe(true);
+    const rowsBefore = Array.from({ length: terrain.rows }, (_, y) => y)
+      .filter((y) => Array.from({ length: terrain.cols }, (_, x) => terrain.getCell(x, y)).includes(material));
+    const highestBefore = rowsBefore[rowsBefore.length - 1] ?? -1;
+
+    for (let i = 0; i < 20; i += 1) sim.stepLivingTerrain();
+
+    const rowsAfter = Array.from({ length: terrain.rows }, (_, y) => y)
+      .filter((y) => Array.from({ length: terrain.cols }, (_, x) => terrain.getCell(x, y)).includes(material));
+    const highestAfter = rowsAfter[rowsAfter.length - 1] ?? -1;
+    expect(highestAfter).toBeGreaterThan(highestBefore);
+    expect(sim.state.timeMs).toBe(0);
+    expect(sim.state.hatchOpenMs).toBe(0);
+  });
+
   it('water flows sideways on a floor', () => {
     const terrain = new Terrain(80, 40, 4);
     terrain.fillRect(0, 28, 80, 12);
@@ -187,6 +210,40 @@ describe('sand CA', () => {
     }
     expect(woodY).toBeGreaterThanOrEqual(0);
     expect(woodY).toBeLessThan(14);
+  });
+});
+
+describe('fire CA', () => {
+  it('spreads through supported wood using the seeded terrain stream', () => {
+    const terrain = new Terrain(80, 80, 4);
+    terrain.fillRect(0, 56, 80, 24, MATERIAL.steel);
+    terrain.fillRect(24, 32, 24, 24, MATERIAL.wood);
+    terrain.setCell(8, 8, MATERIAL.fire); // the fire brush converts one surface fuel cell
+    const initialWood = 35;
+    const ca = new ChunkStepper(terrain, new SeededRng(17));
+
+    for (let i = 0; i < 360; i += 1) ca.step(1);
+
+    let wood = 0;
+    for (let y = 0; y < terrain.rows; y += 1) {
+      for (let x = 0; x < terrain.cols; x += 1) {
+        if (terrain.getCell(x, y) === MATERIAL.wood) wood += 1;
+      }
+    }
+    expect(wood).toBeLessThan(initialWood);
+  });
+
+  it('water immediately extinguishes adjacent fire', () => {
+    const terrain = new Terrain(48, 48, 4);
+    terrain.fillRect(0, 24, 48, 24, MATERIAL.steel);
+    terrain.setCell(5, 5, MATERIAL.fire);
+    terrain.setCell(4, 5, MATERIAL.water);
+    const ca = new ChunkStepper(terrain, new SeededRng(4));
+
+    ca.step(1);
+
+    expect(terrain.getCell(5, 5)).not.toBe(MATERIAL.fire);
+    expect([terrain.getCell(4, 5), terrain.getCell(5, 5)]).toContain(MATERIAL.water);
   });
 });
 

@@ -9,15 +9,28 @@ export interface LevelResult {
   bestSavedPct: number;
 }
 
+export interface ProgressOptions {
+  key?: string;
+  /** Temporary playtest override; disable in tests that exercise the real chain. */
+  unlockAll?: boolean;
+}
+
+/** Flip this off when campaign progression is ready to be player-facing again. */
+export const PLAYTEST_UNLOCK_ALL_LEVELS = true;
+
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
 export class Progress {
   private results: Record<number, LevelResult>;
+  private readonly key: string;
+  private readonly unlockAll: boolean;
 
   constructor(
     private readonly storage: StorageLike,
-    private readonly key = 'lemmingx.progress.v1',
+    options: ProgressOptions = {},
   ) {
+    this.key = options.key ?? 'lemmingx.progress.v1';
+    this.unlockAll = options.unlockAll ?? PLAYTEST_UNLOCK_ALL_LEVELS;
     this.results = this.load();
   }
 
@@ -36,6 +49,7 @@ export class Progress {
   }
 
   isUnlocked(index: number): boolean {
+    if (this.unlockAll) return true;
     if (index <= 0) return true;
     return this.get(index - 1).completed;
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MATERIAL, Terrain } from '../src/sim/Terrain';
 import { GameSimulation } from '../src/sim/GameSimulation';
 import type { EmitterDefinition, LevelDefinition } from '../src/sim/types';
+import { createLevelAt } from '../src/levels';
 
 function makeLevel(terrain: Terrain, overrides: Partial<LevelDefinition> = {}): LevelDefinition {
   return {
@@ -79,6 +80,21 @@ describe('material emitters', () => {
     for (let s = 0; s < 200; s += 1) sim.step(16);
     expect(sim.state.emitters[0].budgetLeft).toBe(0);
     expect(countMaterial(terrain, MATERIAL.water)).toBe(5);
+  });
+
+  it('level 6 gradually raises its protected reservoir from the water spout', () => {
+    const sim = new GameSimulation(createLevelAt(5));
+    const before = countMaterial(sim.level.terrain, MATERIAL.water);
+    const emitter = sim.state.emitters[0];
+    expect(sim.level.terrain.materialAt(emitter.def.x, emitter.def.y)).toBe(MATERIAL.empty);
+
+    for (let s = 0; s < 500; s += 1) sim.step(16); // 8 seconds of the 20-second fill
+
+    const after = countMaterial(sim.level.terrain, MATERIAL.water);
+    expect(sim.state.emitters[0].def.material).toBe('water');
+    expect(sim.state.emitters[0].budgetLeft).toBeGreaterThan(0);
+    expect(sim.state.emitters[0].budgetLeft).toBeLessThan(90);
+    expect(after).toBeGreaterThan(before);
   });
 
   it('same level and seed produce identical terrain after emission', () => {

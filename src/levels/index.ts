@@ -37,7 +37,8 @@ export const SAND_LAB_INDEX = LEVEL_COUNT;
 export function createLevelAt(index: number): LevelDefinition {
   if (index === SAND_LAB_INDEX) return { ...createLabLevel(), openToolbox: true };
   const clamped = Math.max(0, Math.min(LEVELS.length - 1, index));
-  return { ...LEVELS[clamped](), openToolbox: true };
+  const level = LEVELS[clamped]();
+  return { ...level, openToolbox: level.openToolbox ?? true };
 }
 
 export { createLabLevel };

@@ -4,9 +4,10 @@ import { SKILL_DEFS } from '../sim/skills/registry';
 import { MATERIAL, type Terrain } from '../sim/Terrain';
 import type { AudioSettings } from '../audio/settings';
 import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIdentity';
+import { createElement as createLucideIcon, Hand, Maximize2, Minus, type IconNode } from 'lucide';
 
 /** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
-export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'erase' | 'bomb';
+export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'fire' | 'erase' | 'bomb';
 
 export const TERRAIN_TOOLS: readonly {
   kind: TerrainBrush;
@@ -19,6 +20,7 @@ export const TERRAIN_TOOLS: readonly {
   { kind: 'sand', label: 'Sand', hotkey: 'x', color: 0xd4a84a },
   { kind: 'dirt', label: 'Dirt', hotkey: 'c', color: 0x4d9674 },
   { kind: 'wood', label: 'Wood', hotkey: 'v', color: 0xa67c52 },
+  { kind: 'fire', label: 'Fire', hotkey: 'g', color: 0xff6a2a },
   { kind: 'erase', label: 'Erase', hotkey: 'b', color: 0x59617a },
   { kind: 'bomb', label: 'Bomb', hotkey: 'm', color: 0xff7a3a, openOnly: true },
 ] as const;
@@ -111,8 +113,17 @@ export class Hud {
   private readonly missionObjective: HTMLElement;
   private readonly missionHint: HTMLParagraphElement;
   private readonly dock: HTMLDivElement;
+  private readonly dragHandle: HTMLButtonElement;
   private readonly collapseButton: HTMLButtonElement;
   private collapsed = false;
+  private dockAnchor: { x: number; y: number } | null = null;
+  private expandedDockSize: { width: number; height: number } | null = null;
+  private dockDrag: {
+    startX: number;
+    startY: number;
+    anchorX: number;
+    anchorY: number;
+  } | null = null;
   private readonly skillButtons = new Map<Skill, HTMLButtonElement>();
   private readonly releaseValue: HTMLSpanElement;
   private readonly nukeButton: HTMLButtonElement;
@@ -133,6 +144,11 @@ export class Hud {
   private minimapTerrainAt = 0;
   private readonly events: HudEvents;
   private readonly audio: AudioSettings;
+  private readonly handleDockMouseMove = (e: MouseEvent) => this.moveDock(e);
+  private readonly handleDockMouseUp = () => this.endDockDrag();
+  private readonly handleViewportResize = () => {
+    if (this.dockAnchor) this.setDockAnchor(this.dockAnchor.x, this.dockAnchor.y);
+  };
 
   constructor(
     events: HudEvents,
@@ -174,8 +190,23 @@ export class Hud {
     const bar = document.createElement('div');
     bar.className = 'hud__bar';
 
+    const windowControls = document.createElement('div');
+    windowControls.className = 'hud__window-controls';
+
+    this.dragHandle = this.makeIconButton(Hand, 'Drag control panel', () => {});
+    this.dragHandle.className = 'hud__btn hud__drag-handle';
+    this.dragHandle.addEventListener('mousedown', (e) => this.beginDockDrag(e));
+    window.addEventListener('mousemove', this.handleDockMouseMove);
+    window.addEventListener('mouseup', this.handleDockMouseUp);
+    this.dragHandle.addEventListener('keydown', (e) => this.moveDockWithKeyboard(e));
+
+    this.collapseButton = this.makeIconButton(Minus, 'Hide controls (H)', () => this.toggleCollapsed());
+    this.collapseButton.className = 'hud__btn hud__collapse';
+    this.collapseButton.setAttribute('aria-expanded', 'true');
+    windowControls.append(this.dragHandle, this.collapseButton);
+
     const tools = document.createElement('div');
-    tools.className = 'hud__tools';
+    tools.className = 'hud__tools hud__tools--crew';
     tools.innerHTML = '<span class="hud__bar-label">Crew</span>';
     for (const item of SKILLS) {
       const button = document.createElement('button');
@@ -278,11 +309,11 @@ export class Hud {
       this.debugLabelsButton,
       this.makeAudioCluster(),
     );
-    this.collapseButton = this.makeButton('▾', 'Hide controls (H)', () => this.toggleCollapsed());
-    this.collapseButton.className = 'hud__btn hud__collapse';
-    this.collapseButton.setAttribute('aria-expanded', 'true');
-    bar.append(tools, this.terrainBar, controls);
-    dock.append(bar, this.collapseButton);
+    const panelContent = document.createElement('div');
+    panelContent.className = 'hud__panel-content';
+    panelContent.append(tools, this.terrainBar, controls);
+    bar.append(panelContent, windowControls);
+    dock.append(bar);
     this.dock = dock;
     this.root.append(dock);
 
@@ -311,6 +342,7 @@ export class Hud {
     this.root.append(this.overlay);
 
     document.body.append(this.root);
+    window.addEventListener('resize', this.handleViewportResize);
   }
 
   /** Music + SFX mute toggles with volume sliders. */
@@ -348,13 +380,97 @@ export class Hud {
 
   /** Collapse the bottom bar to a slim pill so it stops occluding gameplay. */
   toggleCollapsed(): void {
+    const anchor = this.currentDockAnchor();
+    if (!this.collapsed) {
+      const rect = this.dock.getBoundingClientRect();
+      this.expandedDockSize = { width: rect.width, height: rect.height };
+    }
     this.collapsed = !this.collapsed;
     this.dock.classList.toggle('is-collapsed', this.collapsed);
-    this.collapseButton.textContent = this.collapsed ? '▴' : '▾';
+    this.setButtonIcon(this.collapseButton, this.collapsed ? Maximize2 : Minus);
     const label = this.collapsed ? 'Show controls (H)' : 'Hide controls (H)';
     this.collapseButton.title = label;
     this.collapseButton.setAttribute('aria-label', label);
     this.collapseButton.setAttribute('aria-expanded', String(!this.collapsed));
+    this.setDockAnchor(anchor.x, anchor.y);
+  }
+
+  private beginDockDrag(e: MouseEvent): void {
+    if (e.button !== 0) return;
+    const anchor = this.currentDockAnchor();
+    this.dockDrag = {
+      startX: e.clientX,
+      startY: e.clientY,
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+    };
+    this.dragHandle.classList.add('is-dragging');
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  private moveDock(e: MouseEvent): void {
+    const drag = this.dockDrag;
+    if (!drag) return;
+    this.setDockAnchor(
+      drag.anchorX + e.clientX - drag.startX,
+      drag.anchorY + e.clientY - drag.startY,
+    );
+    e.preventDefault();
+  }
+
+  private endDockDrag(): void {
+    if (!this.dockDrag) return;
+    this.dockDrag = null;
+    this.dragHandle.classList.remove('is-dragging');
+  }
+
+  private moveDockWithKeyboard(e: KeyboardEvent): void {
+    const directions: Partial<Record<string, { x: number; y: number }>> = {
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 },
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+    };
+    const direction = directions[e.key];
+    if (!direction) return;
+    const anchor = this.currentDockAnchor();
+    const step = e.shiftKey ? 32 : 12;
+    this.setDockAnchor(anchor.x + direction.x * step, anchor.y + direction.y * step);
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  private currentDockAnchor(): { x: number; y: number } {
+    const rect = this.collapseButton.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+
+  private setDockAnchor(x: number, y: number): void {
+    const dockRect = this.dock.getBoundingClientRect();
+    const toggleRect = this.collapseButton.getBoundingClientRect();
+    const margin = 8;
+    const toggleOffsetX = toggleRect.left - dockRect.left + toggleRect.width / 2;
+    const toggleOffsetY = toggleRect.top - dockRect.top + toggleRect.height / 2;
+    const effectiveWidth = this.collapsed ? this.expandedDockSize?.width ?? dockRect.width : dockRect.width;
+    const effectiveHeight = this.collapsed ? this.expandedDockSize?.height ?? dockRect.height : dockRect.height;
+    const minX = toggleOffsetX + margin;
+    const maxX = window.innerWidth - (effectiveWidth - toggleOffsetX) - margin;
+    const clampedX = minX <= maxX
+      ? Math.min(maxX, Math.max(minX, x))
+      : Math.min(window.innerWidth - margin, Math.max(margin, x));
+    const minY = toggleOffsetY + margin;
+    const maxY = window.innerHeight - (effectiveHeight - toggleOffsetY) - margin;
+    const clampedY = minY <= maxY
+      ? Math.min(maxY, Math.max(minY, y))
+      : Math.min(window.innerHeight - margin, Math.max(margin, y));
+
+    this.dockAnchor = { x: clampedX, y: clampedY };
+    this.dock.style.left = `${clampedX - toggleOffsetX}px`;
+    this.dock.style.top = `${clampedY - toggleOffsetY}px`;
+    this.dock.style.right = 'auto';
+    this.dock.style.bottom = 'auto';
+    this.dock.style.transform = 'none';
   }
 
   setDebugLabels(enabled: boolean): void {
@@ -396,6 +512,7 @@ export class Hud {
             material === MATERIAL.steel ? '#8a93a6' :
             material === MATERIAL.sand ? '#d4a84a' :
             material === MATERIAL.water ? '#3a9fd8' :
+            material === MATERIAL.fire ? '#ff6a2a' :
             material === MATERIAL.dirt ? '#4d9674' : '#d9b84d';
           tctx.fillRect(x * scale, y * scale, Math.max(1, w * scale), Math.max(1, h * scale));
         });
@@ -431,6 +548,21 @@ export class Hud {
     b.textContent = text;
     b.addEventListener('click', onClick);
     return b;
+  }
+
+  private makeIconButton(icon: IconNode, title: string, onClick: () => void): HTMLButtonElement {
+    const button = this.makeButton('', title, onClick);
+    this.setButtonIcon(button, icon);
+    return button;
+  }
+
+  private setButtonIcon(button: HTMLButtonElement, icon: IconNode): void {
+    const svg = createLucideIcon(icon);
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('aria-hidden', 'true');
+    button.replaceChildren(svg);
   }
 
   update(state: SimulationState, view: HudView): void {
@@ -549,6 +681,9 @@ export class Hud {
   }
 
   destroy(): void {
+    window.removeEventListener('mousemove', this.handleDockMouseMove);
+    window.removeEventListener('mouseup', this.handleDockMouseUp);
+    window.removeEventListener('resize', this.handleViewportResize);
     this.root.remove();
   }
 }

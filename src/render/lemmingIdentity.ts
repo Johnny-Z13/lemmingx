@@ -65,7 +65,7 @@ const STATE_LABELS: Record<LemmingState, string> = {
   swimming: 'Swimming',
   shrug: 'Shrugging',
   exited: 'Saved',
-  dead: 'Down',
+  dead: 'Dead',
 };
 
 const ACTIVE_ROLES: Partial<Record<LemmingState, CrewRole>> = {

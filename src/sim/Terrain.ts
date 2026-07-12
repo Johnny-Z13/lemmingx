@@ -1,5 +1,5 @@
 /**
- * Cell materials. Solids support walking; water is a flowing hazard (not solid).
+ * Cell materials. Solids support walking; water and fire are non-solid.
  * Carvability is separate (steel never; one-ways direction-aware; dirt/sand yes).
  */
 export const MATERIAL = {
@@ -12,6 +12,8 @@ export const MATERIAL = {
   water: 6,
   /** Buoyant solid — falls through air, rests on water (bridge material). */
   wood: 7,
+  /** Hot gas — non-solid, rises, burns wood, and is extinguished by water. */
+  fire: 8,
 } as const;
 
 export type Material = (typeof MATERIAL)[keyof typeof MATERIAL];
@@ -41,7 +43,7 @@ export function isLiquid(material: number): boolean {
 }
 
 export function isWalkSolid(material: number): boolean {
-  return material !== MATERIAL.empty && !isLiquid(material);
+  return material !== MATERIAL.empty && material !== MATERIAL.fire && !isLiquid(material);
 }
 
 export class Terrain {
@@ -144,7 +146,7 @@ export class Terrain {
     return result;
   }
 
-  /** Material-aware blast. Bomber uses leaveAs 'sand' for debris. */
+  /** Material-aware circular carve; callers may optionally leave sand in-place. */
   carveCircle(x: number, y: number, radius: number, leaveAs: CarveLeaveAs = 'empty'): CarveResult {
     const result: CarveResult = { carved: 0, blocked: false };
     this.visitCircle(x, y, radius, (cellX, cellY) => {
@@ -182,7 +184,7 @@ export class Terrain {
   ): void {
     const index = this.index(cellX, cellY);
     const material = this.cells[index];
-    if (material === MATERIAL.empty || material === MATERIAL.water) return;
+    if (material === MATERIAL.empty || material === MATERIAL.water || material === MATERIAL.fire) return;
     if (isCarvable(material, direction)) {
       this.cells[index] = leaveAs === 'sand' ? MATERIAL.sand : MATERIAL.empty;
       result.carved += 1;
@@ -236,6 +238,10 @@ export class Terrain {
 
   isWaterAt(x: number, y: number): boolean {
     return this.materialAt(x, y) === MATERIAL.water;
+  }
+
+  isFireAt(x: number, y: number): boolean {
+    return this.materialAt(x, y) === MATERIAL.fire;
   }
 
   isCellSolid(cellX: number, cellY: number): boolean {

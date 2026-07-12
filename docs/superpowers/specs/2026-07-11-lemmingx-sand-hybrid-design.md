@@ -45,13 +45,13 @@
 
 ### Sand Lab
 - Always-unlocked entry from level select (or pause menu).
-- Tools: paint sand / water / dirt / erase, dig brush, bomb, optional hatch release.
+- Tools: paint sand / water / dirt / wood / fire / erase, bomb, optional hatch release.
 - No quota/timer by default; optional “challenge card” later.
 - Uses a large seeded (or re-rollable) arena; CA always on.
 
 ---
 
-## Materials (v1)
+## Materials (v1 + shipped v1.x)
 
 | ID | Name | Motion | Carvable | Notes |
 |----|------|--------|----------|-------|
@@ -63,6 +63,7 @@
 | 5 | sand | powder: down, then diagonal | yes | dig/bomb debris |
 | 6 | water | liquid: down, then sideways | n/a (flows) | moving hazard; drown on overlap |
 | 7 | wood | falls in air; floats on water | yes | paint-water lift; walkable bridge |
+| 8 | fire | rises through air; spreads through wood | n/a | seeded, non-solid; water/sand extinguish |
 
 **Post-v1 (registry-ready):** oil, lava, steam, gunpowder — follow FallingSand Element hierarchy.
 
@@ -97,7 +98,7 @@ Carve/fill/bomb mark chunks dirty. CA never uses `Math.random` — only `SeededR
 | Action | Effect |
 |--------|--------|
 | Digger / basher / miner | Carve carvable cells; **emit sand** into cleared volume (tunable density) |
-| Bomber / nuke | Crater (steel survives); **sand spray** in blast ring; screen shake already exists |
+| Bomber / nuke | 32px crater (steel survives); **sand + live fire** in blast ring; screen shake |
 | Builder | Still places dirt (or dedicated “brick” later); can dam water |
 | Blocker / climber / floater | Unchanged vs agents |
 
@@ -161,6 +162,7 @@ Online (future, non-goal for v1): shared seed + identical input stream, or serve
 - Level select Lab entry polish  
 
 ### Phase 6+ (backlog)
+- Fire material + wood combustion (shipped v1.x)
 - Element registry (FallingSand-style)  
 - Oil / lava / steam  
 - Rigid chunk detach (Marching Squares)  

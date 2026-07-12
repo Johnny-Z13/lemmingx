@@ -1,11 +1,12 @@
-import { Terrain } from '../sim/Terrain';
+import { MATERIAL, Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
  * Level 4 — "The Long March".
  * The first level wider than the screen: a 2880px trek with three walls to
- * bash through. Mechanically gentle on purpose — the real lesson is the
- * camera (edge scroll / arrows / drag) and the minimap.
+ * bash through. A broad, ankle-deep marsh breaks up the long flat march
+ * without interrupting jobs. Mechanically gentle on purpose — the real lesson
+ * is the camera (edge scroll / arrows / drag) and the minimap.
  *
  * Intended solution: bash each wall (x≈800, 1600, 2400) as the lead walker
  * reaches it.
@@ -17,6 +18,12 @@ export function createLevel4(): LevelDefinition {
   terrain.fillRect(800, 340, 40, 90);
   terrain.fillRect(1600, 340, 40, 90);
   terrain.fillRect(2400, 340, 40, 90);
+
+  // A contained ankle-deep marsh: walkers wade through it, while the low
+  // banks keep the water from thinning across the full 2880px floor.
+  terrain.fillRect(1040, 424, 6, 6);
+  terrain.fillRect(1370, 424, 6, 6);
+  terrain.fillRect(1046, 424, 324, 6, MATERIAL.water);
 
   return {
     name: 'The Long March',

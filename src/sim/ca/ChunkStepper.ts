@@ -1,12 +1,13 @@
 import { MATERIAL, type Terrain } from '../Terrain';
+import { FIRE_TUNING } from '../terrainTuning';
 import type { SeededRng } from './SeededRng';
 
 const CHUNK = 16;
 
 /**
  * Cellular-automata stepper for living terrain (sand powder, water liquid,
- * optional dirt stability). Updates bottom-up with seeded X shuffle; marks
- * terrain dirty when any cell moves.
+ * buoyant wood, rising fire, optional dirt stability). All stochastic choices
+ * use the seeded RNG.
  */
 export class ChunkStepper {
   private readonly cols: number;
@@ -30,12 +31,14 @@ export class ChunkStepper {
     this.scanMobile();
   }
 
-  /** Wake chunks that already contain sand/water (level start). */
+  /** Wake chunks that already contain living materials (level start). */
   scanMobile(): void {
     for (let y = 0; y < this.rows; y += 1) {
       for (let x = 0; x < this.cols; x += 1) {
         const m = this.terrain.getCell(x, y);
-        if (m === MATERIAL.sand || m === MATERIAL.water || m === MATERIAL.wood) this.markCell(x, y);
+        if (m === MATERIAL.sand || m === MATERIAL.water || m === MATERIAL.wood || m === MATERIAL.fire) {
+          this.markCell(x, y);
+        }
       }
     }
   }
@@ -76,7 +79,7 @@ export class ChunkStepper {
     }
   }
 
-  /** Run `substeps` CA passes. Returns how many cell swaps occurred. */
+  /** Run `substeps` CA passes. Returns living-cell changes/activity. */
   step(substeps: number, stabilityThreshold = 0): number {
     if (!this.hasActive()) return 0;
     let moved = 0;
@@ -151,6 +154,24 @@ export class ChunkStepper {
       }
     }
 
+    // Fire runs top → bottom after falling materials. Snapshot first so flames
+    // created during this pass cannot chain across an entire timber pile at once.
+    const fires: Array<readonly [number, number]> = [];
+    for (let cellY = 0; cellY < this.rows; cellY += 1) {
+      const chunkY = Math.floor(cellY / CHUNK);
+      for (const cellX of this.xOrder) {
+        const chunkX = Math.floor(cellX / CHUNK);
+        if (!this.active[chunkY * this.chunkCols + chunkX]) continue;
+        if (this.terrain.getCell(cellX, cellY) === MATERIAL.fire) fires.push([cellX, cellY]);
+      }
+    }
+    for (const [cellX, cellY] of fires) {
+      if (this.terrain.getCell(cellX, cellY) !== MATERIAL.fire) continue;
+      this.stepFire(cellX, cellY);
+      moved += 1; // keeps stationary flames active until they burn out
+      this.wake(nextActive, cellX, cellY);
+    }
+
     this.active.set(nextActive);
     if (moved > 0) this.terrain.touchDirty();
     return moved;
@@ -173,6 +194,12 @@ export class ChunkStepper {
       this.terrain.swapCells(x, y, x, y + 1);
       return true;
     }
+    // Falling sand smothers fire rather than balancing on hot gas.
+    if (this.terrain.getCell(x, y + 1) === MATERIAL.fire) {
+      this.terrain.setCell(x, y, MATERIAL.empty);
+      this.terrain.setCell(x, y + 1, MATERIAL.sand);
+      return true;
+    }
     // Displace water below (sand sinks)
     if (this.terrain.getCell(x, y + 1) === MATERIAL.water) {
       this.terrain.swapCells(x, y, x, y + 1);
@@ -187,6 +214,11 @@ export class ChunkStepper {
   private trySandDiag(x: number, y: number, dir: -1 | 1): boolean {
     const nx = x + dir;
     const below = this.terrain.getCell(nx, y + 1);
+    if (below === MATERIAL.fire) {
+      this.terrain.setCell(x, y, MATERIAL.empty);
+      this.terrain.setCell(nx, y + 1, MATERIAL.sand);
+      return true;
+    }
     if (below === MATERIAL.empty || below === MATERIAL.water) {
       this.terrain.swapCells(x, y, nx, y + 1);
       return true;
@@ -249,29 +281,85 @@ export class ChunkStepper {
   }
 
   private stepWater(x: number, y: number): boolean {
-    if (this.terrain.getCell(x, y + 1) === MATERIAL.empty) {
+    const below = this.terrain.getCell(x, y + 1);
+    if (below === MATERIAL.empty) {
       this.terrain.swapCells(x, y, x, y + 1);
+      return true;
+    }
+    if (below === MATERIAL.fire) {
+      this.terrain.setCell(x, y, MATERIAL.empty);
+      this.terrain.setCell(x, y + 1, MATERIAL.water);
       return true;
     }
     const dir = this.rng.sign();
     const dispersion = 3;
     for (let i = 1; i <= dispersion; i += 1) {
       const nx = x + dir * i;
-      if (this.terrain.getCell(nx, y) === MATERIAL.empty) {
+      const material = this.terrain.getCell(nx, y);
+      if (material === MATERIAL.empty) {
         this.terrain.swapCells(x, y, nx, y);
         return true;
       }
-      if (this.terrain.getCell(nx, y) !== MATERIAL.empty && this.terrain.getCell(nx, y) !== MATERIAL.water) break;
+      if (material === MATERIAL.fire) {
+        this.terrain.setCell(x, y, MATERIAL.empty);
+        this.terrain.setCell(nx, y, MATERIAL.water);
+        return true;
+      }
+      if (material !== MATERIAL.water) break;
     }
     for (let i = 1; i <= dispersion; i += 1) {
       const nx = x - dir * i;
-      if (this.terrain.getCell(nx, y) === MATERIAL.empty) {
+      const material = this.terrain.getCell(nx, y);
+      if (material === MATERIAL.empty) {
         this.terrain.swapCells(x, y, nx, y);
         return true;
       }
-      if (this.terrain.getCell(nx, y) !== MATERIAL.empty && this.terrain.getCell(nx, y) !== MATERIAL.water) break;
+      if (material === MATERIAL.fire) {
+        this.terrain.setCell(x, y, MATERIAL.empty);
+        this.terrain.setCell(nx, y, MATERIAL.water);
+        return true;
+      }
+      if (material !== MATERIAL.water) break;
     }
     return false;
+  }
+
+  /** Fire consumes wood, rises through air, and vanishes instantly beside water. */
+  private stepFire(x: number, y: number): void {
+    const neighbors = [
+      [x, y - 1],
+      [x - 1, y],
+      [x + 1, y],
+      [x, y + 1],
+    ] as const;
+    if (neighbors.some(([nx, ny]) => this.terrain.getCell(nx, ny) === MATERIAL.water)) {
+      this.terrain.setCell(x, y, MATERIAL.empty);
+      return;
+    }
+
+    const fuel = neighbors.filter(([nx, ny]) => this.terrain.getCell(nx, ny) === MATERIAL.wood);
+    if (fuel.length > 0) {
+      if (this.rng.next() < FIRE_TUNING.spreadChance) {
+        const [fx, fy] = fuel[Math.floor(this.rng.next() * fuel.length)];
+        this.terrain.setCell(fx, fy, MATERIAL.fire);
+      }
+      return; // cling to nearby fuel instead of floating away
+    }
+
+    if (this.rng.next() < FIRE_TUNING.burnoutChance || y <= 0) {
+      this.terrain.setCell(x, y, MATERIAL.empty);
+      return;
+    }
+    if (this.terrain.getCell(x, y - 1) === MATERIAL.empty && this.rng.next() < FIRE_TUNING.riseChance) {
+      this.terrain.swapCells(x, y, x, y - 1);
+      return;
+    }
+    if (this.rng.next() < FIRE_TUNING.driftChance) {
+      const dir = this.rng.sign();
+      if (this.terrain.getCell(x + dir, y) === MATERIAL.empty) {
+        this.terrain.swapCells(x, y, x + dir, y);
+      }
+    }
   }
 
   /** Undercut dirt with too few solid (non-water) neighbors becomes sand. */

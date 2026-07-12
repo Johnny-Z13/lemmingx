@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../src/sim/GameSimulation';
 import { MATERIAL, Terrain } from '../src/sim/Terrain';
 import type { LevelDefinition } from '../src/sim/types';
+import { EXPLOSION_TUNING } from '../src/sim/terrainTuning';
 
 function makeFlatLevel(overrides: Partial<LevelDefinition> = {}): LevelDefinition {
   const terrain = new Terrain(240, 120, 4);
@@ -540,6 +541,36 @@ describe('GameSimulation', () => {
       }
     }
     expect(sand).toBeGreaterThan(0);
+  });
+
+  it('landscape bombs carve the larger blast radius and throw live fire', () => {
+    const terrain = new Terrain(160, 120, 4);
+    terrain.fillRect(0, 40, 160, 80);
+    const sim = new GameSimulation(makeFlatLevel({ width: 160, height: 120, terrain, openToolbox: true }));
+
+    sim.labBomb(80, 60);
+
+    expect(EXPLOSION_TUNING.blastRadius).toBe(32);
+    expect(terrain.materialAt(108, 60)).toBe(MATERIAL.empty); // outside the old crew-bomb radius
+    let fire = 0;
+    terrain.forEachSolidCell((_x, _y, _w, _h, material) => {
+      if (material === MATERIAL.fire) fire += 1;
+    });
+    expect(fire).toBeGreaterThan(0);
+  });
+
+  it('living fire kills a lemming and emits burn feedback', () => {
+    const sim = new GameSimulation(makeFlatLevel({ exit: { x: 300, y: 0, width: 1, height: 1 }, openToolbox: true }));
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    sim.drainEvents();
+
+    expect(sim.paintLandscape(lemming.x, lemming.y, 8, 'fire')).toBe(true);
+    sim.step(16);
+
+    expect(lemming.state).toBe('dead');
+    expect(sim.state.lost).toBe(1);
+    expect(sim.drainEvents().map((event) => event.kind)).toContain('burn');
   });
 
   it('emits drainable events for spawn, assign, dig and exit', () => {

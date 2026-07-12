@@ -2,56 +2,56 @@ import { MATERIAL, Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 7 — "Float the Timber".
- * Sandworld signature puzzle: erase the dirt lip so the wood stack drops into
- * the trench, then paint water — buoyancy lifts the timber into a walkable bridge.
- *
- * Scripted solution (tests): same two-stage builder bridge as Bridge the Gap.
- * Intended player solution: dig → paint water → walk the wood.
+ * Level 7 — "Trial by Fire".
+ * A timber choke seals the only opening through a steel bulkhead. Ignite it
+ * during planning, watch the wood burn away, then release the crew through.
  */
 export function createLevel7(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
 
-  // Plateaus with a 90px chasm (builder-solvable like level 2).
-  terrain.fillRect(0, 430, 400, 110);
-  terrain.fillRect(490, 430, 470, 110);
-  terrain.fillRect(490, 400, 80, 30); // landing shelf for builder backup
-
-  // Steel trench floor so diggers / wood can't void the map.
-  terrain.fillRect(400, 510, 90, 30, MATERIAL.steel);
-
-  // Dirt lip spanning the gap — dig this to drop the wood.
-  terrain.fillRect(410, 430, 70, 20);
-  // Timber stacked on the lip.
-  terrain.fillRect(415, 360, 60, 70, MATERIAL.wood);
+  // Raised route keeps both burn targets visible above the control dock.
+  terrain.fillRect(0, 360, 960, 180);
+  // Steel makes every route immutable except the deliberately combustible door.
+  terrain.fillRect(480, 190, 80, 140, MATERIAL.steel);
+  terrain.fillRect(490, 330, 60, 30, MATERIAL.wood);
+  // A second steel arch makes the second charge mechanical, not decoration.
+  terrain.fillRect(640, 190, 100, 140, MATERIAL.steel);
+  terrain.fillRect(650, 330, 80, 30, MATERIAL.wood);
+  // A protected quencher tank contrasts water against fire without letting it
+  // reach the door. The steel catwalk keeps the exit route deterministic.
+  terrain.eraseRect(760, 360, 90, 180);
+  terrain.fillRect(760, 354, 90, 12, MATERIAL.steel);
+  terrain.fillRect(760, 510, 90, 30, MATERIAL.steel);
+  terrain.fillRect(760, 480, 90, 30, MATERIAL.water);
 
   return {
-    name: 'Float the Timber',
-    objective: 'Get at least 5 lemmings across the living trench.',
-    hint: 'Erase the dirt lip, flood beneath it, and float the wood into a bridge.',
+    name: 'Trial by Fire',
+    objective: 'Burn through both timber obstacles and save at least 8 lemmings.',
+    hint: 'Use one Fire charge on each timber choke. Let both burn clear before Start.',
     width: 960,
     height: 540,
-    spawn: { x: 80, y: 406 },
-    exit: { x: 880, y: 386, width: 40, height: 44 },
+    spawn: { x: 80, y: 336 },
+    exit: { x: 880, y: 316, width: 40, height: 44 },
     spawnIntervalMs: 800,
     totalLemmings: 10,
     releaseRate: 45,
     minReleaseRate: 30,
     maxReleaseRate: 99,
-    targetSaved: 5,
-    timeLimitMs: 300000,
+    targetSaved: 8,
+    timeLimitMs: 240000,
     caSeed: 77,
     caSubsteps: 4,
-    landscape: { water: 10 },
+    openToolbox: false,
+    landscape: { fire: 2 },
     skills: {
       climber: 0,
       floater: 0,
       bomber: 0,
-      blocker: 2,
-      builder: 4,
+      blocker: 0,
+      builder: 0,
       basher: 0,
       miner: 0,
-      digger: 6,
+      digger: 0,
       swimmer: 0,
     },
     terrain,

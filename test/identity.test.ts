@@ -78,4 +78,8 @@ describe('lemming identity', () => {
     expect(crewRole(queuedDigger)).toBe('Digger');
     expect(colorToCss(crewPalette(queuedDigger).body)).toBe('#704bb8');
   });
+
+  it('labels a dead lemming as dead rather than down', () => {
+    expect(crewState(makeLemming({ state: 'dead' }))).toBe('Dead');
+  });
 });
