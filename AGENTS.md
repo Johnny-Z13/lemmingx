@@ -17,6 +17,10 @@ Modes:
 1. **Campaign** — 10 levels, quota + timer, progressive landscape intros.
 2. **Sand Lab** — free-play paint arena (Noita-lite), always unlocked.
 
+The current presentation layer includes full role uniforms + matching HUD
+icons, render-only crowd fan-out/jitter, a fixed-anchor collapsible control
+dock, deterministic Random hatch roles, and event-driven impact FX.
+
 ## Stack
 
 | Piece | Choice |
@@ -37,10 +41,14 @@ Commands: `npm run dev` · `npm test` · `npm run build`
 3. **Sim stays headless** — no DOM/Phaser/audio inside `src/sim/`. Feedback goes
    through `SimEvent`s drained by `GameScene`.
 4. **CA must stay seeded** — no unseeded `Math.random` in terrain physics.
+   UI/gameplay randomness must not advance the CA stream; Random hatch roles
+   use their own `releaseRng`.
 5. **Every campaign level needs a solvability guard** in `test/levels.test.ts`.
    If you change geometry or skills, update the script or the level will CI-fail.
 6. **Prefers composition** — small modules; don't grow god files.
-7. Commit only when the user asks (`type(scope): summary`).
+7. **Crowd spacing is render-only** — never write display fan-out/jitter back to
+   `Lemming.x/y`; hit-testing may follow display positions, sim logic may not.
+8. Commit only when the user asks (`type(scope): summary`).
 
 ## Layout
 
@@ -48,7 +56,7 @@ Commands: `npm run dev` · `npm test` · `npm run build`
 src/
   sim/
     Terrain.ts          Materials + carve/fill bitmap
-    GameSimulation.ts   Lemmings, skills, hatch queue, landscape paint, traps
+    GameSimulation.ts   Lemmings, skills, seeded hatch queue, paint, traps
     types.ts            LevelDefinition, Lemming, Skill, SimEvent, …
     ca/SeededRng.ts     Deterministic PRNG
     ca/ChunkStepper.ts  Sand / water / wood / optional dirt stability
@@ -58,7 +66,7 @@ src/
   ui/LevelSelect.ts     Campaign unlocks + Sand Lab
   levels/               level1…level10 + lab.ts + index.ts
   audio/                Sfx, Music, tracks, settings (music muted by default)
-  render/               LemmingSprite, Particles
+  render/               LemmingSprite, lemmingIdentity, crowdLayout, Particles
   progress.ts           localStorage unlocks + best save-%
 test/                   simulation, ca, levels, tracks, progress
 docs/superpowers/       Design specs + plans (Sand hybrid USP locked here)
@@ -98,9 +106,13 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 
 ## Important APIs
 
-- `enqueueRelease(skill)` / `popReleaseQueue()` — hatch order puzzle (UI: **Q** / **Backspace**).
-  Queued skills apply on spawn or once grounded (`pendingHatchSkill`); open
-  toolboxes do not consume stock.
+- `enqueueRelease(skill)` / `popReleaseQueue()` — hatch order puzzle (UI: **Q**
+  / **Backspace**, or double-click a crew button). Queued skills apply on spawn
+  or once grounded (`pendingHatchSkill`); open toolboxes do not consume stock.
+- `enqueueRandomRelease()` — queues and returns a concrete available `Skill`.
+  It uses a separate seed-derived `releaseRng`, so random releases are
+  reproducible and cannot perturb sand/water physics. The HUD shows the chosen
+  role in `state.hatchQueue` rather than leaving a hidden "random" token.
 - `paintLandscape(x, y, r, kind)` — paints `water|sand|dirt|wood|erase`.
   Limited test/custom levels can use `level.landscape` / `state.landscape`;
   shipped levels paint freely through `openToolbox`. UI hotkeys are
@@ -112,9 +124,20 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 - Campaign levels start paused in a planning phase. `objective` and `hint` are
   shown while the player queues roles or reshapes terrain; Start/Space opens the
   hatch and clock. Sand Lab skips planning and labels its status Free Play.
-- Crew display identity stays render/UI-only: deterministic names plus separate
-  role/state labels come from `render/lemmingIdentity.ts`. Sprite hair and debug
-  text share its colour key. The persisted Labels/L toggle must not enter sim state.
+- Crew display identity stays render/UI-only: deterministic names, role/state
+  labels, ten full uniform palettes, and matching HUD miniatures come from
+  `render/lemmingIdentity.ts`. Armed bombers override the displayed role; a
+  pending hatch skill displays its intended palette before grounding. The
+  persisted Labels/L toggle must not enter sim state.
+- `layoutLemmingCrowds(lemmings, timeMs)` — fans close stacks to 7.5px centres
+  with deterministic per-ID jitter. `GameScene` uses the returned positions for
+  sprites, labels, hover, and clicking only; terrain/minimap/sim use real positions.
+- The bottom toolbar is a `.hud__dock`: its collapse/expand button is the fixed
+  anchor and the panel grows upward. Do not reintroduce a permanent floating
+  instruction notice over gameplay.
+- Fatal falls emit `splat`; `GameScene` routes only that event to
+  `Particles.bloodSplat()` (large transient spray + capped persistent stain).
+  Drowning, traps, and explosions retain separate feedback.
 - `level.emitters` — deterministic material spouts (`EmitterDefinition`:
   x/y/material/cellsPerSecond/budget), stepped between agents and the CA
   settle. Live state in `state.emitters`; a blocked spout burns no budget.
@@ -131,6 +154,9 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 
 - `test/simulation.test.ts` — core lemming / skill behavior
 - `test/ca.test.ts` — sand, water, wood, hatch queue, drowning
+- `test/identity.test.ts` — role/palette mapping and queued display identity
+- `test/crowdLayout.test.ts` — render-only spacing, jitter, and ledge separation
+- `test/particles.test.ts` — transient and persistent fatal-fall feedback
 - `test/levels.test.ts` — one scripted win path per campaign level
 - After level or dig/bash/CA changes: run `npm test` before claiming done
 

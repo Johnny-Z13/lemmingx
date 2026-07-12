@@ -9,6 +9,7 @@ import { Hud, TERRAIN_TOOLS, type TerrainBrush } from '../ui/Hud';
 import { LevelSelect, type LevelCard } from '../ui/LevelSelect';
 import { Progress } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
+import { layoutLemmingCrowds, type LemmingDisplayPoint } from '../render/crowdLayout';
 import { MATERIAL } from '../sim/Terrain';
 import { Particles } from '../render/Particles';
 import { Sfx } from '../audio/Sfx';
@@ -32,6 +33,7 @@ export class GameScene extends Phaser.Scene {
   private fxGraphics!: Phaser.GameObjects.Graphics;
   private animClockMs = 0;
   private hoveredId: number | null = null;
+  private lemmingDisplayPoints = new Map<number, LemmingDisplayPoint>();
   private paused = false;
   private planning = false;
   private speed = 1;
@@ -192,6 +194,7 @@ export class GameScene extends Phaser.Scene {
     this.particles.update(this.paused ? 0 : delta * this.speed);
     this.updateAmbient(delta);
     this.updateCamera(delta);
+    this.lemmingDisplayPoints = layoutLemmingCrowds(this.sim.state.lemmings, this.animClockMs);
     this.updateHover();
     this.drawWorld();
     this.hud.update(this.sim.state, this.hudView());
@@ -250,8 +253,9 @@ export class GameScene extends Phaser.Scene {
           this.addShake(2.5);
           break;
         case 'splat':
-          this.particles.burst(e.x, e.y + 8, 10, { color: [0xff5b7f, 0x5e6575], speed: 0.12, spread: Math.PI, angle: -Math.PI / 2, lifeMs: 550, size: 2.2 });
-          this.addShake(4);
+          this.particles.bloodSplat(e.x, e.y + 8);
+          this.cameras.main.flash(90, 145, 0, 20);
+          this.addShake(9);
           break;
         case 'drown':
           this.particles.burst(e.x, e.y, 10, { color: [0x4ab6ff, 0xffffff], speed: 0.1, lifeMs: 550, size: 2, upward: true });
@@ -375,6 +379,7 @@ export class GameScene extends Phaser.Scene {
 
     this.children.removeAll(true);
     this.lemmingLabels.clear();
+    this.lemmingDisplayPoints.clear();
     this.cameras.main.setBounds(0, 0, this.level.width, this.level.height);
     this.cameras.main.setBackgroundColor('#12171f');
     this.cameras.main.centerOn(this.level.spawn.x, this.level.spawn.y);
@@ -402,6 +407,7 @@ export class GameScene extends Phaser.Scene {
       },
       onStart: () => this.startRun(),
       onEnqueueRelease: () => this.sim.enqueueRelease(this.sim.state.selectedSkill),
+      onEnqueueRandomRelease: () => this.sim.enqueueRandomRelease(),
       onPopQueue: () => this.sim.popReleaseQueue(),
       onSelectBrush: (kind) => {
         this.brush = kind;
@@ -559,7 +565,8 @@ export class GameScene extends Phaser.Scene {
 
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'dead' || lemming.state === 'exited') continue;
-      const distanceSq = (lemming.x - worldX) ** 2 + (lemming.y + 4 - worldY) ** 2;
+      const point = this.lemmingDisplayPoints.get(lemming.id) ?? lemming;
+      const distanceSq = (point.x - worldX) ** 2 + (point.y + 4 - worldY) ** 2;
       if (distanceSq < nearestDistanceSq) {
         nearest = lemming;
         nearestDistanceSq = distanceSq;
@@ -872,13 +879,14 @@ export class GameScene extends Phaser.Scene {
     const visibleLabels = new Set<number>();
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'exited') continue;
-      drawLemming(this.actorGraphics, lemming, frame, lemming.id === this.hoveredId);
+      const point = this.lemmingDisplayPoints.get(lemming.id) ?? lemming;
+      drawLemming(this.actorGraphics, lemming, frame, lemming.id === this.hoveredId, point);
 
       if (!this.uiSettings.debugLabels) continue;
       visibleLabels.add(lemming.id);
       let label = this.lemmingLabels.get(lemming.id);
       if (!label) {
-        label = this.add.text(lemming.x, lemming.y - 24, '', {
+        label = this.add.text(point.x, point.y - 24, '', {
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
           fontSize: '9px',
           fontStyle: 'bold',
@@ -893,13 +901,13 @@ export class GameScene extends Phaser.Scene {
         this.lemmingLabels.set(lemming.id, label);
       }
       label.setVisible(true);
-      const labelY = lemming.y - 24 - ((lemming.id - 1) % 6) * 18;
+      const labelY = point.y - 24 - ((lemming.id - 1) % 6) * 18;
       const color = crewColor(lemming);
-      label.setPosition(lemming.x, labelY);
+      label.setPosition(point.x, labelY);
       label.setText(crewLabel(lemming));
       label.setColor(colorToCss(color));
       this.actorGraphics.lineStyle(1, color, 0.35);
-      this.actorGraphics.lineBetween(lemming.x, lemming.y - 10, lemming.x, labelY + 1);
+      this.actorGraphics.lineBetween(point.x, point.y - 10, point.x, labelY + 1);
     }
 
     for (const [id, label] of this.lemmingLabels) {

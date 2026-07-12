@@ -21,6 +21,14 @@ npm run test    # vitest: sim + CA + level solvability
 npm run build   # typecheck + production build
 ```
 
+## Current state
+
+LemmingX is a playable, guarded game rather than a loose prototype: the full
+10-level campaign and Sand Lab ship from the same deterministic headless sim,
+every campaign level has a scripted solvability path, and the rendered shell
+adds procedural sprites, role identity, crowd readability, particles, music,
+and SFX without leaking Phaser or browser state into simulation code.
+
 ## How to play
 
 - **Level select** — 10 campaign levels (progressive landscape intros) plus
@@ -40,20 +48,29 @@ npm run build   # typecheck + production build
   level enables it (always on in the Lab).
 - Pick a skill (**1–9** or click), then click a lemming. Hover shows the current
   job. **Swimmer (9)** is assignable mid-water — rescue a treading lemming.
-- Lemmings are colour-coded by their live job; armed bombers take the orange
-  role colour even while swimming or falling. Toggle persisted debug labels
-  with **Labels** or **L** to show `Name · Role · State` above every crew member.
-- **Hatch queue (Q)** — pre-order the next release (e.g. swimmers or diggers
-  first). **Backspace** pops the last queued skill.
+- Every crew role has a distinct hair + uniform palette, echoed by the miniature
+  lemming on its HUD button. Armed bombers take priority while their fuse burns.
+  Toggle persisted debug labels with **Labels** or **L** to show
+  `Name · Role · State` above every crew member.
+- **Hatch queue (Q)** — select a role and press Q/Queue, or double-click its
+  crew button, to pre-order that exact release. **Random** immediately queues a
+  seeded-random available role and reveals the concrete choice in the queue.
+  **Backspace** pops the last queued skill.
+- Tight piles fan out visually to about 50% sprite overlap and jitter subtly so
+  a stack reads as a crowd. This is render-only: collisions and solutions still
+  use the untouched sim positions, while hovering/clicking follows the display.
 - **Terrain toolbar** — every level can paint the living world: **Z** water ·
   **X** sand · **C** dirt · **V** wood · **B** erase · **M** bomb. Drag to pour;
   Esc returns to skills (stacked puzzles: dig → flood → float wood).
 - **Emitters** — some levels have spouts that pour sand or water on their own
   until their budget runs dry. Living terrain you don't control.
 - **Space** pause · **F** speed (1×/2×/3×) · **N** nuke · **H** hide/show the
-  control bar · **L** debug labels · **R** restart · **Esc** select.
+  control dock · **L** debug labels · **R** restart · **Esc** select. The dock
+  expands upward from a fixed toggle, so collapse/expand never moves the button.
 - Pan big levels with **arrows**, edge scroll, or **right/middle-drag**; **minimap** jumps the camera.
 - **Traps** (crusher / zapper / chomper) kill one victim, then re-arm.
+- Fatal falls produce a deliberately OTT blood spray, impact flash, shake, and
+  a ground stain that lasts until restart; other death types keep distinct FX.
 - Chiptune **music** + SFX are synthesized at runtime. Music starts **muted**;
   HUD toggles/volumes persist.
 
@@ -140,7 +157,7 @@ src/
     GameSimulation.ts Lemmings, hatch queue, landscape paint, traps, events
     types.ts          Shared types
     skills/           Skill registry
-  render/             Procedural sprites + particles
+  render/             Role palettes, procedural sprites, crowd layout, particles
   audio/              Runtime SFX + chiptune + persisted settings
   scenes/GameScene.ts Input, camera, Lab tools, juice
   ui/                 HUD (Success %, queue, landscape) + level select
@@ -158,6 +175,12 @@ CLAUDE.md             Agent-oriented project map
   climber/floater/swimmer are permanent modifiers (a climber-walker is fine).
 - **`SimEvent`s** — sim emits dig/exit/splat/…; scene drains them for audio/FX.
 - **Seeded CA** — same seed + inputs → same settle (tests, future lockstep).
+- **Separate random streams** — Random hatch roles use their own seeded RNG and
+  never advance the terrain-physics RNG.
+- **Render-only crowd layout** — `crowdLayout.ts` fans stacks for readability;
+  sim positions remain authoritative for terrain, traps, and outcomes.
+- **Persistent level FX** — fatal-fall stains live in `Particles` and clear with
+  the rest of the scene on restart.
 - **Level factories** — fresh terrain every start; each level has a scripted win
   path in `test/levels.test.ts`.
 

@@ -1,4 +1,4 @@
-import type { Lemming, LevelDefinition, SimEvent, SimEventKind, SimulationState, Skill } from './types';
+import { ALL_SKILLS, type Lemming, type LevelDefinition, type SimEvent, type SimEventKind, type SimulationState, type Skill } from './types';
 import type { SkillContext } from './skills/types';
 import { SKILL_DEFS } from './skills/registry';
 import { MATERIAL, type Material } from './Terrain';
@@ -43,6 +43,8 @@ export class GameSimulation {
   private readonly sandEmitRatio: number;
   private readonly stabilityThreshold: number;
   private readonly rng: SeededRng;
+  /** Separate stream so random hatch roles never perturb seeded terrain physics. */
+  private readonly releaseRng: SeededRng;
   private readonly ca: ChunkStepper | null;
 
   /** Take and clear the events accumulated since the last drain (for FX/audio). */
@@ -63,6 +65,7 @@ export class GameSimulation {
     this.sandEmitRatio = level.sandEmitRatio ?? DEFAULT_SAND_EMIT;
     this.stabilityThreshold = level.stabilityThreshold ?? 0;
     this.rng = new SeededRng(level.caSeed ?? 1);
+    this.releaseRng = new SeededRng((level.caSeed ?? 1) ^ 0x52414e44);
     this.ca = this.caEnabled ? new ChunkStepper(level.terrain, this.rng) : null;
     this.state = {
       width: level.width,
@@ -342,6 +345,16 @@ export class GameSimulation {
     if (!this.hasOpenToolbox()) this.state.skills[skill] -= 1;
     this.state.hatchQueue.push(skill);
     return true;
+  }
+
+  /** Queue one seeded-random available role and return the concrete choice. */
+  enqueueRandomRelease(): Skill | null {
+    const remaining = this.level.totalLemmings - this.state.spawned;
+    if (this.state.outcome !== 'running' || this.state.hatchQueue.length >= remaining) return null;
+    const available = ALL_SKILLS.filter((skill) => this.hasOpenToolbox() || this.state.skills[skill] > 0);
+    if (available.length === 0) return null;
+    const skill = available[Math.floor(this.releaseRng.next() * available.length)];
+    return this.enqueueRelease(skill) ? skill : null;
   }
 
   /** Cancel the last queued release and refund the skill. */

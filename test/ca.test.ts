@@ -3,7 +3,8 @@ import { MATERIAL, Terrain } from '../src/sim/Terrain';
 import { SeededRng } from '../src/sim/ca/SeededRng';
 import { ChunkStepper } from '../src/sim/ca/ChunkStepper';
 import { GameSimulation } from '../src/sim/GameSimulation';
-import type { LevelDefinition } from '../src/sim/types';
+import { ALL_SKILLS, type LevelDefinition } from '../src/sim/types';
+import { crewRole } from '../src/render/lemmingIdentity';
 
 function makeLevel(terrain: Terrain, overrides: Partial<LevelDefinition> = {}): LevelDefinition {
   return {
@@ -190,6 +191,50 @@ describe('sand CA', () => {
 });
 
 describe('hatch release queue', () => {
+  it.each(ALL_SKILLS)('spawns the queued %s as the corresponding crew type', (skill) => {
+    const terrain = new Terrain(200, 120, 4);
+    terrain.fillRect(0, 80, 200, 40);
+    if (skill === 'basher') terrain.fillRect(48, 48, 16, 32);
+    const sim = new GameSimulation(
+      makeLevel(terrain, {
+        openToolbox: true,
+        caEnabled: false,
+        totalLemmings: 1,
+        targetSaved: 1,
+        spawn: { x: 40, y: 64 },
+        spawnIntervalMs: 1,
+      }),
+    );
+
+    expect(sim.enqueueRelease(skill)).toBe(true);
+    for (let i = 0; i < 20; i += 1) {
+      sim.step(16);
+      if (sim.state.lemmings[0]?.pendingHatchSkill === null) break;
+    }
+
+    const worker = sim.state.lemmings[0];
+    expect(worker).toBeTruthy();
+    expect(worker.pendingHatchSkill).toBeNull();
+    expect(crewRole(worker)).toBe(skill.charAt(0).toUpperCase() + skill.slice(1));
+    expect(sim.state.hatchQueue).toHaveLength(0);
+  });
+
+  it('chooses random hatch roles deterministically without hiding the result', () => {
+    const makeSim = () => {
+      const terrain = new Terrain(120, 80, 4);
+      terrain.fillRect(0, 56, 120, 24);
+      return new GameSimulation(makeLevel(terrain, { openToolbox: true, totalLemmings: 6, caSeed: 73 }));
+    };
+    const a = makeSim();
+    const b = makeSim();
+    const choicesA = Array.from({ length: 6 }, () => a.enqueueRandomRelease());
+    const choicesB = Array.from({ length: 6 }, () => b.enqueueRandomRelease());
+
+    expect(choicesA).toEqual(choicesB);
+    expect(choicesA.every((choice) => choice !== null)).toBe(true);
+    expect(a.state.hatchQueue).toEqual(choicesA);
+  });
+
   it('queues a digger and applies it once grounded', () => {
     const terrain = new Terrain(200, 120, 4);
     terrain.fillRect(0, 80, 200, 40);

@@ -195,24 +195,33 @@ button:disabled {
   }
 }
 
-/* ---- Bottom control bar ---- */
-.hud__bar {
+/* ---- Bottom control dock ---- */
+.hud__dock {
   position: absolute;
   bottom: 14px;
   left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  width: min(1180px, calc(100vw - 24px));
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.hud__bar {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
   align-items: center;
-  width: min(1180px, calc(100vw - 24px));
+  width: 100%;
   padding: 9px;
   border: 1px solid var(--stroke);
   border-radius: 12px;
   background: var(--panel);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
   pointer-events: auto;
-  transform: translateX(-50%);
   backdrop-filter: blur(10px);
 }
 
@@ -226,15 +235,10 @@ button:disabled {
   min-width: 30px;
   min-height: 30px;
   padding: 0 8px;
+  pointer-events: auto;
 }
 
-.hud__bar.is-collapsed {
-  width: auto;
-  padding: 4px;
-}
-
-.hud__bar.is-collapsed .hud__tools,
-.hud__bar.is-collapsed .hud__controls {
+.hud__dock.is-collapsed .hud__bar {
   display: none;
 }
 
@@ -269,9 +273,100 @@ button:disabled {
   justify-content: center;
   gap: 2px;
   min-width: 62px;
-  min-height: 46px;
+  min-height: 68px;
   padding: 4px 8px 6px;
   white-space: nowrap;
+}
+
+.hud__crew-icon {
+  --crew-hair: #5ef2a1;
+  --crew-body: #3f62d9;
+  --crew-shade: #2846a5;
+  --crew-trim: #a7ffd0;
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+.hud__crew-icon.is-random {
+  --crew-hair: linear-gradient(90deg, #ffd24d 0 33%, #ff7aa8 33% 66%, #2ee6c8 66%);
+  --crew-body: linear-gradient(90deg, #e34b35 0 33%, #704bb8 33% 66%, #1477a6 66%);
+  --crew-shade: linear-gradient(90deg, #9c2c27 0 33%, #472f7b 33% 66%, #0c4c6d 66%);
+  --crew-trim: linear-gradient(90deg, #fff3a3 0 33%, #efd5ff 33% 66%, #a8fff0 66%);
+}
+
+.hud__crew-hair,
+.hud__crew-head,
+.hud__crew-body,
+.hud__crew-feet {
+  position: absolute;
+  display: block;
+}
+
+.hud__crew-hair {
+  top: 0;
+  left: 5px;
+  width: 8px;
+  height: 4px;
+  background: var(--crew-hair);
+}
+
+.hud__crew-hair::after {
+  position: absolute;
+  top: 2px;
+  right: -2px;
+  width: 2px;
+  height: 2px;
+  background: var(--crew-hair);
+  content: '';
+}
+
+.hud__crew-head {
+  top: 4px;
+  left: 5px;
+  width: 8px;
+  height: 6px;
+  background: #f2c9a0;
+  box-shadow: inset 0 -2px 0 #d9a87f;
+}
+
+.hud__crew-body {
+  top: 10px;
+  left: 4px;
+  width: 10px;
+  height: 7px;
+  background: var(--crew-body);
+}
+
+.hud__crew-body::before,
+.hud__crew-body::after {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  content: '';
+}
+
+.hud__crew-body::before {
+  top: 3px;
+  height: 2px;
+  background: var(--crew-trim);
+}
+
+.hud__crew-body::after {
+  bottom: 0;
+  height: 2px;
+  background: var(--crew-shade);
+}
+
+.hud__crew-feet {
+  top: 17px;
+  left: 4px;
+  width: 4px;
+  height: 2px;
+  background: #d9a87f;
+  box-shadow: 6px 0 0 #d9a87f;
 }
 
 .hud__tool.is-active {
@@ -377,24 +472,6 @@ button:disabled {
 
 .hud__restart {
   background: var(--panel-strong);
-}
-
-/* ---- Floating notice ---- */
-.hud__notice {
-  position: absolute;
-  left: 50%;
-  bottom: 148px; /* clears the control bar even when it wraps to two rows */
-  max-width: min(360px, calc(100vw - 36px));
-  padding: 8px 14px;
-  border: 1px solid var(--stroke);
-  border-radius: 999px;
-  color: rgba(239, 247, 255, 0.94);
-  background: var(--panel);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.26);
-  font-size: 0.86rem;
-  text-align: center;
-  transform: translateX(-50%);
-  backdrop-filter: blur(8px);
 }
 
 /* ---- Level select ---- */
@@ -624,34 +701,28 @@ button:disabled {
     font-size: 0.76rem;
   }
 
-  .hud__bar {
+  .hud__dock {
     bottom: 8px;
-    gap: 6px;
     width: calc(100vw - 12px);
+  }
+
+  .hud__bar {
+    gap: 6px;
     padding: 7px;
   }
 
   .hud__tool {
     min-width: 52px;
-    min-height: 42px;
+    min-height: 64px;
   }
 
   .hud__tool-name {
     font-size: 0.74rem;
   }
 
-  .hud__notice {
-    bottom: auto;
-    top: 56px;
-  }
-
   .hud__mission {
     top: 52px;
     left: 8px;
     width: calc(100vw - 16px);
-  }
-
-  .hud__mission:not([hidden]) ~ .hud__notice {
-    display: none;
   }
 }

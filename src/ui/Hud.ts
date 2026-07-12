@@ -3,6 +3,7 @@ import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import { MATERIAL, type Terrain } from '../sim/Terrain';
 import type { AudioSettings } from '../audio/settings';
+import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIdentity';
 
 /** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
 export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'erase' | 'bomb';
@@ -28,6 +29,8 @@ export type HudEvents = {
   onStart?: () => void;
   /** Pre-load hatch queue with selected skill (consumes stock). */
   onEnqueueRelease?: () => void;
+  /** Pre-load one seeded-random available role and reveal it in the queue. */
+  onEnqueueRandomRelease?: () => void;
   onPopQueue?: () => void;
   onNuke: () => void;
   onReleaseRate: (delta: number) => void;
@@ -80,7 +83,19 @@ const SKILLS = ALL_SKILLS.map((skill) => ({
   label: SKILL_DEFS[skill].label,
   icon: SKILL_DEFS[skill].icon,
   hotkey: SKILL_DEFS[skill].hotkey,
+  palette: skillPalette(skill),
 }));
+
+function crewIconMarkup(palette: CrewPalette | null): string {
+  const className = palette ? 'hud__crew-icon' : 'hud__crew-icon is-random';
+  const style = palette
+    ? ` style="--crew-hair:${colorToCss(palette.hair)};--crew-body:${colorToCss(palette.body)};` +
+      `--crew-shade:${colorToCss(palette.bodyShade)};--crew-trim:${colorToCss(palette.trim)}"`
+    : '';
+  return `<span class="${className}"${style} aria-hidden="true">` +
+    '<span class="hud__crew-hair"></span><span class="hud__crew-head"></span>' +
+    '<span class="hud__crew-body"></span><span class="hud__crew-feet"></span></span>';
+}
 
 function formatTime(ms: number): string {
   const total = Math.ceil(ms / 1000);
@@ -95,7 +110,7 @@ export class Hud {
   private readonly mission: HTMLElement;
   private readonly missionObjective: HTMLElement;
   private readonly missionHint: HTMLParagraphElement;
-  private readonly bar: HTMLDivElement;
+  private readonly dock: HTMLDivElement;
   private readonly collapseButton: HTMLButtonElement;
   private collapsed = false;
   private readonly skillButtons = new Map<Skill, HTMLButtonElement>();
@@ -104,7 +119,7 @@ export class Hud {
   private readonly pauseButton: HTMLButtonElement;
   private readonly speedButton: HTMLButtonElement;
   private readonly debugLabelsButton: HTMLButtonElement;
-  private readonly notice: HTMLDivElement;
+  private readonly randomButton: HTMLButtonElement;
   private readonly queueBar: HTMLDivElement;
   private readonly terrainButtons = new Map<TerrainBrush, HTMLButtonElement>();
   private readonly terrainBar: HTMLDivElement;
@@ -152,7 +167,10 @@ export class Hud {
     this.mission.append(startButton);
     this.root.append(this.mission);
 
-    // --- Bottom control bar ---
+    // --- Bottom control dock ---
+    const dock = document.createElement('div');
+    dock.className = 'hud__dock';
+
     const bar = document.createElement('div');
     bar.className = 'hud__bar';
 
@@ -168,6 +186,7 @@ export class Hud {
       button.dataset.skill = item.skill;
       button.innerHTML =
         `<span class="hud__hotkey">${item.hotkey}</span>` +
+        crewIconMarkup(item.palette) +
         `<span class="hud__tool-name">${item.label}</span>` +
         `<span class="hud__stock">0</span>`;
       button.addEventListener('click', () => events.onSelectSkill(item.skill));
@@ -175,6 +194,17 @@ export class Hud {
       tools.append(button);
       this.skillButtons.set(item.skill, button);
     }
+
+    this.randomButton = document.createElement('button');
+    this.randomButton.className = 'hud__tool hud__tool--random';
+    this.randomButton.type = 'button';
+    this.randomButton.title = 'Queue random crew type';
+    this.randomButton.setAttribute('aria-label', 'Queue random crew type');
+    this.randomButton.innerHTML =
+      '<span class="hud__hotkey">?</span>' + crewIconMarkup(null) +
+      '<span class="hud__tool-name">Random</span><span class="hud__stock">↧</span>';
+    this.randomButton.addEventListener('click', () => events.onEnqueueRandomRelease?.());
+    tools.append(this.randomButton);
 
     const queueBtn = this.makeButton('⬇ Queue (Q)', 'Add selected skill to hatch queue', () => events.onEnqueueRelease?.());
     queueBtn.className = 'hud__btn';
@@ -250,14 +280,11 @@ export class Hud {
     );
     this.collapseButton = this.makeButton('▾', 'Hide controls (H)', () => this.toggleCollapsed());
     this.collapseButton.className = 'hud__btn hud__collapse';
-    bar.append(tools, this.terrainBar, controls, this.collapseButton);
-    this.bar = bar;
-    this.root.append(bar);
-
-    // --- Floating notice (selected skill / hovered job) ---
-    this.notice = document.createElement('div');
-    this.notice.className = 'hud__notice';
-    this.root.append(this.notice);
+    this.collapseButton.setAttribute('aria-expanded', 'true');
+    bar.append(tools, this.terrainBar, controls);
+    dock.append(bar, this.collapseButton);
+    this.dock = dock;
+    this.root.append(dock);
 
     this.queueBar = document.createElement('div');
     this.queueBar.className = 'hud__queue';
@@ -322,9 +349,12 @@ export class Hud {
   /** Collapse the bottom bar to a slim pill so it stops occluding gameplay. */
   toggleCollapsed(): void {
     this.collapsed = !this.collapsed;
-    this.bar.classList.toggle('is-collapsed', this.collapsed);
+    this.dock.classList.toggle('is-collapsed', this.collapsed);
     this.collapseButton.textContent = this.collapsed ? '▴' : '▾';
-    this.collapseButton.title = this.collapsed ? 'Show controls (H)' : 'Hide controls (H)';
+    const label = this.collapsed ? 'Show controls (H)' : 'Hide controls (H)';
+    this.collapseButton.title = label;
+    this.collapseButton.setAttribute('aria-label', label);
+    this.collapseButton.setAttribute('aria-expanded', String(!this.collapsed));
   }
 
   setDebugLabels(enabled: boolean): void {
@@ -436,6 +466,9 @@ export class Hud {
       button.classList.toggle('is-active', skill === state.selectedSkill && !view.brush);
       button.disabled = !running || (!this.openToolbox && state.skills[skill] <= 0);
     }
+    const releaseSlots = state.totalLemmings - state.spawned - state.hatchQueue.length;
+    const hasRandomRole = this.openToolbox || ALL_SKILLS.some((skill) => state.skills[skill] > 0);
+    this.randomButton.disabled = !running || releaseSlots <= 0 || !hasRandomRole;
 
     this.nukeButton.disabled = !view.nukeReady;
     this.pauseButton.classList.toggle('is-active', view.paused && !view.planning);
@@ -469,9 +502,6 @@ export class Hud {
         button.disabled = !running || (!infinite && stock <= 0);
       }
     }
-
-    this.notice.textContent = this.noticeText(state, view);
-    this.notice.hidden = state.outcome !== 'running';
 
     this.minimap.hidden = view.minimap === null;
     if (view.minimap) this.drawMinimap(view.minimap);
@@ -520,18 +550,5 @@ export class Hud {
 
   destroy(): void {
     this.root.remove();
-  }
-
-  private noticeText(state: SimulationState, view: HudView): string {
-    if (view.planning) return 'Queue roles or reshape terrain now — the clock is stopped.';
-    if (view.paused) return 'Paused';
-    if (view.brush) {
-      if (view.brush === 'bomb') return 'Bomb (M) — click to blast · Esc skills';
-      const tool = TERRAIN_TOOLS.find((t) => t.kind === view.brush);
-      const stock = this.openToolbox ? '∞' : String(state.landscape[view.brush]);
-      return `${tool?.label ?? view.brush} ×${stock} — click/drag to paint · Esc skills`;
-    }
-    if (view.hoveredJob) return `${view.hoveredJob} — click to assign ${state.selectedSkill}`;
-    return `${SKILL_DEFS[state.selectedSkill].label} — click lemming · Q = hatch queue · dbl-click skill = queue`;
   }
 }

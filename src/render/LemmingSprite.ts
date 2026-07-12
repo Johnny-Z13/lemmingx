@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import type { Lemming } from '../sim/types';
-import { crewColor } from './lemmingIdentity';
+import type { LemmingDisplayPoint } from './crowdLayout';
+import { crewPalette } from './lemmingIdentity';
 
 /**
  * Procedural "cute retro pixel" lemming renderer.
@@ -13,12 +14,10 @@ import { crewColor } from './lemmingIdentity';
  * No copyrighted sprites — every pixel is placed here in code.
  */
 
-// Palette. Body/skin stay constant so the swarm reads as one species; the
-// hair colour shifts with state so a glance tells you who is doing what.
+// Skin stays constant so the swarm reads as one species; each assigned role
+// supplies a distinct hair + uniform palette through lemmingIdentity.
 const SKIN = 0xf2c9a0;
 const SKIN_SHADE = 0xd9a87f;
-const BODY = 0x4f74e3; // classic blue smock
-const BODY_SHADE = 0x3a59bd;
 const EYE = 0x1a2030;
 const DEAD = 0x6a7283;
 const PARACHUTE = 0xff7aa8;
@@ -35,22 +34,23 @@ function blk(g: Phaser.GameObjects.Graphics, ox: number, oy: number, color: numb
 }
 
 /**
- * Draw one lemming. `(cx, cy)` is the sim position (cy is roughly the vertical
- * centre used by the old circle renderer; we offset so the feet land on it).
- * `frame` is a shared animation tick (advances ~12fps). `selected` draws a ring.
+ * Draw one lemming. `position` may fan a crowd visually without changing the
+ * lemming's sim coordinates. `frame` is a shared animation tick (advances
+ * ~12fps); `selected` draws a ring at the displayed position.
  */
 export function drawLemming(
   g: Phaser.GameObjects.Graphics,
   lemming: Lemming,
   frame: number,
   selected: boolean,
+  position: LemmingDisplayPoint = lemming,
 ): void {
   const dir = lemming.direction;
   // Landing squash: briefly squash the sprite toward the feet.
   const squash = lemming.squashMs > 0 ? Math.min(1, lemming.squashMs / 160) : 0;
-  const ox = lemming.x - 4 * PX - squash * PX;
+  const ox = position.x - 4 * PX - squash * PX;
   // Feet (block row 9 bottom = oy + 9·PX) rest on the sim's collision feet.
-  const oy = lemming.y + FOOT_OFFSET - 9 * PX + squash * 2;
+  const oy = position.y + FOOT_OFFSET - 9 * PX + squash * 2;
 
   if (lemming.state === 'dead') {
     drawSplat(g, ox, oy, frame, lemming);
@@ -61,12 +61,12 @@ export function drawLemming(
   if (selected) {
     const pulse = 10 + Math.sin(frame * 0.6) * 1.5;
     g.lineStyle(2, 0xffffff, 0.9);
-    g.strokeCircle(lemming.x, lemming.y + 4, pulse);
+    g.strokeCircle(position.x, position.y + 4, pulse);
     g.lineStyle(1, 0x6ae1ff, 0.45);
-    g.strokeCircle(lemming.x, lemming.y + 4, pulse + 3);
+    g.strokeCircle(position.x, position.y + 4, pulse + 3);
   }
 
-  const hair = crewColor(lemming);
+  const palette = crewPalette(lemming);
   const walkPhase = frame % 4; // 0..3 used for limb cycles
 
   // --- Floater parachute (drawn behind the body) ---
@@ -76,8 +76,8 @@ export function drawLemming(
 
   // --- Hair tuft ---
   // A little swept tuft; leans in the facing direction.
-  blk(g, ox, oy, hair, dir === 1 ? 1 : 2, -1, 4, 2);
-  blk(g, ox, oy, hair, dir === 1 ? 4 : 1, 0, 1, 1);
+  blk(g, ox, oy, palette.hair, dir === 1 ? 1 : 2, -1, 4, 2);
+  blk(g, ox, oy, palette.hair, dir === 1 ? 4 : 1, 0, 1, 1);
 
   // --- Head ---
   blk(g, ox, oy, SKIN, 1, 1, 4, 3);
@@ -92,8 +92,9 @@ export function drawLemming(
   // --- Body / smock (wider when squashed) ---
   const bodyW = squash > 0.2 ? 5 : 4;
   const bodyX = squash > 0.2 ? 0.5 : 1;
-  blk(g, ox, oy, BODY, bodyX, 4, bodyW, squash > 0.2 ? 3 : 4);
-  blk(g, ox, oy, BODY_SHADE, bodyX, squash > 0.2 ? 6 : 7, bodyW, 1);
+  blk(g, ox, oy, palette.body, bodyX, 4, bodyW, squash > 0.2 ? 3 : 4);
+  blk(g, ox, oy, palette.trim, bodyX, 6, bodyW, 1);
+  blk(g, ox, oy, palette.bodyShade, bodyX, squash > 0.2 ? 6 : 7, bodyW, 1);
 
   // --- Permanent trait badges: always visible, whatever the job ---
   if (lemming.isSwimmer) {
@@ -157,7 +158,7 @@ export function drawLemming(
       g.fillRect(ox + 1 * PX, oy + 1 * PX, 4 * PX, 7 * PX);
     }
     const digit = Math.max(1, Math.ceil(lemming.fuseMs / 1000));
-    drawDigit(g, lemming.x, lemming.y - 12 - squash * 2, digit);
+    drawDigit(g, position.x, position.y - 12 - squash * 2, digit);
   }
 }
 
@@ -280,13 +281,15 @@ function drawParachute(g: Phaser.GameObjects.Graphics, ox: number, oy: number, f
 }
 
 function drawSplat(g: Phaser.GameObjects.Graphics, ox: number, oy: number, frame: number, lemming: Lemming): void {
-  // A flattened smudge. Fades subtly over time using the action timer.
+  // A broad corpse smear under the persistent blood decal layer.
   void frame;
-  const alpha = lemming.actionTimerMs > 0 ? Math.max(0.3, 1 - lemming.actionTimerMs / 4000) : 0.85;
-  g.fillStyle(DEAD, alpha);
-  g.fillRect(ox - 1 * PX, oy + 8 * PX, 8 * PX, 2 * PX);
-  g.fillStyle(0xff5b7f, alpha * 0.6);
-  g.fillRect(ox + 1 * PX, oy + 7 * PX, 4 * PX, 1 * PX);
+  void lemming;
+  g.fillStyle(0x350008, 0.92);
+  g.fillRect(ox - 3 * PX, oy + 8 * PX, 12 * PX, 2 * PX);
+  g.fillStyle(0xa90022, 0.9);
+  g.fillRect(ox - 1 * PX, oy + 7 * PX, 8 * PX, 2 * PX);
+  g.fillStyle(DEAD, 0.8);
+  g.fillRect(ox + 1 * PX, oy + 6 * PX, 4 * PX, 1 * PX);
 }
 
 /**
