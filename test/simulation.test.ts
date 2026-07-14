@@ -642,6 +642,73 @@ describe('GameSimulation', () => {
     expect(sim.state.spawned).toBe(1);
   });
 
+  it('tray-drop mode never auto-spawns and places the chosen role at the requested point', () => {
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        totalLemmings: 3,
+        targetSaved: 1,
+        openToolbox: true,
+        playMode: { spawn: 'tray-drop', goal: 'free-play' },
+      }),
+    );
+
+    for (let i = 0; i < 100; i += 1) sim.step(16);
+    expect(sim.state.spawned).toBe(0);
+    expect(sim.placeLemming(64, 40, 'floater')).toBe(true);
+
+    const placed = sim.state.lemmings[0];
+    expect(placed.x).toBe(64);
+    expect(placed.y).toBe(40);
+    expect(placed.isFloater).toBe(true);
+    expect(sim.state.spawned).toBe(1);
+    expect(sim.drainEvents().map((event) => event.kind)).toEqual(expect.arrayContaining(['spawn', 'assign']));
+    expect(sim.state.outcome).toBe('running');
+  });
+
+  it('tray-drop rejects solid placements and stops when the crew budget is spent', () => {
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        totalLemmings: 1,
+        openToolbox: true,
+        playMode: { spawn: 'tray-drop', goal: 'free-play' },
+      }),
+    );
+
+    expect(sim.placeLemming(64, 92, 'digger')).toBe(false); // inside the floor
+    expect(sim.placeLemming(64, 72, 'digger')).toBe(true); // standing on it
+    expect(sim.placeLemming(96, 72, 'swimmer')).toBe(false); // tray empty
+    for (let i = 0; i < 20 && sim.state.lemmings[0].state !== 'digger'; i += 1) sim.step(16);
+    expect(sim.state.lemmings[0].state).toBe('digger');
+  });
+
+  it('placeable world entities move the hatch and exit before queued release', () => {
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        totalLemmings: 2,
+        targetSaved: 1,
+        openToolbox: true,
+        playMode: {
+          spawn: 'automatic-hatch',
+          goal: 'free-play',
+          worldTools: ['hatch', 'exit'],
+        },
+      }),
+    );
+
+    expect(sim.placeWorldEntity('hatch', 80, 72)).toBe(true);
+    expect(sim.placeWorldEntity('exit', 170, 72)).toBe(true);
+    expect(sim.level.spawn).toEqual({ x: 80, y: 72 });
+    expect(sim.level.exit.x + sim.level.exit.width / 2).toBe(170);
+    expect(sim.enqueueRelease('swimmer')).toBe(true);
+
+    sim.step(120);
+    const events = sim.drainEvents();
+    expect(events).toContainEqual({ kind: 'spawn', x: 80, y: 72 });
+    expect(sim.state.lemmings[0].isSwimmer).toBe(true);
+    expect(sim.placeWorldEntity('hatch', 120, 72)).toBe(false); // locked after release
+    expect(sim.state.outcome).toBe('running');
+  });
+
   it('nukeAll arms every live lemming with a fuse', () => {
     const sim = new GameSimulation(makeFlatLevel({ totalLemmings: 3, targetSaved: 3 }));
     for (let i = 0; i < 200; i += 1) sim.step(16);

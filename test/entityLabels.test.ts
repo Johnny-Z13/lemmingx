@@ -25,4 +25,12 @@ describe('world entity labels', () => {
       'Chomper · Armed',
     ]));
   });
+
+  it('omits the hatch label when crew enter through the tray', () => {
+    const sim = new GameSimulation(createLevelAt(10));
+    const labels = worldEntityLabels(sim.level, sim.state);
+
+    expect(labels.some(({ key }) => key === 'hatch')).toBe(false);
+    expect(labels.some(({ key }) => key === 'exit')).toBe(true);
+  });
 });

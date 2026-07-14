@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { createLevelAt, LEVEL_COUNT, SAND_LAB_INDEX } from '../levels';
+import { createLevelAt, LEVEL_COUNT, PROTOTYPE_LEVEL_INDICES, PROTOTYPE_START_INDEX, SAND_LAB_INDEX } from '../levels';
 import { GameSimulation } from '../sim/GameSimulation';
-import type { Lemming, LevelDefinition, Skill } from '../sim/types';
+import type { Lemming, LevelDefinition, Skill, WorldEntityKind } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import type { SimEvent } from '../sim/types';
@@ -10,13 +10,16 @@ import { LevelSelect, type LevelCard } from '../ui/LevelSelect';
 import { Progress } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
 import { layoutLemmingCrowds, type LemmingDisplayPoint } from '../render/crowdLayout';
-import { MATERIAL } from '../sim/Terrain';
 import { EXPLOSION_TUNING } from '../sim/terrainTuning';
 import { Particles } from '../render/Particles';
+import { drawTerrain as drawTerrainLayer } from '../render/TerrainRenderer';
+import { INDUSTRIAL_BACKDROP_KEY, WorldBackdrop } from '../render/WorldBackdrop';
+import { drawIndustrialTorch, drawWorldLights, type WorldLightSource } from '../render/WorldLights';
+import { WORLD_THEME } from '../render/visualTheme';
 import { Sfx } from '../audio/Sfx';
 import { Music } from '../audio/Music';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/settings';
-import { colorToCss, crewColor, crewLabel } from '../render/lemmingIdentity';
+import { colorToCss, crewColor, crewLabel, skillPalette } from '../render/lemmingIdentity';
 import { worldEntityLabels } from '../render/entityLabels';
 import { loadUiSettings, saveUiSettings } from '../ui/settings';
 
@@ -30,9 +33,12 @@ export class GameScene extends Phaser.Scene {
   private sim!: GameSimulation;
   private hud!: Hud;
   private terrainGraphics!: Phaser.GameObjects.Graphics;
+  private lightGraphics!: Phaser.GameObjects.Graphics;
   private setpieceGraphics!: Phaser.GameObjects.Graphics;
   private actorGraphics!: Phaser.GameObjects.Graphics;
   private fxGraphics!: Phaser.GameObjects.Graphics;
+  private worldBackdrop?: WorldBackdrop;
+  private fireLights: WorldLightSource[] = [];
   private animClockMs = 0;
   private hoveredId: number | null = null;
   private lemmingDisplayPoints = new Map<number, LemmingDisplayPoint>();
@@ -57,6 +63,9 @@ export class GameScene extends Phaser.Scene {
   private celebrateFired = false;
   private ambientAccMs = 0;
   private brush: TerrainBrush | null = null;
+  private crewPlacement: Skill | null = null;
+  private worldTool: WorldEntityKind | null = null;
+  private readonly placedWorldEntities = new Set<WorldEntityKind>();
   private painting = false;
   /** Last paint stamp, used to space stamps when a level has limited charges. */
   private lastStampX = 0;
@@ -64,6 +73,10 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super('GameScene');
+  }
+
+  preload(): void {
+    this.load.image(INDUSTRIAL_BACKDROP_KEY, '/assets/industrial-cavern-backdrop.png');
   }
 
   create(): void {
@@ -83,6 +96,14 @@ export class GameScene extends Phaser.Scene {
       if (brush) {
         this.painting = true;
         this.paintStamp(pointer.worldX, pointer.worldY, brush);
+        return;
+      }
+      if (this.worldTool) {
+        this.placeWorldEntity(this.worldTool, pointer.worldX, pointer.worldY);
+        return;
+      }
+      if (this.crewPlacement) {
+        this.placeCrew(pointer.worldX, pointer.worldY, this.crewPlacement);
         return;
       }
       this.assignSelectedSkill(pointer.worldX, pointer.worldY);
@@ -131,6 +152,17 @@ export class GameScene extends Phaser.Scene {
         bestSavedPct: result.bestSavedPct,
       };
     });
+    for (const index of PROTOTYPE_LEVEL_INDICES) {
+      const def = createLevelAt(index);
+      cards.push({
+        index,
+        name: def.name ?? `Prototype ${index + 1}`,
+        unlocked: true,
+        completed: false,
+        bestSavedPct: 0,
+        prototype: true,
+      });
+    }
     cards.push({
       index: SAND_LAB_INDEX,
       name: 'Sand Lab',
@@ -146,8 +178,55 @@ export class GameScene extends Phaser.Scene {
     return !!this.level?.sandLab;
   }
 
+  private isPrototype(): boolean {
+    return this.levelIndex >= PROTOTYPE_START_INDEX && this.levelIndex < SAND_LAB_INDEX;
+  }
+
+  private isFreePlay(): boolean {
+    return this.isLab() || this.level?.playMode?.goal === 'free-play';
+  }
+
   private hasOpenToolbox(): boolean {
     return this.level?.openToolbox === true || this.isLab();
+  }
+
+  private clientToWorld(clientX: number, clientY: number): Phaser.Math.Vector2 {
+    const rect = this.game.canvas.getBoundingClientRect();
+    const screenX = (clientX - rect.left) * (this.scale.width / rect.width);
+    const screenY = (clientY - rect.top) * (this.scale.height / rect.height);
+    return this.cameras.main.getWorldPoint(screenX, screenY);
+  }
+
+  private isOverGame(clientX: number, clientY: number): boolean {
+    const rect = this.game.canvas.getBoundingClientRect();
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  private placeCrew(worldX: number, worldY: number, skill: Skill): void {
+    if (!this.sim.placeLemming(worldX, worldY, skill)) {
+      this.particles.ring(worldX, worldY, 10, { color: 0xff5b7f, speed: 0.04, lifeMs: 220, size: 1.5 });
+      return;
+    }
+    this.brush = null;
+    this.worldTool = null;
+    this.sim.setSelectedSkill(skill);
+    this.crewPlacement = skill;
+    this.consumeEvents(this.sim.drainEvents());
+  }
+
+  private placeWorldEntity(kind: WorldEntityKind, worldX: number, worldY: number): void {
+    if (!this.planning || !this.sim.placeWorldEntity(kind, worldX, worldY)) return;
+    this.brush = null;
+    this.crewPlacement = null;
+    this.placedWorldEntities.add(kind);
+    this.worldTool = kind;
+    this.sfx.play('assign');
+    this.particles.ring(worldX, worldY, 14, {
+      color: kind === 'hatch' ? [0xffd96b, 0xffffff] : [0x78ffd6, 0xffffff],
+      speed: 0.08,
+      lifeMs: 360,
+      size: 1.8,
+    });
   }
 
   /**
@@ -197,6 +276,7 @@ export class GameScene extends Phaser.Scene {
       this.fireWinCelebrate();
     }
     this.animClockMs += delta;
+    this.worldBackdrop?.update(this.animClockMs);
     this.particles.update(this.paused ? 0 : delta * this.speed);
     this.updateAmbient(delta);
     this.updateCamera(delta);
@@ -240,10 +320,10 @@ export class GameScene extends Phaser.Scene {
           this.particles.ring(e.x, e.y, 10, { color: [0xffffff, 0x6ae1ff, 0x5ef2a1], speed: 0.14, lifeMs: 320, size: 2 });
           break;
         case 'dig':
-          this.particles.burst(e.x, e.y, 6, { color: [0x4d9674, 0x297567, 0xffe9c2], speed: 0.06, lifeMs: 420, size: 2 });
+          this.particles.burst(e.x, e.y, 6, { color: [WORLD_THEME.dirt, WORLD_THEME.dirtSpeck, WORLD_THEME.moss], speed: 0.06, lifeMs: 420, size: 2 });
           break;
         case 'bash':
-          this.particles.burst(e.x, e.y, 7, { color: [0x4d9674, 0x297567, 0xffe9c2], speed: 0.11, spread: Math.PI, lifeMs: 400, size: 2.2 });
+          this.particles.burst(e.x, e.y, 7, { color: [WORLD_THEME.dirt, WORLD_THEME.dirtSpeck, WORLD_THEME.sandLight], speed: 0.11, spread: Math.PI, lifeMs: 400, size: 2.2 });
           break;
         case 'build':
           this.particles.burst(e.x, e.y, 3, { color: [0x6ae1ff, 0xffffff], speed: 0.05, lifeMs: 340, size: 1.8, upward: true });
@@ -252,7 +332,7 @@ export class GameScene extends Phaser.Scene {
           this.particles.burst(e.x, e.y - 8, 4, { color: [0xff9ec8, 0xffffff], speed: 0.04, lifeMs: 500, size: 1.5, upward: true, gravity: -0.00005 });
           break;
         case 'land':
-          this.particles.burst(e.x, e.y, 5, { color: [0x9aa6c2, 0x4d9674], speed: 0.05, spread: Math.PI * 0.8, angle: -Math.PI / 2, lifeMs: 280, size: 1.5 });
+          this.particles.burst(e.x, e.y, 5, { color: [WORLD_THEME.steelLight, WORLD_THEME.dirtSpeck], speed: 0.05, spread: Math.PI * 0.8, angle: -Math.PI / 2, lifeMs: 280, size: 1.5 });
           break;
         case 'exit':
           this.particles.burst(e.x, e.y - 6, 14, { color: [0x78ffd6, 0x6ae1ff, 0xffffff], speed: 0.14, lifeMs: 750, size: 2.5, gravity: -0.0002, upward: true });
@@ -342,17 +422,26 @@ export class GameScene extends Phaser.Scene {
       : null;
     const cam = this.cameras.main;
     const scrolls = this.level.width > this.scale.width || this.level.height > this.scale.height;
+    const levelPrefix = this.isLab()
+      ? 'Lab'
+      : this.isPrototype()
+        ? `Prototype ${this.levelIndex + 1}`
+        : `${this.levelIndex + 1}/${LEVEL_COUNT}`;
     return {
       paused: this.paused,
       planning: this.planning,
       speed: this.speed,
       nukeReady: this.sim.state.outcome === 'running' && !this.planning && !this.sim.state.nuking,
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
-      levelName: `${this.isLab() ? 'Lab' : `${this.levelIndex + 1}/${LEVEL_COUNT}`} · ${this.level.name ?? 'LemmingX'}`,
+      levelName: `${levelPrefix} · ${this.level.name ?? 'LemmingX'}`,
       objective: this.level.objective ?? `Save ${this.level.targetSaved} lemmings.`,
       hint: this.level.hint ?? 'Queue roles or reshape the terrain before release.',
-      hasNextLevel: !this.isLab() && this.levelIndex < LEVEL_COUNT - 1,
+      hasNextLevel: !this.isLab() && !this.isPrototype() && this.levelIndex < LEVEL_COUNT - 1,
       brush: this.brush,
+      crewPlacement: this.crewPlacement,
+      worldTool: this.worldTool,
+      canPlaceWorldEntities: this.planning && this.sim.state.spawned === 0,
+      prompt: this.prototypePrompt(),
       hasTerrainTools: this.hasOpenToolbox() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
       minimap: scrolls
         ? {
@@ -364,6 +453,24 @@ export class GameScene extends Phaser.Scene {
           }
         : null,
     };
+  }
+
+  private prototypePrompt(): string | null {
+    if (!this.planning || !this.isPrototype()) return null;
+    if (this.level.playMode?.spawn === 'tray-drop') {
+      if (this.sim.state.spawned === 0) return 'Place your first crew member — drag a coloured role into the world, or select one and click.';
+      const remaining = this.sim.state.totalLemmings - this.sim.state.spawned;
+      return remaining > 0
+        ? `${this.sim.state.spawned} placed · ${remaining} left in the tray. Add more, reshape the terrain, or press Start.`
+        : 'The whole crew is placed. Press Start to bring the scene to life.';
+    }
+    if (this.level.playMode?.worldTools?.length) {
+      if (!this.placedWorldEntities.has('hatch')) return 'Place the hatch — drag it from the World row, or select it and click the map.';
+      if (!this.placedWorldEntities.has('exit')) return 'Now place the exit somewhere the crew can reach.';
+      if (this.sim.state.hatchQueue.length === 0) return 'Choose a crew colour and Queue it, or use Random. Then press Start.';
+      return 'World ready. Add more queued roles, reshape the terrain, or press Start.';
+    }
+    return null;
   }
 
   private titleCase(s: string): string {
@@ -395,11 +502,12 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#12171f');
     this.cameras.main.centerOn(this.level.spawn.x, this.level.spawn.y);
 
-    this.addBackground();
-    this.terrainGraphics = this.add.graphics();
-    this.setpieceGraphics = this.add.graphics();
-    this.actorGraphics = this.add.graphics();
-    this.fxGraphics = this.add.graphics();
+    this.worldBackdrop = new WorldBackdrop(this, this.level.width, this.level.height);
+    this.terrainGraphics = this.add.graphics().setDepth(0);
+    this.lightGraphics = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
+    this.setpieceGraphics = this.add.graphics().setDepth(10);
+    this.actorGraphics = this.add.graphics().setDepth(20);
+    this.fxGraphics = this.add.graphics().setDepth(30);
 
     this.particles.clear();
     this.planning = !this.isLab();
@@ -412,13 +520,18 @@ export class GameScene extends Phaser.Scene {
       !ALL_SKILLS.some((skill) => this.level.skills[skill] > 0) &&
       (this.level.landscape?.fire ?? 0) > 0;
     this.brush = this.isLab() ? 'sand' : terrainOnlyChallenge ? 'fire' : null;
+    this.crewPlacement = null;
+    this.worldTool = null;
+    this.placedWorldEntities.clear();
     this.painting = false;
 
     this.hud?.destroy();
     this.hud = new Hud({
       onSelectSkill: (skill) => {
         this.brush = null;
+        this.worldTool = null;
         this.selectSkill(skill);
+        this.crewPlacement = this.level.playMode?.spawn === 'tray-drop' ? skill : null;
       },
       onStart: () => this.startRun(),
       onEnqueueRelease: () => this.sim.enqueueRelease(this.sim.state.selectedSkill),
@@ -426,6 +539,23 @@ export class GameScene extends Phaser.Scene {
       onPopQueue: () => this.sim.popReleaseQueue(),
       onSelectBrush: (kind) => {
         this.brush = kind;
+        this.crewPlacement = null;
+        this.worldTool = null;
+      },
+      onSelectWorldTool: (kind) => {
+        this.brush = null;
+        this.crewPlacement = null;
+        this.worldTool = kind;
+      },
+      onDropCrew: (skill, clientX, clientY) => {
+        if (!this.isOverGame(clientX, clientY)) return;
+        const point = this.clientToWorld(clientX, clientY);
+        this.placeCrew(point.x, point.y, skill);
+      },
+      onDropWorldTool: (kind, clientX, clientY) => {
+        if (!this.isOverGame(clientX, clientY)) return;
+        const point = this.clientToWorld(clientX, clientY);
+        this.placeWorldEntity(kind, point.x, point.y);
       },
       onNuke: () => this.triggerNuke(),
       onReleaseRate: (delta) => this.sim.changeReleaseRate(delta),
@@ -442,8 +572,10 @@ export class GameScene extends Phaser.Scene {
       onDebugLabelsChange: (enabled) => this.setDebugLabels(enabled),
     }, this.audioSettings, {
       openToolbox: this.hasOpenToolbox(),
-      freePlay: this.isLab(),
+      freePlay: this.isFreePlay(),
       debugLabels: this.uiSettings.debugLabels,
+      spawnMode: this.level.playMode?.spawn,
+      worldTools: this.level.playMode?.worldTools,
     });
     this.hud.update(this.sim.state, this.hudView());
 
@@ -471,7 +603,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Advance to the next level; from the finale, back to the level select. */
   private nextLevel(): void {
-    if (this.isLab() || this.levelIndex + 1 >= LEVEL_COUNT) {
+    if (this.isLab() || this.isPrototype() || this.levelIndex + 1 >= LEVEL_COUNT) {
       this.openLevelSelect();
       return;
     }
@@ -492,6 +624,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.planning || this.sim.state.outcome !== 'running') return;
     this.planning = false;
     this.paused = false;
+    this.worldTool = null;
   }
 
   private togglePause(): void {
@@ -517,7 +650,7 @@ export class GameScene extends Phaser.Scene {
       if (this.selectOpen) return; // the level select owns the keyboard
       const key = event.key.toLowerCase();
 
-      if (key === 'q') {
+      if (key === 'q' && this.level.playMode?.spawn !== 'tray-drop') {
         this.sim.enqueueRelease(this.sim.state.selectedSkill);
         return;
       } else if (key === 'backspace') {
@@ -531,6 +664,8 @@ export class GameScene extends Phaser.Scene {
         const stock = tool.kind === 'bomb' ? 0 : this.sim.state.landscape[tool.kind];
         if (this.hasOpenToolbox() || stock > 0) {
           this.brush = tool.kind;
+          this.crewPlacement = null;
+          this.worldTool = null;
           return;
         }
       }
@@ -539,7 +674,9 @@ export class GameScene extends Phaser.Scene {
       const skill = ALL_SKILLS.find((s) => SKILL_DEFS[s].hotkey === key);
       if (skill) {
         this.brush = null;
+        this.worldTool = null;
         this.selectSkill(skill);
+        this.crewPlacement = this.level.playMode?.spawn === 'tray-drop' ? skill : null;
         return;
       }
       if (key === ' ' || key === 'spacebar') {
@@ -557,8 +694,10 @@ export class GameScene extends Phaser.Scene {
         this.startLevel();
       } else if (key === 'escape' && !this.selectOpen) {
         // First Esc disarms a brush; the next one leaves the level.
-        if (this.brush) {
+        if (this.brush || this.crewPlacement || this.worldTool) {
           this.brush = null;
+          this.crewPlacement = null;
+          this.worldTool = null;
           return;
         }
         this.openLevelSelect();
@@ -590,41 +729,93 @@ export class GameScene extends Phaser.Scene {
     return nearest;
   }
 
-  private addBackground(): void {
-    const sky = this.add.graphics();
-    sky.fillGradientStyle(0x172130, 0x172130, 0x273449, 0x273449, 1);
-    sky.fillRect(0, 0, this.level.width, this.level.height);
-
-    sky.lineStyle(2, 0x314258, 0.35);
-    for (let x = 0; x < this.level.width; x += 48) {
-      sky.lineBetween(x, 0, x - 180, this.level.height);
-    }
-
-    // A soft moon in the upper sky, placed relative to the level so it never
-    // lands on top of terrain in the upper-right corner of a given layout.
-    sky.fillStyle(0x6ae1ff, 0.12);
-    sky.fillCircle(this.level.width * 0.8, this.level.height * 0.16, 74);
-  }
-
   private drawWorld(): void {
     // Terrain cells only when the bitmap changed — traps/hatch/exit animate
     // every frame on their own layer so we don't re-sweep thousands of cells.
     if (this.level.terrain.isDirty()) {
-      this.drawTerrain();
+      this.fireLights = drawTerrainLayer(this.terrainGraphics, this.level.terrain, this.sim.state.timeMs).fireLights;
       this.level.terrain.consumeDirty();
     }
     this.setpieceGraphics.clear();
-    this.drawHatch();
+    if (this.level.playMode?.spawn !== 'tray-drop') {
+      this.drawHatch();
+      const torch = this.torchPosition();
+      drawIndustrialTorch(this.setpieceGraphics, torch.x, torch.y, this.sim.state.timeMs);
+    }
     this.drawExit();
     this.drawHazards();
     this.drawEmitters();
     this.drawTraps();
+    this.drawLighting();
     this.drawEntityLabels();
     this.drawLemmings();
     this.fxGraphics.clear();
     this.particles.draw(this.fxGraphics);
     this.drawBrushCursor();
+    this.drawPlacementCursor();
     if (this.speed > 1 && !this.paused) this.drawFastForwardTint();
+  }
+
+  private torchPosition(): { x: number; y: number } {
+    return { x: this.level.spawn.x + 42, y: this.level.spawn.y - 18 };
+  }
+
+  /** Render-only emissive pools for active materials and powered setpieces. */
+  private drawLighting(): void {
+    const exit = this.level.exit;
+    const sources: WorldLightSource[] = [
+      ...this.fireLights,
+      {
+        x: exit.x + exit.width / 2,
+        y: exit.y + exit.height / 2,
+        color: WORLD_THEME.mint,
+        radius: 54,
+        strength: 0.9,
+      },
+    ];
+
+    if (this.level.playMode?.spawn !== 'tray-drop') {
+      const torch = this.torchPosition();
+      sources.push(
+        { x: this.level.spawn.x, y: this.level.spawn.y - 22, color: WORLD_THEME.sand, radius: 34, strength: 0.45 },
+        { x: torch.x, y: torch.y - 8, color: WORLD_THEME.fire, radius: 42, strength: 0.85 },
+      );
+    }
+
+    for (const hazard of this.level.hazards ?? []) {
+      if (hazard.kind !== 'lava') continue;
+      sources.push({
+        x: hazard.x + hazard.width / 2,
+        y: hazard.y + 8,
+        color: WORLD_THEME.fire,
+        radius: Math.min(76, 28 + hazard.width * 0.28),
+        strength: 0.85,
+      });
+    }
+
+    for (const trap of this.sim.state.traps) {
+      if (trap.def.kind !== 'zapper') continue;
+      sources.push({
+        x: trap.def.x + trap.def.width / 2,
+        y: trap.def.y + trap.def.height / 2,
+        color: WORLD_THEME.cyan,
+        radius: 38,
+        strength: trap.phase === 'killing' ? 1 : 0.42,
+      });
+    }
+
+    for (const emitter of this.sim.state.emitters) {
+      if (emitter.budgetLeft <= 0) continue;
+      sources.push({
+        x: emitter.def.x,
+        y: emitter.def.y - 6,
+        color: emitter.def.material === 'water' ? WORLD_THEME.cyan : WORLD_THEME.sand,
+        radius: 24,
+        strength: 0.32,
+      });
+    }
+
+    drawWorldLights(this.lightGraphics, sources, this.sim.state.timeMs);
   }
 
   /** Tinted ring at the pointer while a terrain brush is armed. */
@@ -639,6 +830,31 @@ export class GameScene extends Phaser.Scene {
     g.fillCircle(pointer.worldX, pointer.worldY, radius);
     g.lineStyle(1.5, tool.color, 0.85);
     g.strokeCircle(pointer.worldX, pointer.worldY, radius);
+  }
+
+  /** World-space preview for click placement; native drag gets the OS drag ghost. */
+  private drawPlacementCursor(): void {
+    if (this.brush || this.selectOpen) return;
+    const pointer = this.input.activePointer;
+    const g = this.fxGraphics;
+    if (this.worldTool) {
+      const color = this.worldTool === 'hatch' ? 0xffd96b : 0x78ffd6;
+      const width = this.worldTool === 'hatch' ? 66 : this.level.exit.width + 16;
+      const height = this.worldTool === 'hatch' ? 38 : this.level.exit.height + 16;
+      g.fillStyle(color, 0.08);
+      g.fillRoundedRect(pointer.worldX - width / 2, pointer.worldY - height / 2, width, height, 6);
+      g.lineStyle(2, color, 0.9);
+      g.strokeRoundedRect(pointer.worldX - width / 2, pointer.worldY - height / 2, width, height, 6);
+      return;
+    }
+    if (this.crewPlacement) {
+      const color = skillPalette(this.crewPlacement).hair;
+      g.fillStyle(color, 0.12);
+      g.fillCircle(pointer.worldX, pointer.worldY, 12);
+      g.lineStyle(2, color, 0.9);
+      g.strokeCircle(pointer.worldX, pointer.worldY, 12);
+      g.lineBetween(pointer.worldX, pointer.worldY - 18, pointer.worldX, pointer.worldY + 18);
+    }
   }
 
   /** Subtle speed lines while fast-forwarding. */
@@ -711,101 +927,35 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private drawTerrain(): void {
-    this.terrainGraphics.clear();
-    // Shade by depth (fraction of level height) so terrain reads with a sense
-    // of "lower = deeper/darker" on any level layout, not just level 1.
-    const h = this.level.height;
-    this.level.terrain.forEachSolidCell((x, y, width, height, material) => {
-      if (material === MATERIAL.steel) {
-        // Riveted gray plate, clearly "not diggable".
-        this.terrainGraphics.fillStyle(0x77819a, 1);
-        this.terrainGraphics.fillRect(x, y, width, height);
-        this.terrainGraphics.fillStyle(0x59617a, 1);
-        this.terrainGraphics.fillRect(x, y + height - 1, width, 1);
-        if ((Math.floor(x / width) + Math.floor(y / height)) % 3 === 0) {
-          this.terrainGraphics.fillStyle(0x9aa6c2, 1);
-          this.terrainGraphics.fillRect(x + 1, y + 1, 1, 1);
-        }
-        return;
-      }
-      if (material === MATERIAL.sand) {
-        const speck = (Math.floor(x / width) + Math.floor(y / height)) % 2 === 0 ? 0xe8c56a : 0xd4a84a;
-        this.terrainGraphics.fillStyle(speck, 1);
-        this.terrainGraphics.fillRect(x, y, width, height);
-        return;
-      }
-      if (material === MATERIAL.wood) {
-        this.terrainGraphics.fillStyle(0xa67c52, 1);
-        this.terrainGraphics.fillRect(x, y, width, height);
-        this.terrainGraphics.fillStyle(0xc4a06a, 1);
-        this.terrainGraphics.fillRect(x, y, width, 1);
-        return;
-      }
-      if (material === MATERIAL.fire) {
-        const flicker = (Math.floor(x / width) + Math.floor(y / height) + Math.floor(this.sim.state.timeMs / 70)) % 3;
-        this.terrainGraphics.fillStyle(flicker === 0 ? 0xffd96b : flicker === 1 ? 0xff7a2d : 0xff3d21, 0.95);
-        this.terrainGraphics.fillRect(x, y, width, height);
-        this.terrainGraphics.fillStyle(0xfff0a8, 0.75);
-        this.terrainGraphics.fillRect(x + 1, y, Math.max(1, width - 2), Math.max(1, height / 2));
-        return;
-      }
-      if (material === MATERIAL.water) {
-        this.terrainGraphics.fillStyle(0x3a9fd8, 0.85);
-        this.terrainGraphics.fillRect(x, y, width, height);
-        this.terrainGraphics.fillStyle(0x8ad4ff, 0.35);
-        this.terrainGraphics.fillRect(x, y, width, Math.max(1, height / 3));
-        return;
-      }
-      const depth = y / h;
-      const shade = depth > 0.85 ? 0x1f5f55 : depth > 0.72 ? 0x297567 : 0x4d9674;
-      this.terrainGraphics.fillStyle(shade, 1);
-      this.terrainGraphics.fillRect(x, y, width, height);
-      if (material === MATERIAL.oneWayLeft || material === MATERIAL.oneWayRight) {
-        // Chevron tint marking the only carve direction.
-        const dir = material === MATERIAL.oneWayRight ? 1 : -1;
-        const cx = x + width / 2;
-        const cy = y + height / 2;
-        this.terrainGraphics.fillStyle(0xffd96b, 0.55);
-        this.terrainGraphics.fillTriangle(
-          cx - dir * (width / 4), y + 1,
-          cx - dir * (width / 4), y + height - 1,
-          cx + dir * (width / 3), cy,
-        );
-      }
-    });
-  }
-
   private drawExit(): void {
     const exit = this.level.exit;
     const g = this.setpieceGraphics;
     const t = this.sim.state.timeMs;
     // Slow shimmer so the goal reads as alive.
     const pulse = 0.75 + Math.sin(t / 420) * 0.2;
-    // Soft outer glow halo.
-    g.fillStyle(0x78ffd6, 0.06 + pulse * 0.05);
-    g.fillCircle(exit.x + exit.width / 2, exit.y + exit.height / 2, 38 + pulse * 6);
-    g.fillStyle(0x111923, 0.92);
+    g.fillStyle(WORLD_THEME.ink, 0.96);
     g.fillRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
-    g.lineStyle(3, 0x78ffd6, pulse);
+    g.lineStyle(3, WORLD_THEME.mint, pulse);
     g.strokeRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
+    g.lineStyle(1, WORLD_THEME.steelLight, 0.45);
+    g.strokeRoundedRect(exit.x - 5, exit.y - 5, exit.width + 10, exit.height + 10, 6);
     // Inner light rays.
-    g.lineStyle(1.5, 0x78ffd6, 0.25 + pulse * 0.2);
+    g.lineStyle(1.5, WORLD_THEME.mint, 0.25 + pulse * 0.2);
     const cx = exit.x + exit.width / 2;
     const cy = exit.y + 10;
     for (let i = 0; i < 5; i += 1) {
       const a = -Math.PI / 2 + (i - 2) * 0.28 + Math.sin(t / 600 + i) * 0.05;
       g.lineBetween(cx, cy, cx + Math.cos(a) * 22, cy + Math.sin(a) * 18);
     }
-    g.fillStyle(0x78ffd6, 0.12 + pulse * 0.14);
+    g.fillStyle(WORLD_THEME.mint, 0.12 + pulse * 0.14);
     g.fillRect(exit.x, exit.y, exit.width, exit.height);
     g.fillStyle(0xeff7ff, 0.92);
     g.fillTriangle(exit.x + 11, exit.y + 34, exit.x + 30, exit.y + 22, exit.x + 11, exit.y + 10);
   }
 
   private drawHatch(): void {
-    const hatchX = this.level.spawn.x - 28;
-    const hatchY = this.level.spawn.y - 34;
+    const hatchX = this.level.spawn.x - 33;
+    const hatchY = this.level.spawn.y - 42;
     const state = this.sim.state;
     const g = this.setpieceGraphics;
     // 0 → shut, 1 → fully open.
@@ -814,25 +964,29 @@ export class GameScene extends Phaser.Scene {
     // Soft warm glow under the hatch while closed / opening.
     if (open < 1) {
       g.fillStyle(0xffd96b, 0.08 + open * 0.1);
-      g.fillCircle(this.level.spawn.x, hatchY + 20, 28);
+      g.fillCircle(this.level.spawn.x, hatchY + 24, 30);
     }
 
-    g.fillStyle(0x101620, 0.96);
-    g.fillRoundedRect(hatchX, hatchY, 58, 30, 5);
-    g.lineStyle(3, 0xffd96b, 1);
-    g.strokeRoundedRect(hatchX, hatchY, 58, 30, 5);
-    g.lineStyle(2, 0xffd96b, 0.55);
-    for (let x = hatchX + 10; x < hatchX + 52; x += 10) {
-      g.lineBetween(x, hatchY + 4, x - 12, hatchY + 26);
+    g.fillStyle(WORLD_THEME.steelDark, 1);
+    g.fillRoundedRect(hatchX - 3, hatchY - 3, 72, 44, 6);
+    g.fillStyle(WORLD_THEME.ink, 0.98);
+    g.fillRoundedRect(hatchX, hatchY, 66, 38, 4);
+    g.lineStyle(3, WORLD_THEME.sandLight, 1);
+    g.strokeRoundedRect(hatchX, hatchY, 66, 38, 4);
+    g.lineStyle(3, WORLD_THEME.sand, 0.72);
+    for (let x = hatchX + 10; x < hatchX + 62; x += 11) {
+      g.lineBetween(x, hatchY + 5, x - 15, hatchY + 33);
     }
+    g.fillStyle(0xff3d21, 0.95);
+    g.fillRect(this.level.spawn.x - 3, hatchY - 7, 6, 4);
 
     // Trapdoor doors slide apart from the centre as the hatch opens.
     const opening = 24;
     const doorWidth = (opening / 2) * (1 - open);
     if (doorWidth > 0.5) {
       g.fillStyle(0xffd96b, 0.95);
-      g.fillRect(this.level.spawn.x - opening / 2, hatchY + 26, doorWidth, 5);
-      g.fillRect(this.level.spawn.x + opening / 2 - doorWidth, hatchY + 26, doorWidth, 5);
+      g.fillRect(this.level.spawn.x - opening / 2, hatchY + 34, doorWidth, 5);
+      g.fillRect(this.level.spawn.x + opening / 2 - doorWidth, hatchY + 34, doorWidth, 5);
     }
     if (open >= 1) {
       // Pulsing drop arrow once open.
@@ -840,11 +994,11 @@ export class GameScene extends Phaser.Scene {
       g.fillStyle(0xffd96b, 0.95);
       g.fillTriangle(
         this.level.spawn.x - 8,
-        hatchY + 30 + bob,
+        hatchY + 39 + bob,
         this.level.spawn.x + 8,
-        hatchY + 30 + bob,
+        hatchY + 39 + bob,
         this.level.spawn.x,
-        hatchY + 44 + bob,
+        hatchY + 51 + bob,
       );
     }
   }

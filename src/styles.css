@@ -6,11 +6,12 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --panel: rgba(13, 17, 23, 0.82);
-  --panel-strong: rgba(9, 12, 17, 0.94);
-  --stroke: rgba(170, 208, 220, 0.24);
+  --panel: rgba(7, 11, 16, 0.88);
+  --panel-strong: rgba(5, 8, 12, 0.96);
+  --stroke: rgba(106, 225, 255, 0.26);
   --accent: #6ae1ff;
-  --mint: #5ef2a1;
+  --mint: #78ffd6;
+  --gold: #ffd96b;
   --danger: #ff5b7f;
 }
 
@@ -29,6 +30,7 @@ body,
 
 body {
   min-width: 320px;
+  background: #080c12;
 }
 
 canvas {
@@ -45,11 +47,16 @@ canvas {
 
 button {
   border: 1px solid var(--stroke);
-  border-radius: 8px;
+  border-radius: 7px;
   color: #eff7ff;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(114, 144, 164, 0.09);
   font: inherit;
   cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgba(106, 225, 255, 0.58);
+  background: rgba(106, 225, 255, 0.12);
 }
 
 button:disabled {
@@ -77,12 +84,12 @@ input:focus-visible {
   display: flex;
   gap: 16px;
   align-items: center;
-  padding: 7px 16px;
-  border: 1px solid var(--stroke);
+  padding: 8px 18px;
+  border: 1px solid rgba(129, 166, 184, 0.36);
   border-radius: 999px;
-  background: var(--panel);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(10px);
+  background: rgba(5, 8, 12, 0.9);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(12px);
   transform: translateX(-50%);
   font-size: 0.86rem;
   white-space: nowrap;
@@ -91,6 +98,7 @@ input:focus-visible {
 .hud__level {
   font-weight: 800;
   color: #fff;
+  letter-spacing: 0.01em;
 }
 
 .hud__stat strong {
@@ -104,7 +112,7 @@ input:focus-visible {
 }
 
 .hud__stat--pct strong {
-  color: #ffd96b;
+  color: var(--gold);
 }
 
 /* ---- Pre-release mission briefing ---- */
@@ -114,10 +122,10 @@ input:focus-visible {
   left: 14px;
   display: grid;
   gap: 8px;
-  width: min(360px, calc(100vw - 28px));
-  padding: 16px;
-  border: 1px solid rgba(106, 225, 255, 0.45);
-  border-radius: 12px;
+  width: min(370px, calc(100vw - 28px));
+  padding: 17px 18px;
+  border: 1px solid rgba(106, 225, 255, 0.58);
+  border-radius: 10px;
   background: var(--panel-strong);
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.38),
@@ -135,7 +143,7 @@ input:focus-visible {
 }
 
 .hud__mission-objective {
-  font-size: 1rem;
+  font-size: 1.05rem;
   line-height: 1.35;
 }
 
@@ -144,6 +152,18 @@ input:focus-visible {
   color: rgba(239, 247, 255, 0.72);
   font-size: 0.84rem;
   line-height: 1.4;
+}
+
+.hud__mission-prompt {
+  margin: 0;
+  padding: 7px 9px;
+  border-left: 3px solid #ffd96b;
+  border-radius: 4px;
+  color: #fff3c2;
+  background: rgba(255, 217, 107, 0.1);
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.35;
 }
 
 .hud__mission-start {
@@ -174,8 +194,9 @@ input:focus-visible {
 
 .hud__queue-chip {
   padding: 2px 8px;
+  border: 1px solid rgba(106, 225, 255, 0.18);
   border-radius: 999px;
-  background: rgba(106, 225, 255, 0.2);
+  background: rgba(106, 225, 255, 0.14);
   color: #c9f4ff;
   font-weight: 700;
 }
@@ -206,7 +227,7 @@ input:focus-visible {
   position: absolute;
   bottom: 14px;
   left: 50%;
-  width: min(900px, calc(100vw - 24px));
+  width: min(1020px, calc(100vw - 28px));
   pointer-events: none;
   transform: translateX(-50%);
 }
@@ -214,18 +235,20 @@ input:focus-visible {
 .hud__bar {
   position: relative;
   width: 100%;
-  padding: 7px 8px 8px;
+  padding: 5px 6px 6px;
   border: 1px solid var(--stroke);
-  border-radius: 12px;
-  background: var(--panel);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.46),
+    0 0 0 1px rgba(255, 255, 255, 0.025) inset;
   pointer-events: auto;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
 }
 
 .hud__panel-content {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
 .hud__window-controls {
@@ -304,9 +327,38 @@ input:focus-visible {
 }
 
 .hud__tools--terrain {
-  padding: 4px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 3px 0;
+  border-top: 1px solid rgba(106, 225, 255, 0.1);
+  border-bottom: 1px solid rgba(106, 225, 255, 0.1);
+}
+
+.hud__tools--world {
+  padding: 2px 0;
+  border-top: 1px solid rgba(255, 217, 107, 0.18);
+  border-bottom: 1px solid rgba(120, 255, 214, 0.14);
+}
+
+.hud__world-tool {
+  min-width: 62px;
+  min-height: 48px;
+}
+
+.hud__world-tool .hud__stock {
+  min-width: 34px;
+  font-size: 0.54rem;
+  letter-spacing: 0.04em;
+}
+
+.hud__tool[data-drag-source='true'] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.hud__tool[data-drag-source='true']:active,
+.hud__tool.is-dragging {
+  cursor: grabbing;
+  border-color: rgba(255, 217, 107, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 217, 107, 0.24) inset;
 }
 
 .hud__bar-label {
@@ -315,16 +367,19 @@ input:focus-visible {
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  opacity: 0.45;
+  color: #9fc7d8;
+  opacity: 0.62;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
 }
 
 .hud__swatch {
-  width: 16px;
-  height: 9px;
-  border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22) inset;
+  width: 20px;
+  height: 11px;
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.24) inset,
+    0 2px 0 rgba(0, 0, 0, 0.28);
 }
 
 .hud__tool {
@@ -337,6 +392,8 @@ input:focus-visible {
   min-width: 52px;
   min-height: 56px;
   padding: 3px 5px 4px;
+  border-color: rgba(129, 166, 184, 0.24);
+  background: rgba(84, 108, 124, 0.08);
   white-space: nowrap;
 }
 
@@ -439,8 +496,10 @@ input:focus-visible {
 
 .hud__tool.is-active {
   border-color: rgba(106, 225, 255, 0.9);
-  background: rgba(106, 225, 255, 0.22);
-  box-shadow: 0 0 0 1px rgba(106, 225, 255, 0.5) inset;
+  background: rgba(31, 103, 127, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(106, 225, 255, 0.48) inset,
+    0 0 16px rgba(106, 225, 255, 0.08);
   animation: tool-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.4);
 }
 
@@ -482,7 +541,8 @@ input:focus-visible {
   padding: 0 4px;
   border-radius: 5px;
   color: #eff7ff;
-  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.1);
   font-size: 0.64rem;
   font-weight: 800;
 }
@@ -562,8 +622,7 @@ input:focus-visible {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(6, 9, 14, 0.78);
-  backdrop-filter: blur(6px);
+  background: #070b11 url('/assets/industrial-cavern-backdrop.png') center / cover no-repeat;
   z-index: 30;
 }
 
@@ -571,9 +630,12 @@ input:focus-visible {
   width: min(640px, calc(100vw - 32px));
   padding: 30px 32px;
   border: 1px solid var(--stroke);
-  border-radius: 16px;
-  background: var(--panel-strong);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  background: rgba(5, 8, 12, 0.94);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.68),
+    0 0 60px rgba(19, 55, 76, 0.28);
+  backdrop-filter: blur(12px);
   text-align: center;
 }
 
@@ -607,6 +669,7 @@ input:focus-visible {
   display: grid;
   gap: 4px;
   padding: 12px 10px;
+  background: rgba(116, 142, 158, 0.08);
   text-align: center;
 }
 
@@ -618,6 +681,11 @@ input:focus-visible {
   border-color: rgba(212, 168, 74, 0.65);
   background: rgba(212, 168, 74, 0.12);
   grid-column: 1 / -1;
+}
+
+.select__card--prototype {
+  border-color: rgba(106, 225, 255, 0.55);
+  background: rgba(54, 106, 126, 0.18);
 }
 
 .select__num {
@@ -666,8 +734,8 @@ input:focus-visible {
   top: 64px;
   right: 14px;
   border: 1px solid var(--stroke);
-  border-radius: 6px;
-  background: rgba(10, 14, 20, 0.85);
+  border-radius: 5px;
+  background: rgba(5, 8, 12, 0.92);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
   pointer-events: auto;
   cursor: crosshair;
@@ -695,7 +763,7 @@ input:focus-visible {
   width: min(420px, calc(100vw - 40px));
   padding: 28px 30px;
   border: 1px solid var(--stroke);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--panel-strong);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
   text-align: center;

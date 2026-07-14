@@ -19,8 +19,9 @@ export function worldEntityLabels(
   level: LevelDefinition,
   state: Pick<SimulationState, 'emitters' | 'traps'>,
 ): WorldEntityLabel[] {
-  const labels: WorldEntityLabel[] = [
-    {
+  const labels: WorldEntityLabel[] = [];
+  if (level.playMode?.spawn !== 'tray-drop') {
+    labels.push({
       key: 'hatch',
       text: 'Hatch · Crew spawn',
       x: level.spawn.x,
@@ -28,17 +29,17 @@ export function worldEntityLabels(
       anchorX: level.spawn.x,
       anchorY: level.spawn.y - 30,
       color: 0xffd96b,
-    },
-    {
-      key: 'exit',
-      text: 'Exit · Save zone',
-      x: level.exit.x + level.exit.width / 2,
-      y: level.exit.y - 18,
-      anchorX: level.exit.x + level.exit.width / 2,
-      anchorY: level.exit.y + 4,
-      color: 0x78ffd6,
-    },
-  ];
+    });
+  }
+  labels.push({
+    key: 'exit',
+    text: 'Exit · Save zone',
+    x: level.exit.x + level.exit.width / 2,
+    y: level.exit.y - 18,
+    anchorX: level.exit.x + level.exit.width / 2,
+    anchorY: level.exit.y + 4,
+    color: 0x78ffd6,
+  });
 
   state.emitters.forEach((emitter, index) => {
     const material = titleCase(emitter.def.material);

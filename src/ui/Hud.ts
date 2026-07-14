@@ -1,10 +1,10 @@
-import type { Lemming, SimulationState, Skill } from '../sim/types';
+import type { CrewSpawnMode, Lemming, SimulationState, Skill, WorldEntityKind } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import { MATERIAL, type Terrain } from '../sim/Terrain';
 import type { AudioSettings } from '../audio/settings';
 import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIdentity';
-import { createElement as createLucideIcon, Hand, Maximize2, Minus, type IconNode } from 'lucide';
+import { createElement as createLucideIcon, DoorOpen, Hand, Maximize2, Minus, Warehouse, type IconNode } from 'lucide';
 
 /** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
 export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'fire' | 'erase' | 'bomb';
@@ -16,10 +16,10 @@ export const TERRAIN_TOOLS: readonly {
   color: number;
   openOnly?: boolean;
 }[] = [
-  { kind: 'water', label: 'Water', hotkey: 'z', color: 0x3a9fd8 },
+  { kind: 'water', label: 'Water', hotkey: 'z', color: 0x247ba4 },
   { kind: 'sand', label: 'Sand', hotkey: 'x', color: 0xd4a84a },
-  { kind: 'dirt', label: 'Dirt', hotkey: 'c', color: 0x4d9674 },
-  { kind: 'wood', label: 'Wood', hotkey: 'v', color: 0xa67c52 },
+  { kind: 'dirt', label: 'Dirt', hotkey: 'c', color: 0x49352a },
+  { kind: 'wood', label: 'Wood', hotkey: 'v', color: 0x7a4c2d },
   { kind: 'fire', label: 'Fire', hotkey: 'g', color: 0xff6a2a },
   { kind: 'erase', label: 'Erase', hotkey: 'b', color: 0x59617a },
   { kind: 'bomb', label: 'Bomb', hotkey: 'm', color: 0xff7a3a, openOnly: true },
@@ -46,6 +46,12 @@ export type HudEvents = {
   onDebugLabelsChange?: (enabled: boolean) => void;
   /** Arm a terrain paint brush (limited charges or open-toolbox infinite). */
   onSelectBrush?: (kind: TerrainBrush) => void;
+  /** Arm a placeable authored entity in a prototype playset. */
+  onSelectWorldTool?: (kind: WorldEntityKind) => void;
+  /** Complete a pointer drag from the crew tray at viewport coordinates. */
+  onDropCrew?: (skill: Skill, clientX: number, clientY: number) => void;
+  /** Complete a pointer drag from the World row at viewport coordinates. */
+  onDropWorldTool?: (kind: WorldEntityKind, clientX: number, clientY: number) => void;
 };
 
 /** Everything the minimap needs to draw one frame, in level coordinates. */
@@ -70,6 +76,14 @@ export interface HudView {
   hasNextLevel: boolean;
   /** Armed terrain brush, or null when assigning skills. */
   brush: TerrainBrush | null;
+  /** Selected role to place from a tray-drop prototype. */
+  crewPlacement: Skill | null;
+  /** Selected authored entity to place in the world. */
+  worldTool: WorldEntityKind | null;
+  /** World entities lock once a prototype run has started. */
+  canPlaceWorldEntities: boolean;
+  /** Contextual planning coach; null for ordinary campaign levels. */
+  prompt: string | null;
   /** Whether this level exposes the terrain toolbar at all. */
   hasTerrainTools: boolean;
   minimap: MinimapData | null;
@@ -87,6 +101,11 @@ const SKILLS = ALL_SKILLS.map((skill) => ({
   hotkey: SKILL_DEFS[skill].hotkey,
   palette: skillPalette(skill),
 }));
+
+const WORLD_TOOLS: Record<WorldEntityKind, { label: string; icon: IconNode; color: string }> = {
+  hatch: { label: 'Hatch', icon: Warehouse, color: '#ffd96b' },
+  exit: { label: 'Exit', icon: DoorOpen, color: '#78ffd6' },
+};
 
 function crewIconMarkup(palette: CrewPalette | null): string {
   const className = palette ? 'hud__crew-icon' : 'hud__crew-icon is-random';
@@ -112,6 +131,7 @@ export class Hud {
   private readonly mission: HTMLElement;
   private readonly missionObjective: HTMLElement;
   private readonly missionHint: HTMLParagraphElement;
+  private readonly missionPrompt: HTMLParagraphElement;
   private readonly dock: HTMLDivElement;
   private readonly dragHandle: HTMLButtonElement;
   private readonly collapseButton: HTMLButtonElement;
@@ -124,6 +144,15 @@ export class Hud {
     anchorX: number;
     anchorY: number;
   } | null = null;
+  private trayDrag: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    button: HTMLButtonElement;
+    onDrop: (clientX: number, clientY: number) => void;
+  } | null = null;
+  private readonly suppressedTrayClicks = new WeakSet<HTMLButtonElement>();
   private readonly skillButtons = new Map<Skill, HTMLButtonElement>();
   private readonly releaseValue: HTMLSpanElement;
   private readonly nukeButton: HTMLButtonElement;
@@ -131,11 +160,17 @@ export class Hud {
   private readonly speedButton: HTMLButtonElement;
   private readonly debugLabelsButton: HTMLButtonElement;
   private readonly randomButton: HTMLButtonElement;
+  private readonly queueButton: HTMLButtonElement;
+  private readonly unqueueButton: HTMLButtonElement;
   private readonly queueBar: HTMLDivElement;
   private readonly terrainButtons = new Map<TerrainBrush, HTMLButtonElement>();
   private readonly terrainBar: HTMLDivElement;
+  private readonly worldButtons = new Map<WorldEntityKind, HTMLButtonElement>();
+  private readonly worldBar: HTMLDivElement;
   private readonly openToolbox: boolean;
   private readonly freePlay: boolean;
+  private readonly spawnMode: CrewSpawnMode;
+  private readonly worldTools: readonly WorldEntityKind[];
   private debugLabels: boolean;
   private readonly overlay: HTMLDivElement;
   private readonly minimap: HTMLCanvasElement;
@@ -146,6 +181,8 @@ export class Hud {
   private readonly audio: AudioSettings;
   private readonly handleDockMouseMove = (e: MouseEvent) => this.moveDock(e);
   private readonly handleDockMouseUp = () => this.endDockDrag();
+  private readonly handleTrayPointerMove = (e: PointerEvent) => this.moveTrayDrag(e);
+  private readonly handleTrayPointerUp = (e: PointerEvent) => this.endTrayDrag(e);
   private readonly handleViewportResize = () => {
     if (this.dockAnchor) this.setDockAnchor(this.dockAnchor.x, this.dockAnchor.y);
   };
@@ -153,11 +190,19 @@ export class Hud {
   constructor(
     events: HudEvents,
     audio?: AudioSettings,
-    opts?: { openToolbox?: boolean; freePlay?: boolean; debugLabels?: boolean },
+    opts?: {
+      openToolbox?: boolean;
+      freePlay?: boolean;
+      debugLabels?: boolean;
+      spawnMode?: CrewSpawnMode;
+      worldTools?: readonly WorldEntityKind[];
+    },
   ) {
     this.events = events;
     this.openToolbox = opts?.openToolbox ?? false;
     this.freePlay = opts?.freePlay ?? false;
+    this.spawnMode = opts?.spawnMode ?? 'automatic-hatch';
+    this.worldTools = opts?.worldTools ?? [];
     this.debugLabels = opts?.debugLabels ?? false;
     this.audio = audio ?? { musicMuted: true, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
@@ -173,10 +218,12 @@ export class Hud {
     this.mission.className = 'hud__mission';
     this.mission.setAttribute('aria-label', 'Level briefing');
     this.mission.innerHTML =
-      '<span class="hud__mission-kicker">Plan before release</span>' +
+      `<span class="hud__mission-kicker">${this.spawnMode === 'tray-drop' ? 'Compose the drop' : this.worldTools.length > 0 ? 'Build before release' : 'Plan before release'}</span>` +
       '<strong class="hud__mission-objective"></strong>' +
+      '<p class="hud__mission-prompt"></p>' +
       '<p class="hud__mission-hint"></p>';
     this.missionObjective = this.mission.querySelector('.hud__mission-objective') as HTMLElement;
+    this.missionPrompt = this.mission.querySelector('.hud__mission-prompt') as HTMLParagraphElement;
     this.missionHint = this.mission.querySelector('.hud__mission-hint') as HTMLParagraphElement;
     const startButton = this.makeButton('Start run', 'Start run (Space)', () => events.onStart?.());
     startButton.className = 'hud__btn hud__primary hud__mission-start';
@@ -198,6 +245,8 @@ export class Hud {
     this.dragHandle.addEventListener('mousedown', (e) => this.beginDockDrag(e));
     window.addEventListener('mousemove', this.handleDockMouseMove);
     window.addEventListener('mouseup', this.handleDockMouseUp);
+    window.addEventListener('pointermove', this.handleTrayPointerMove);
+    window.addEventListener('pointerup', this.handleTrayPointerUp);
     this.dragHandle.addEventListener('keydown', (e) => this.moveDockWithKeyboard(e));
 
     this.collapseButton = this.makeIconButton(Minus, 'Hide controls (H)', () => this.toggleCollapsed());
@@ -215,13 +264,25 @@ export class Hud {
       button.title = `${item.label} (${item.hotkey})`;
       button.setAttribute('aria-label', item.label);
       button.dataset.skill = item.skill;
+      button.dataset.dragSource = String(this.spawnMode === 'tray-drop');
       button.innerHTML =
         `<span class="hud__hotkey">${item.hotkey}</span>` +
         crewIconMarkup(item.palette) +
         `<span class="hud__tool-name">${item.label}</span>` +
         `<span class="hud__stock">0</span>`;
-      button.addEventListener('click', () => events.onSelectSkill(item.skill));
-      button.addEventListener('dblclick', () => events.onEnqueueRelease?.());
+      button.addEventListener('click', (e) => {
+        if (this.consumeSuppressedTrayClick(button)) {
+          e.preventDefault();
+          return;
+        }
+        events.onSelectSkill(item.skill);
+      });
+      if (this.spawnMode === 'automatic-hatch') {
+        button.addEventListener('dblclick', () => events.onEnqueueRelease?.());
+      } else {
+        button.title = `Drag ${item.label} into the world, or click then place (${item.hotkey})`;
+        this.installTrayDrag(button, (clientX, clientY) => events.onDropCrew?.(item.skill, clientX, clientY));
+      }
       tools.append(button);
       this.skillButtons.set(item.skill, button);
     }
@@ -235,13 +296,54 @@ export class Hud {
       '<span class="hud__hotkey">?</span>' + crewIconMarkup(null) +
       '<span class="hud__tool-name">Random</span><span class="hud__stock">↧</span>';
     this.randomButton.addEventListener('click', () => events.onEnqueueRandomRelease?.());
+    this.randomButton.hidden = this.spawnMode === 'tray-drop';
     tools.append(this.randomButton);
 
-    const queueBtn = this.makeButton('⬇ Queue (Q)', 'Add selected skill to hatch queue', () => events.onEnqueueRelease?.());
-    queueBtn.className = 'hud__btn';
-    const unqueueBtn = this.makeButton('⬆', 'Remove last from hatch queue', () => events.onPopQueue?.());
-    unqueueBtn.className = 'hud__btn';
-    tools.append(queueBtn, unqueueBtn);
+    this.queueButton = this.makeButton('⬇ Queue (Q)', 'Add selected skill to hatch queue', () => events.onEnqueueRelease?.());
+    this.queueButton.className = 'hud__btn';
+    this.queueButton.hidden = this.spawnMode === 'tray-drop';
+    this.unqueueButton = this.makeButton('⬆', 'Remove last from hatch queue', () => events.onPopQueue?.());
+    this.unqueueButton.className = 'hud__btn';
+    this.unqueueButton.hidden = this.spawnMode === 'tray-drop';
+    tools.append(this.queueButton, this.unqueueButton);
+
+    // --- Prototype world entities: real authored things, not canvas-only ghosts. ---
+    this.worldBar = document.createElement('div');
+    this.worldBar.className = 'hud__tools hud__tools--world';
+    this.worldBar.hidden = this.worldTools.length === 0;
+    this.worldBar.innerHTML = '<span class="hud__bar-label">World</span>';
+    for (const kind of this.worldTools) {
+      const def = WORLD_TOOLS[kind];
+      const button = document.createElement('button');
+      button.className = 'hud__tool hud__world-tool';
+      button.type = 'button';
+      button.dataset.dragSource = 'true';
+      button.title = `Drag ${def.label} into the world, or click then place`;
+      button.setAttribute('aria-label', def.label);
+      const icon = createLucideIcon(def.icon);
+      icon.setAttribute('width', '20');
+      icon.setAttribute('height', '20');
+      icon.setAttribute('stroke-width', '2');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.style.color = def.color;
+      const label = document.createElement('span');
+      label.className = 'hud__tool-name';
+      label.textContent = def.label;
+      const action = document.createElement('span');
+      action.className = 'hud__stock';
+      action.textContent = 'PLACE';
+      button.append(icon, label, action);
+      button.addEventListener('click', (e) => {
+        if (this.consumeSuppressedTrayClick(button)) {
+          e.preventDefault();
+          return;
+        }
+        events.onSelectWorldTool?.(kind);
+      });
+      this.installTrayDrag(button, (clientX, clientY) => events.onDropWorldTool?.(kind, clientX, clientY));
+      this.worldBar.append(button);
+      this.worldButtons.set(kind, button);
+    }
 
     // --- Terrain toolbar: paint the living world (limited charges / open ∞) ---
     this.terrainBar = document.createElement('div');
@@ -271,6 +373,7 @@ export class Hud {
 
     const release = document.createElement('div');
     release.className = 'hud__release';
+    release.hidden = this.spawnMode === 'tray-drop';
     const minus = this.makeButton('−', 'Slower release rate', () => events.onReleaseRate(-5));
     this.releaseValue = document.createElement('span');
     this.releaseValue.className = 'hud__release-value';
@@ -311,7 +414,7 @@ export class Hud {
     );
     const panelContent = document.createElement('div');
     panelContent.className = 'hud__panel-content';
-    panelContent.append(tools, this.terrainBar, controls);
+    panelContent.append(tools, this.worldBar, this.terrainBar, controls);
     bar.append(panelContent, windowControls);
     dock.append(bar);
     this.dock = dock;
@@ -425,6 +528,53 @@ export class Hud {
     this.dragHandle.classList.remove('is-dragging');
   }
 
+  private installTrayDrag(
+    button: HTMLButtonElement,
+    onDrop: (clientX: number, clientY: number) => void,
+  ): void {
+    button.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || button.disabled) return;
+      this.trayDrag = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false,
+        button,
+        onDrop,
+      };
+      button.setPointerCapture(e.pointerId);
+    });
+  }
+
+  private moveTrayDrag(e: PointerEvent): void {
+    const drag = this.trayDrag;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= 6) {
+      drag.moved = true;
+      drag.button.classList.add('is-dragging');
+    }
+    if (drag.moved) e.preventDefault();
+  }
+
+  private endTrayDrag(e: PointerEvent): void {
+    const drag = this.trayDrag;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    this.trayDrag = null;
+    drag.button.classList.remove('is-dragging');
+    if (drag.button.hasPointerCapture(e.pointerId)) drag.button.releasePointerCapture(e.pointerId);
+    if (!drag.moved) return;
+    this.suppressedTrayClicks.add(drag.button);
+    window.setTimeout(() => this.suppressedTrayClicks.delete(drag.button), 0);
+    drag.onDrop(e.clientX, e.clientY);
+    e.preventDefault();
+  }
+
+  private consumeSuppressedTrayClick(button: HTMLButtonElement): boolean {
+    if (!this.suppressedTrayClicks.has(button)) return false;
+    this.suppressedTrayClicks.delete(button);
+    return true;
+  }
+
   private moveDockWithKeyboard(e: KeyboardEvent): void {
     const directions: Partial<Record<string, { x: number; y: number }>> = {
       ArrowLeft: { x: -1, y: 0 },
@@ -509,11 +659,12 @@ export class Hud {
         tctx.clearRect(0, 0, MINIMAP_WIDTH, height);
         data.terrain.forEachSolidCell((x, y, w, h, material) => {
           tctx.fillStyle =
-            material === MATERIAL.steel ? '#8a93a6' :
+            material === MATERIAL.steel ? '#74808f' :
             material === MATERIAL.sand ? '#d4a84a' :
-            material === MATERIAL.water ? '#3a9fd8' :
+            material === MATERIAL.water ? '#247ba4' :
             material === MATERIAL.fire ? '#ff6a2a' :
-            material === MATERIAL.dirt ? '#4d9674' : '#d9b84d';
+            material === MATERIAL.wood ? '#7a4c2d' :
+            material === MATERIAL.dirt ? '#49352a' : '#9f8a45';
           tctx.fillRect(x * scale, y * scale, Math.max(1, w * scale), Math.max(1, h * scale));
         });
       }
@@ -575,6 +726,7 @@ export class Hud {
       ? `<span class="hud__level">${view.levelName}</span>` +
         '<span class="hud__stat hud__stat--pct"><strong>Free Play</strong></span>' +
         `<span class="hud__stat">Crew <strong>${state.spawned}/${state.totalLemmings}</strong></span>` +
+        `<span class="hud__stat">Saved <strong>${state.saved}</strong></span>` +
         `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>`
       : `<span class="hud__level">${view.levelName}</span>` +
         `<span class="hud__stat hud__stat--pct">Success <strong>${pct}%</strong></span>` +
@@ -586,6 +738,8 @@ export class Hud {
     this.mission.hidden = !view.planning;
     if (view.planning) {
       this.missionObjective.textContent = view.objective;
+      this.missionPrompt.hidden = view.prompt === null;
+      this.missionPrompt.textContent = view.prompt ?? '';
       this.missionHint.textContent = view.hint;
     }
 
@@ -594,13 +748,32 @@ export class Hud {
     const running = state.outcome === 'running';
     for (const [skill, button] of this.skillButtons) {
       const stock = button.querySelector('.hud__stock');
-      if (stock) stock.textContent = this.openToolbox ? '∞' : String(state.skills[skill]);
-      button.classList.toggle('is-active', skill === state.selectedSkill && !view.brush);
-      button.disabled = !running || (!this.openToolbox && state.skills[skill] <= 0);
+      if (stock) {
+        stock.textContent = this.spawnMode === 'tray-drop'
+          ? String(Math.max(0, state.totalLemmings - state.spawned))
+          : this.openToolbox ? '∞' : String(state.skills[skill]);
+      }
+      button.classList.toggle(
+        'is-active',
+        skill === (this.spawnMode === 'tray-drop' ? view.crewPlacement : state.selectedSkill) &&
+          !view.brush &&
+          view.worldTool === null,
+      );
+      button.disabled =
+        !running ||
+        (this.spawnMode === 'tray-drop' && state.spawned >= state.totalLemmings) ||
+        (!this.openToolbox && state.skills[skill] <= 0);
     }
     const releaseSlots = state.totalLemmings - state.spawned - state.hatchQueue.length;
     const hasRandomRole = this.openToolbox || ALL_SKILLS.some((skill) => state.skills[skill] > 0);
     this.randomButton.disabled = !running || releaseSlots <= 0 || !hasRandomRole;
+    this.queueButton.disabled = !running || releaseSlots <= 0;
+    this.unqueueButton.disabled = !running || state.hatchQueue.length === 0;
+
+    for (const [kind, button] of this.worldButtons) {
+      button.classList.toggle('is-active', view.worldTool === kind);
+      button.disabled = !running || !view.canPlaceWorldEntities;
+    }
 
     this.nukeButton.disabled = !view.nukeReady;
     this.pauseButton.classList.toggle('is-active', view.paused && !view.planning);
@@ -612,7 +785,7 @@ export class Hud {
     this.speedButton.classList.toggle('is-active', view.speed > 1);
 
     // Hatch queue strip
-    if (state.hatchQueue.length > 0) {
+    if (this.spawnMode === 'automatic-hatch' && state.hatchQueue.length > 0) {
       this.queueBar.hidden = false;
       this.queueBar.innerHTML =
         '<span class="hud__queue-label">Hatch queue</span>' +
@@ -684,6 +857,8 @@ export class Hud {
     window.removeEventListener('mousemove', this.handleDockMouseMove);
     window.removeEventListener('mouseup', this.handleDockMouseUp);
     window.removeEventListener('resize', this.handleViewportResize);
+    window.removeEventListener('pointermove', this.handleTrayPointerMove);
+    window.removeEventListener('pointerup', this.handleTrayPointerUp);
     this.root.remove();
   }
 }

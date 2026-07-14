@@ -1,4 +1,4 @@
-import { ALL_SKILLS, type Lemming, type LevelDefinition, type SimEvent, type SimEventKind, type SimulationState, type Skill } from './types';
+import { ALL_SKILLS, type Lemming, type LevelDefinition, type SimEvent, type SimEventKind, type SimulationState, type Skill, type WorldEntityKind } from './types';
 import type { SkillContext } from './skills/types';
 import { SKILL_DEFS } from './skills/registry';
 import { MATERIAL, type Material } from './Terrain';
@@ -112,14 +112,16 @@ export class GameSimulation {
       this.state.timeRemainingMs = Math.max(0, this.state.timeRemainingMs - deltaMs);
     }
 
-    // The hatch doors swing open first; lemmings only pour out once they have.
-    if (this.state.hatchOpenMs > 0) {
-      this.state.hatchOpenMs = Math.max(0, this.state.hatchOpenMs - deltaMs);
-    } else {
-      this.spawnTimerMs += deltaMs * (this.state.releaseRate / 50);
-      while (this.state.spawned < this.level.totalLemmings && this.spawnTimerMs >= this.level.spawnIntervalMs) {
-        this.spawnTimerMs -= this.level.spawnIntervalMs;
-        this.spawnLemming();
+    if (this.level.playMode?.spawn !== 'tray-drop') {
+      // The hatch doors swing open first; lemmings only pour out once they have.
+      if (this.state.hatchOpenMs > 0) {
+        this.state.hatchOpenMs = Math.max(0, this.state.hatchOpenMs - deltaMs);
+      } else {
+        this.spawnTimerMs += deltaMs * (this.state.releaseRate / 50);
+        while (this.state.spawned < this.level.totalLemmings && this.spawnTimerMs >= this.level.spawnIntervalMs) {
+          this.spawnTimerMs -= this.level.spawnIntervalMs;
+          this.spawnLemming();
+        }
       }
     }
 
@@ -353,17 +355,17 @@ export class GameSimulation {
     };
   }
 
-  private spawnLemming(): void {
+  private createLemming(x: number, y: number): Lemming {
     const lemming: Lemming = {
       id: this.nextLemmingId,
-      x: this.level.spawn.x,
-      y: this.level.spawn.y,
+      x,
+      y,
       direction: 1,
       velocityY: 0,
       state: 'walker',
       buildSteps: 0,
       actionTimerMs: 0,
-      fallStartY: this.level.spawn.y,
+      fallStartY: y,
       isClimber: false,
       isFloater: false,
       isSwimmer: false,
@@ -373,9 +375,14 @@ export class GameSimulation {
       pendingHatchSkill: null,
     };
     this.state.lemmings.push(lemming);
-    this.emit('spawn', this.level.spawn.x, this.level.spawn.y);
+    this.emit('spawn', x, y);
     this.nextLemmingId += 1;
     this.state.spawned += 1;
+    return lemming;
+  }
+
+  private spawnLemming(): void {
+    const lemming = this.createLemming(this.level.spawn.x, this.level.spawn.y);
 
     // Hatch queue: prepaid skill — apply now if possible, else on first grounded frame.
     const queued = this.state.hatchQueue.shift();
@@ -383,6 +390,51 @@ export class GameSimulation {
       lemming.pendingHatchSkill = queued;
       this.tryApplyPendingHatchSkill(lemming);
     }
+  }
+
+  /**
+   * Place one role directly into the world in a tray-drop level. The role is
+   * treated like a prepaid hatch skill: traits apply immediately and grounded
+   * jobs wait until the placed lemming reaches a surface.
+   */
+  placeLemming(x: number, y: number, skill: Skill): boolean {
+    if (this.level.playMode?.spawn !== 'tray-drop') return false;
+    if (this.state.outcome !== 'running' || this.state.spawned >= this.level.totalLemmings) return false;
+    if (!this.hasOpenToolbox() && this.state.skills[skill] <= 0) return false;
+    if (x < BODY_HALF_WIDTH || x > this.level.width - BODY_HALF_WIDTH) return false;
+    if (y < -HEAD_Y || y > this.level.height - FOOT_Y - 1) return false;
+
+    // Keep the whole body out of solid terrain; water/fire remain valid drop targets.
+    for (let probeY = y + HEAD_Y; probeY <= y + FOOT_Y; probeY += 4) {
+      if (
+        this.level.terrain.isSolidAt(x - BODY_HALF_WIDTH, probeY) ||
+        this.level.terrain.isSolidAt(x, probeY) ||
+        this.level.terrain.isSolidAt(x + BODY_HALF_WIDTH, probeY)
+      ) return false;
+    }
+
+    if (!this.hasOpenToolbox()) this.state.skills[skill] -= 1;
+    const lemming = this.createLemming(x, y);
+    lemming.pendingHatchSkill = skill;
+    this.tryApplyPendingHatchSkill(lemming);
+    return true;
+  }
+
+  /** Move an exposed authored entity during the untouched planning state. */
+  placeWorldEntity(kind: WorldEntityKind, x: number, y: number): boolean {
+    if (!this.level.playMode?.worldTools?.includes(kind)) return false;
+    if (this.state.outcome !== 'running' || this.state.timeMs > 0 || this.state.spawned > 0) return false;
+
+    if (kind === 'hatch') {
+      this.level.spawn.x = Math.max(32, Math.min(this.level.width - 32, x));
+      this.level.spawn.y = Math.max(48, Math.min(this.level.height - FOOT_Y - 2, y));
+      return true;
+    }
+
+    const { width, height } = this.level.exit;
+    this.level.exit.x = Math.max(8, Math.min(this.level.width - width - 8, x - width / 2));
+    this.level.exit.y = Math.max(8, Math.min(this.level.height - height - 8, y - height / 2));
+    return true;
   }
 
   /** Apply a hatch-queued skill once the lemming can accept it (usually grounded). */
@@ -1144,8 +1196,8 @@ export class GameSimulation {
   }
 
   private updateOutcome(): void {
-    // Sand Lab is free-play — no win/lose from quota.
-    if (this.level.sandLab) return;
+    // Sand Lab and prototype playsets are free-play — no win/lose from quota.
+    if (this.level.sandLab || this.level.playMode?.goal === 'free-play') return;
 
     if (this.state.saved >= this.level.targetSaved) {
       this.state.outcome = 'won';

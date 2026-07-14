@@ -113,6 +113,22 @@ export interface EmitterState {
   accumulatorCells: number;
 }
 
+/** How crew enter a level. Existing campaign levels use the automatic hatch. */
+export type CrewSpawnMode = 'automatic-hatch' | 'tray-drop';
+
+/** Whether the run resolves a quota or stays open as an experiment. */
+export type GoalMode = 'rescue' | 'free-play';
+
+/** Authored world entities exposed as placement tools in prototype levels. */
+export type WorldEntityKind = 'hatch' | 'exit';
+
+/** Optional mechanic policy; omitted fields preserve the campaign defaults. */
+export interface LevelPlayMode {
+  spawn?: CrewSpawnMode;
+  goal?: GoalMode;
+  worldTools?: WorldEntityKind[];
+}
+
 export interface LevelDefinition {
   /** Optional human-readable name shown in the HUD / level select. */
   name?: string;
@@ -174,6 +190,8 @@ export interface LevelDefinition {
   openToolbox?: boolean;
   /** Sand Lab free-play arena (no quota pressure; paint tools on). */
   sandLab?: boolean;
+  /** Composable mechanic switches used by experimental levels. */
+  playMode?: LevelPlayMode;
 }
 
 /**

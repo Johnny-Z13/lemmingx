@@ -9,6 +9,8 @@ export interface LevelCard {
   bestSavedPct: number;
   /** Highlight as the free-play Sand Lab. */
   sandLab?: boolean;
+  /** Always-unlocked mechanic experiment outside campaign progression. */
+  prototype?: boolean;
 }
 
 export class LevelSelect {
@@ -22,7 +24,7 @@ export class LevelSelect {
     this.root.innerHTML = `
       <div class="select__panel">
         <h1 class="select__title">LemmingX</h1>
-        <p class="select__sub">Campaign puzzles — or open the Sand Lab and dig freely.</p>
+        <p class="select__sub">Campaign puzzles, two prototype slots, or the free-play Sand Lab.</p>
         <p class="select__build"></p>
         <div class="select__grid"></div>
       </div>`;
@@ -36,13 +38,18 @@ export class LevelSelect {
     for (const card of cards) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'select__card' + (card.sandLab ? ' select__card--lab' : '');
+      button.className =
+        'select__card' +
+        (card.sandLab ? ' select__card--lab' : '') +
+        (card.prototype ? ' select__card--prototype' : '');
       button.disabled = !card.unlocked;
       button.classList.toggle('is-completed', card.completed);
       const status = !card.unlocked
         ? '<span class="select__lock">🔒</span>'
         : card.sandLab
           ? '<span class="select__best select__best--new">FREE PLAY</span>'
+          : card.prototype
+            ? '<span class="select__best select__best--new">PROTOTYPE</span>'
           : card.completed
             ? `<span class="select__best">★ ${card.bestSavedPct}%</span>`
             : '<span class="select__best select__best--new">NEW</span>';

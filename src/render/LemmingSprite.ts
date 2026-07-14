@@ -69,6 +69,11 @@ export function drawLemming(
   const palette = crewPalette(lemming);
   const walkPhase = frame % 4; // 0..3 used for limb cycles
 
+  // A tight render-only contact shadow keeps the tiny crew grounded against
+  // the richer terrain without changing their sim footprint or hit target.
+  g.fillStyle(0x05080d, lemming.state === 'faller' ? 0.18 : 0.42);
+  g.fillEllipse(position.x, position.y + FOOT_OFFSET + 1, lemming.state === 'faller' ? 8 : 14, 3);
+
   // --- Floater parachute (drawn behind the body) ---
   if (lemming.isFloater && lemming.state === 'faller') {
     drawParachute(g, ox, oy, frame);

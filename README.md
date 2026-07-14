@@ -25,15 +25,15 @@ npm run build   # typecheck + production build
 ## Current state
 
 LemmingX is a playable, guarded game rather than a loose prototype: the full
-10-level campaign and Sand Lab ship from the same deterministic headless sim,
+10-level campaign, two mechanic-prototype slots, and Sand Lab ship from the same deterministic headless sim,
 every campaign level has a scripted solvability path, and the rendered shell
 adds procedural sprites, role identity, crowd readability, particles, music,
 and SFX without leaking Phaser or browser state into simulation code.
 
 ## How to play
 
-- **Level select** — 10 campaign levels (progressive landscape intros) plus
-  **Sand Lab**. The current playtest build temporarily unlocks every campaign
+- **Level select** — 10 campaign levels (progressive landscape intros),
+  always-unlocked **Prototype 11/12** slots, plus **Sand Lab**. The current playtest build temporarily unlocks every campaign
   level; sequential progression and best Success % are still saved (localStorage).
 - Meet the **save quota** before the **timer** ends. Live **Success %** is
   `saved / total` (100% = everyone home). Quota can be lower than 100%.
@@ -105,6 +105,20 @@ Always-unlocked Noita-lite sandbox from the level select:
 
 Drag to paint. No quota — dig, flood, bomb, and shepherd the crew for fun.
 
+### Prototype slots
+
+These are deliberately outside campaign progression and quota scoring:
+
+| # | Prototype | Experiment |
+|---|-----------|------------|
+| 11 | Drop Zone | Drag a coloured crew role from the tray into the world, or select and click-place it. Place several while planning, then Start. |
+| 12 | World Kit | Drag/click-place the Hatch and Exit during planning, order the normal hatch queue, then Start. |
+
+The planning card gives short contextual prompts (`Place your first crew member`,
+`Place the hatch`, `Place the exit`, then queue/start) and disappears when the
+run begins. Both slots retain the open terrain toolbox and never overwrite the
+classic automatic-hatch implementation.
+
 ### The Interaction Matrix
 
 Who can do what, where — the heart of the design. 🆕 marks the water-update
@@ -169,7 +183,7 @@ src/
   audio/              Runtime SFX + chiptune + persisted settings
   scenes/GameScene.ts Input, camera, Lab tools, juice
   ui/                 HUD (Success %, queue, landscape) + level select
-  levels/             Campaign factories + Sand Lab
+  levels/             Campaign factories + prototype slots + Sand Lab
   progress.ts         Temporary playtest unlock override + progression + best save-%
 test/                 Vitest: sim, CA, solvability guards
 docs/superpowers/     Design specs (Sand hybrid USP locked)
@@ -197,7 +211,8 @@ CLAUDE.md             Agent-oriented project map
 1. Add `src/levels/levelN.ts` → `createLevelN(): LevelDefinition`
    (`fillRect` / `eraseRect`, spawn, exit, skills, quota, optional `landscape`,
    `sandEmitRatio`, `caSeed`, timer).
-2. Append the factory to `LEVELS` in `src/levels/index.ts`.
+2. Append campaign factories to `LEVELS`; experimental factories belong in
+   `PROTOTYPE_LEVELS` so progression remains a ten-level chain.
 3. Add a solvability script in `test/levels.test.ts`.
 
 ## Future work

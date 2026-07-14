@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../src/sim/GameSimulation';
-import { createLevelAt, LEVEL_COUNT } from '../src/levels';
+import { createLevelAt, LEVEL_COUNT, PROTOTYPE_LEVEL_INDICES, SAND_LAB_INDEX } from '../src/levels';
 import { MATERIAL } from '../src/sim/Terrain';
 
 /**
@@ -54,6 +54,48 @@ function waterCellCount(levelIndex: number): number {
 describe('Level roster', () => {
   it('exposes the expected number of levels', () => {
     expect(LEVEL_COUNT).toBe(10);
+  });
+
+  it('keeps two numbered prototype slots outside campaign progression', () => {
+    expect(PROTOTYPE_LEVEL_INDICES).toEqual([10, 11]);
+    expect(SAND_LAB_INDEX).toBe(12);
+
+    const dropZone = createLevelAt(PROTOTYPE_LEVEL_INDICES[0]);
+    expect(dropZone.name).toBe('Drop Zone');
+    expect(dropZone.playMode).toEqual({ spawn: 'tray-drop', goal: 'free-play' });
+    expect(dropZone.openToolbox).toBe(true);
+
+    const worldKit = createLevelAt(PROTOTYPE_LEVEL_INDICES[1]);
+    expect(worldKit.name).toBe('World Kit');
+    expect(worldKit.playMode).toEqual({
+      spawn: 'automatic-hatch',
+      goal: 'free-play',
+      worldTools: ['hatch', 'exit'],
+    });
+    expect(worldKit.openToolbox).toBe(true);
+  });
+
+  it('prototype 11 accepts direct crew placement without resolving a quota', () => {
+    const sim = new GameSimulation(createLevelAt(PROTOTYPE_LEVEL_INDICES[0]));
+    expect(sim.placeLemming(100, 140, 'floater')).toBe(true);
+    for (let i = 0; i < 500; i += 1) sim.step(STEP_MS);
+
+    expect(sim.state.spawned).toBe(1);
+    expect(sim.state.lemmings[0].isFloater).toBe(true);
+    expect(sim.state.outcome).toBe('running');
+  });
+
+  it('prototype 12 releases the queued role from a moved hatch', () => {
+    const sim = new GameSimulation(createLevelAt(PROTOTYPE_LEVEL_INDICES[1]));
+    expect(sim.placeWorldEntity('hatch', 520, 380)).toBe(true);
+    expect(sim.placeWorldEntity('exit', 870, 220)).toBe(true);
+    expect(sim.enqueueRelease('climber')).toBe(true);
+
+    for (let i = 0; i < 200 && sim.state.spawned === 0; i += 1) sim.step(STEP_MS);
+    const spawn = sim.drainEvents().find((event) => event.kind === 'spawn');
+    expect(spawn).toEqual({ kind: 'spawn', x: 520, y: 380 });
+    expect(sim.state.lemmings[0].isClimber).toBe(true);
+    expect(sim.state.outcome).toBe('running');
   });
 
   it('ships three locked-loadout challenges and player-facing briefings throughout', () => {

@@ -15,7 +15,8 @@ Guidance for AI agents working in this repo.
 Modes:
 
 1. **Campaign** — 10 levels, quota + timer, progressive landscape intros.
-2. **Sand Lab** — free-play paint arena (Noita-lite), always unlocked.
+2. **Prototype 11/12** — always-unlocked mechanic slots outside progression.
+3. **Sand Lab** — free-play paint arena (Noita-lite), always unlocked.
 
 The current presentation layer includes full role uniforms + matching HUD
 icons, render-only crowd fan-out/jitter, a fixed-anchor collapsible control
@@ -64,7 +65,7 @@ src/
   scenes/GameScene.ts   Input, camera, draw, Lab tools, juice
   ui/Hud.ts             Skills, Success %, hatch queue, landscape, overlays
   ui/LevelSelect.ts     Campaign unlocks + Sand Lab
-  levels/               level1…level10 + lab.ts + index.ts
+  levels/               level1…level12 + lab.ts + index.ts
   audio/                Sfx, Music, tracks, settings (music muted by default)
   render/               LemmingSprite, lemmingIdentity, crowdLayout, Particles
   progress.ts           localStorage unlocks + best save-%
@@ -105,6 +106,8 @@ Level 7 signature.
 | 10 | Sandworld Symphony | Full toolkit finale: all charges + dune emitter |
 
 Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
+Prototype slots are indices 10/11 in `PROTOTYPE_LEVEL_INDICES`; the campaign
+count remains 10 and Sand Lab follows at index 12.
 
 ## Important APIs
 
@@ -115,6 +118,11 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
   It uses a separate seed-derived `releaseRng`, so random releases are
   reproducible and cannot perturb sand/water physics. The HUD shows the chosen
   role in `state.hatchQueue` rather than leaving a hidden "random" token.
+- `level.playMode` composes experimental mechanics without deleting campaign
+  paths. Prototype 11 uses `spawn: 'tray-drop'` plus `placeLemming(...)`;
+  Prototype 12 retains `automatic-hatch` and exposes `placeWorldEntity(...)`
+  for Hatch/Exit while the planning state is untouched. Both use
+  `goal: 'free-play'`, and the HUD supplies contextual, non-blocking prompts.
 - `paintLandscape(x, y, r, kind)` — paints `water|sand|dirt|wood|fire|erase`.
   Limited test/custom levels can use `level.landscape` / `state.landscape`;
   shipped levels paint freely through `openToolbox`. UI hotkeys are
@@ -173,6 +181,7 @@ Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
 - `test/crowdLayout.test.ts` — render-only spacing, jitter, and ledge separation
 - `test/particles.test.ts` — transient and persistent fatal-fall feedback
 - `test/levels.test.ts` — one scripted win path per campaign level
+  plus mode/invariant guards for both prototype slots
 - `docs/level-design-review-and-solvability-test-plan.md` — roster diversity,
   water placement rationale, coverage layers, and failure policy
 - After level or dig/bash/CA changes: run `npm test` before claiming done
