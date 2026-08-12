@@ -23,12 +23,13 @@ import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../aud
 import { colorToCss, crewColor, crewLabel, skillPalette } from '../render/lemmingIdentity';
 import { worldEntityLabels } from '../render/entityLabels';
 import { loadUiSettings, saveUiSettings } from '../ui/settings';
-import { ResumeOverlay } from '../ui/ResumeOverlay';
+import { ResumeOverlay, type ResumeReason } from '../ui/ResumeOverlay';
 import { selectCrewTarget } from '../input/crewTargeting';
 import { ContinueOverlay } from '../ui/ContinueOverlay';
 import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
+import { PHONE_PORTRAIT_QUERY, PhoneOrientationGate } from '../lifecycle/PhoneOrientationGate';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -92,13 +93,15 @@ export class GameScene extends Phaser.Scene {
   private lastStampY = 0;
   private resumeOverlay!: ResumeOverlay;
   private continueOverlay?: ContinueOverlay;
+  private phoneOrientationGate?: PhoneOrientationGate;
+  private lifecycleReason: ResumeReason = 'focus';
   private readonly lifecycle = new FocusLifecycle({
     onSuspend: () => {
       this.painting = false;
       this.canvasGesture = null;
       this.simClock.reset();
       this.input.keyboard?.resetKeys();
-      this.resumeOverlay.show();
+      this.resumeOverlay.show(this.lifecycleReason);
     },
     onResume: () => {
       this.unlockAudio();
@@ -107,9 +110,9 @@ export class GameScene extends Phaser.Scene {
     },
   });
   private readonly handleVisibilityChange = () => {
-    if (document.hidden) this.suspendForLifecycle();
+    if (document.hidden) this.suspendForLifecycle('focus');
   };
-  private readonly handleWindowBlur = () => this.suspendForLifecycle();
+  private readonly handleWindowBlur = () => this.suspendForLifecycle('focus');
 
   constructor() {
     super('GameScene');
@@ -122,6 +125,10 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
     if (__PLAYER_BUILD__) {
+      this.phoneOrientationGate = new PhoneOrientationGate(
+        window.matchMedia(PHONE_PORTRAIT_QUERY),
+        () => this.suspendForLifecycle('orientation'),
+      );
       this.continueOverlay = new ContinueOverlay(
         () => this.continueOverlay?.hide(),
         () => {
@@ -252,6 +259,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.openLevelSelect();
     }
+    this.phoneOrientationGate?.start();
   }
 
   /** Show the campaign screen (boot, Esc, or from the win/lose overlay). */
@@ -868,20 +876,25 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private suspendForLifecycle(): void {
+  private suspendForLifecycle(reason: ResumeReason): void {
     this.sfx.suspend();
     this.music.suspend();
     if (this.selectOpen || !this.sim) return;
-    this.lifecycle.suspend();
+    this.lifecycleReason = reason;
+    if (!this.lifecycle.suspend() && reason === 'orientation') {
+      this.resumeOverlay.show(reason);
+    }
   }
 
   private resumeFromLifecycle(): void {
+    if (this.phoneOrientationGate?.isPortrait()) return;
     this.lifecycle.resume();
   }
 
   private cleanupLifecycle(): void {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     window.removeEventListener('blur', this.handleWindowBlur);
+    this.phoneOrientationGate?.stop();
     this.resumeOverlay.destroy();
     this.continueOverlay?.destroy();
   }

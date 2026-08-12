@@ -753,7 +753,7 @@ export class Hud {
         : '';
     this.statusBar.innerHTML = this.playerBuild && !this.freePlay
       ? `<span class="hud__level">${view.levelName}</span>` +
-        `<span class="hud__stat">Saved <strong>${state.saved}/${state.targetSaved}</strong></span>` +
+        `<span class="hud__stat">Quota <strong>${state.saved}/${state.targetSaved}</strong></span>` +
         timer
       : this.freePlay
       ? `<span class="hud__level">${view.levelName}</span>` +
@@ -763,7 +763,7 @@ export class Hud {
         `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>`
       : `<span class="hud__level">${view.levelName}</span>` +
         `<span class="hud__stat hud__stat--pct">Success <strong>${pct}%</strong></span>` +
-        `<span class="hud__stat">Saved <strong>${state.saved}/${state.targetSaved}</strong></span>` +
+        `<span class="hud__stat">Quota <strong>${state.saved}/${state.targetSaved}</strong></span>` +
         `<span class="hud__stat">Out <strong>${state.spawned}/${state.totalLemmings}</strong></span>` +
         `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>` +
         timer;
@@ -872,8 +872,8 @@ export class Hud {
         <p class="hud__panel-pct">${pct}%</p>
         <p class="hud__panel-sub">${won ? 'You met the rescue quota.' : failureReason}</p>
         <div class="hud__panel-stats">
-          <span>Saved <strong>${state.saved}/${state.targetSaved}</strong></span>
-          <span>Home <strong>${state.saved}/${state.totalLemmings}</strong></span>
+          <span>Saved <strong>${state.saved}/${state.totalLemmings}</strong></span>
+          <span>Target <strong>${state.targetSaved}</strong></span>
           <span>Lost <strong>${state.lost}</strong></span>
         </div>
         <div class="hud__panel-actions"></div>

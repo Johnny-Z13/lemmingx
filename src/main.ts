@@ -7,6 +7,8 @@ document.body.classList.toggle('is-player-build', __PLAYER_BUILD__);
 if (__PLAYER_BUILD__) {
   const rotateNotice = document.createElement('div');
   rotateNotice.className = 'rotate-notice';
+  rotateNotice.setAttribute('role', 'status');
+  rotateNotice.setAttribute('aria-live', 'polite');
   rotateNotice.innerHTML = '<strong>Rotate to play</strong><span>LemmingX is designed for landscape.</span>';
   document.body.append(rotateNotice);
 }
