@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "proofOnly": true,
+  "releaseCleared": false,
+  "branch": "main",
+  "commit": "9be8a7ef0565da70828b2a46aaab10198122d72b",
+  "dirty": true,
+  "excludedUserWork": [
+    ".gitignore",
+    ".artifacts/",
+    "design-qa.md"
+  ],
+  "fileCount": 5,
+  "uncompressedBytes": 2969225,
+  "artifactSha256": "cc07a5ce5db4f6f2de6efe791dd5e7223552070a61f498bfb1f07c2fb9e85fa8",
+  "unresolvedProvenance": [
+    {
+      "id": "industrial-cavern-backdrop",
+      "approvalState": "prototype-only"
+    },
+    {
+      "id": "procedural-crew-renderer",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "procedural-terrain-renderer",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "procedural-world-backdrop",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "procedural-world-lights",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "procedural-particles",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "visual-theme-and-identity",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "procedural-sfx",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "procedural-music",
+      "approvalState": "rights-review"
+    },
+    {
+      "id": "lucide-ui-icons",
+      "approvalState": "rights-review"
+    }
+  ],
+  "checks": "pass"
+}

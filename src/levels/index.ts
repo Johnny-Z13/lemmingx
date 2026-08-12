@@ -33,7 +33,9 @@ export const LEVELS: ReadonlyArray<() => LevelDefinition> = [
 export const LEVEL_COUNT = LEVELS.length;
 
 /** Always-unlocked mechanic experiments; deliberately outside campaign progression. */
-export const PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> = [createLevel11, createLevel12];
+export const PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> = __PLAYER_BUILD__
+  ? []
+  : [createLevel11, createLevel12];
 export const PROTOTYPE_START_INDEX = LEVEL_COUNT;
 export const PROTOTYPE_LEVEL_INDICES = PROTOTYPE_LEVELS.map((_, offset) => PROTOTYPE_START_INDEX + offset);
 
@@ -52,4 +54,4 @@ export function createLevelAt(index: number): LevelDefinition {
   return { ...level, openToolbox: level.openToolbox ?? true };
 }
 
-export { createLabLevel, createLevel11, createLevel12 };
+export { createLabLevel };

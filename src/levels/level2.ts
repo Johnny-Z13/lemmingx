@@ -2,28 +2,26 @@ import { MATERIAL, Terrain } from '../sim/Terrain';
 import type { LevelDefinition } from '../sim/types';
 
 /**
- * Level 2 — "The Deep End".
- * A deep, steel-bottomed pool blocks the only route. This is a challenge-loadout
- * stage: every rescue must be given the Swimmer trait before or during its tread.
- *
- * Intended solution: queue swimmers before release, or click treaders in the pool.
+ * Level 2 — "Float the Way".
+ * Water is the only active tool. Pour across the marked catch while the hatch
+ * is closed, let the timber rise into a bridge, then explicitly start the run.
  */
 export function createLevel2(): LevelDefinition {
   const terrain = new Terrain(960, 540, 6);
 
-  // Banks sit flush with a 90px-deep pool so swimmers can climb out either side.
-  terrain.fillRect(0, 430, 380, 110);
-  terrain.fillRect(560, 430, 400, 110);
-  terrain.fillRect(380, 520, 180, 20, MATERIAL.steel);
-  terrain.fillRect(380, 430, 180, 90, MATERIAL.water);
+  terrain.fillRect(0, 430, 618, 110);
+  terrain.fillRect(726, 430, 234, 110);
+  terrain.fillRect(618, 480, 108, 60, MATERIAL.steel);
+  terrain.fillRect(612, 430, 6, 50, MATERIAL.steel);
+  terrain.fillRect(624, 462, 96, 18, MATERIAL.wood);
 
   return {
-    name: 'The Deep End',
-    objective: 'Give at least 6 lemmings the Swimmer trait and cross the deep pool.',
-    hint: 'This is a locked loadout: queue Swimmers before release or rescue treaders mid-pool.',
+    name: 'Float the Way',
+    objective: 'Pour water into the marked channel to lift the timber crossing.',
+    hint: 'Drag Water across the channel, then press Start.',
     width: 960,
     height: 540,
-    spawn: { x: 80, y: 406 },
+    spawn: { x: 400, y: 410 },
     exit: { x: 880, y: 386, width: 40, height: 44 },
     spawnIntervalMs: 900,
     totalLemmings: 10,
@@ -34,6 +32,7 @@ export function createLevel2(): LevelDefinition {
     timeLimitMs: 240000,
     caSeed: 22,
     openToolbox: false,
+    landscape: { water: 8 },
     skills: {
       climber: 0,
       floater: 0,
@@ -43,7 +42,7 @@ export function createLevel2(): LevelDefinition {
       basher: 0,
       miner: 0,
       digger: 0,
-      swimmer: 10,
+      swimmer: 0,
     },
     terrain,
   };

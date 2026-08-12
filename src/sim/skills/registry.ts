@@ -62,9 +62,9 @@ export const SKILL_DEFS: Record<Skill, SkillDef> = {
     label: 'Blocker',
     icon: 'K',
     hotkey: '4',
-    canAssign: (l, ctx) => canAssignGroundedJob(l, ctx),
+    canAssign: (l, ctx) => l.state === 'blocker' || canAssignGroundedJob(l, ctx),
     onAssign: (l) => {
-      l.state = 'blocker';
+      l.state = l.state === 'blocker' ? 'walker' : 'blocker';
       l.velocityY = 0;
       l.actionTimerMs = 0;
     },

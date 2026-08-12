@@ -57,6 +57,15 @@ export class Music {
     }
   }
 
+  /** Suspend playback and its lookahead scheduler until the next user gesture. */
+  suspend(): void {
+    if (this.timer !== null) {
+      window.clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (this.ctx?.state === 'running') void this.ctx.suspend();
+  }
+
   /** Select a track (wrapping) and restart it from the top. */
   play(trackIndex: number): void {
     this.track = TRACKS[((trackIndex % TRACKS.length) + TRACKS.length) % TRACKS.length];

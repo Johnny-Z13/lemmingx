@@ -100,6 +100,8 @@ export interface TrapState {
  */
 export interface EmitterDefinition extends Point {
   material: 'sand' | 'water';
+  /** Optional sim event that arms the spout; omitted emitters start active. */
+  trigger?: 'bash';
   /** Whole cells emitted per second while the spout cell is empty. */
   cellsPerSecond: number;
   /** Total cells this emitter may produce; it goes quiet at 0. */
@@ -108,6 +110,7 @@ export interface EmitterDefinition extends Point {
 
 export interface EmitterState {
   def: EmitterDefinition;
+  active: boolean;
   budgetLeft: number;
   /** Fractional cells accrued toward the next emission. */
   accumulatorCells: number;
@@ -127,6 +130,14 @@ export interface LevelPlayMode {
   spawn?: CrewSpawnMode;
   goal?: GoalMode;
   worldTools?: WorldEntityKind[];
+}
+
+/** Optional authored hotspot for a level-specific precision lesson. */
+export interface SkillAssignmentBounds {
+  minX: number;
+  maxX: number;
+  minY?: number;
+  maxY?: number;
 }
 
 export interface LevelDefinition {
@@ -156,6 +167,8 @@ export interface LevelDefinition {
   maxReleaseRate: number;
   targetSaved: number;
   skills: SkillInventory;
+  /** Bounds that keep a limited lesson charge from being spent meaninglessly. */
+  skillAssignmentBounds?: Partial<Record<Skill, SkillAssignmentBounds>>;
   /** Optional level time limit in ms. Omit/0 for no limit. */
   timeLimitMs?: number;
   /**

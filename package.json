@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
+    "build:crazygames": "tsc && vite build --mode crazygames",
+    "verify:crazygames": "node scripts/verify-crazygames-build.mjs",
+    "proof:deterministic": "vite-node scripts/capture-deterministic-proof.ts",
     "test": "vitest run",
     "test:run": "vitest run"
   },

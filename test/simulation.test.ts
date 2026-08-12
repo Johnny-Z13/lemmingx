@@ -303,6 +303,23 @@ describe('GameSimulation', () => {
     expect(sim.state.outcome).toBe('won');
   });
 
+  it('keeps a quota-qualified campaign run open until every crew member is accounted for', () => {
+    const sim = new GameSimulation(
+      makeFlatLevel({ totalLemmings: 2, targetSaved: 1, spawnIntervalMs: 1200 }),
+    );
+
+    for (let i = 0; i < 900 && sim.state.saved === 0; i += 1) sim.step(16);
+
+    expect(sim.state.saved).toBe(1);
+    expect(sim.state.outcome).toBe('running');
+
+    for (let i = 0; i < 900 && sim.state.outcome === 'running'; i += 1) sim.step(16);
+
+    expect(sim.state.saved).toBe(2);
+    expect(sim.state.lost).toBe(0);
+    expect(sim.state.outcome).toBe('won');
+  });
+
   it('blockers reverse walkers that run into them', () => {
     const level = makeFlatLevel({ totalLemmings: 2, targetSaved: 2 });
     const sim = new GameSimulation(level);
@@ -323,6 +340,18 @@ describe('GameSimulation', () => {
 
     expect(first.state).toBe('blocker');
     expect(reversed).toBe(true);
+  });
+
+  it('reassigning Blocker releases the same crew member without consuming stock', () => {
+    const sim = new GameSimulation(makeFlatLevel({ exit: { x: 200, y: 0, width: 1, height: 1 } }));
+    sim.step(120);
+    const lemming = sim.state.lemmings[0];
+    expect(sim.assignSkill(lemming.id, 'blocker')).toBe(true);
+    expect(lemming.state).toBe('blocker');
+    const stockAfterPlanting = sim.state.skills.blocker;
+    expect(sim.assignSkill(lemming.id, 'blocker')).toBe(true);
+    expect(lemming.state).toBe('walker');
+    expect(sim.state.skills.blocker).toBe(stockAfterPlanting);
   });
 
   it('diggers carve the terrain below themselves', () => {

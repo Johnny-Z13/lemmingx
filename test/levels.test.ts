@@ -51,6 +51,22 @@ function waterCellCount(levelIndex: number): number {
   return count;
 }
 
+function materialCellCount(sim: GameSimulation, material: number): number {
+  let count = 0;
+  sim.level.terrain.forEachSolidCell((_x, _y, _width, _height, cellMaterial) => {
+    if (cellMaterial === material) count += 1;
+  });
+  return count;
+}
+
+function minimumMaterialY(sim: GameSimulation, material: number): number {
+  let minY = Number.POSITIVE_INFINITY;
+  sim.level.terrain.forEachSolidCell((_x, y, _width, _height, cellMaterial) => {
+    if (cellMaterial === material) minY = Math.min(minY, y);
+  });
+  return minY;
+}
+
 describe('Level roster', () => {
   it('exposes the expected number of levels', () => {
     expect(LEVEL_COUNT).toBe(10);
@@ -98,8 +114,8 @@ describe('Level roster', () => {
     expect(sim.state.outcome).toBe('running');
   });
 
-  it('ships three locked-loadout challenges and player-facing briefings throughout', () => {
-    const lockedLoadouts = new Set([1, 6, 8]);
+  it('ships focused locked-loadout challenges and player-facing briefings throughout', () => {
+    const lockedLoadouts = new Set([0, 1, 2, 6, 8]);
     for (let index = 0; index < LEVEL_COUNT; index += 1) {
       const level = createLevelAt(index);
       expect(level.openToolbox).toBe(!lockedLoadouts.has(index));
@@ -127,11 +143,12 @@ describe('Level roster', () => {
     }
   });
 
-  it('authors substantial water bodies into at least half of the campaign', () => {
+  it('authors substantial water play into at least half of the campaign', () => {
     const waterLevels = Array.from({ length: LEVEL_COUNT }, (_, index) => ({
       index,
       cells: waterCellCount(index),
-    })).filter(({ cells }) => cells >= 50);
+      paintCharges: createLevelAt(index).landscape?.water ?? 0,
+    })).filter(({ cells, paintCharges }) => cells >= 50 || paintCharges > 0);
     expect(waterLevels.map(({ index }) => index)).toEqual(expect.arrayContaining([1, 3, 5, 6, 9]));
     expect(waterLevels.length).toBeGreaterThanOrEqual(Math.ceil(LEVEL_COUNT / 2));
   });
@@ -140,7 +157,7 @@ describe('Level roster', () => {
     let bashed = false;
     const sim = run(0, (s) => {
       for (const l of s.state.lemmings) {
-        if (!bashed && l.state === 'walker' && l.direction === 1 && l.x > 544 && l.x < 556) {
+        if (!bashed && l.state === 'walker' && l.direction === 1 && l.x > 484 && l.x < 498) {
           bashed = s.assignSkill(l.id, 'basher');
         }
       }
@@ -148,17 +165,71 @@ describe('Level roster', () => {
     expectWon(sim);
   });
 
-  solvabilityIt(1, 'The Deep End', 'swimmers cross the deep pool', () => {
-    const sim = run(1, (s) => {
-      for (const l of s.state.lemmings) {
-        if (!l.isSwimmer && l.state !== 'dead' && l.state !== 'exited') s.assignSkill(l.id, 'swimmer');
+  it('level 1 accepts one early Basher order and executes it only at the dam hotspot', () => {
+    const sim = new GameSimulation(createLevelAt(0));
+    while (!sim.state.lemmings.some((lemming) => lemming.state === 'walker')) sim.step(STEP_MS);
+    const earlyWalker = sim.state.lemmings.find((lemming) => lemming.state === 'walker');
+    expect(earlyWalker).toBeDefined();
+    expect(sim.assignSkill(earlyWalker!.id, 'basher')).toBe(true);
+    expect(earlyWalker!.pendingHatchSkill).toBe('basher');
+    expect(sim.state.skills.basher).toBe(0);
+    expect(sim.state.emitters.every(({ active }) => !active)).toBe(true);
+
+    for (let step = 0; step < 1000 && earlyWalker!.pendingHatchSkill !== null; step += 1) {
+      sim.step(STEP_MS);
+    }
+    expect(earlyWalker!.pendingHatchSkill).toBeNull();
+    expect(earlyWalker!.state).toBe('basher');
+    expect(sim.state.emitters.every(({ active }) => active)).toBe(true);
+  });
+
+  it('level 1 completes the breach, sand, water, wood, and crossing chain within 10 seconds', () => {
+    const sim = new GameSimulation(createLevelAt(0));
+    let assignedAt: number | null = null;
+    let sandAt: number | null = null;
+    let waterAt: number | null = null;
+    let woodAt: number | null = null;
+    let crossingAt: number | null = null;
+
+    for (let step = 0; step < 1400; step += 1) {
+      sim.step(STEP_MS);
+      if (assignedAt === null) {
+        const lead = sim.state.lemmings.find(
+          (lemming) => lemming.state === 'walker' && lemming.direction === 1 && lemming.x > 484 && lemming.x < 498,
+        );
+        if (lead && sim.assignSkill(lead.id, 'basher')) assignedAt = sim.state.timeMs;
+      }
+      if (assignedAt !== null) {
+        const elapsed = sim.state.timeMs - assignedAt;
+        if (sandAt === null && materialCellCount(sim, MATERIAL.sand) > 0) sandAt = elapsed;
+        if (waterAt === null && sim.state.emitters.some((emitter) => emitter.def.material === 'water' && emitter.budgetLeft < emitter.def.budget)) waterAt = elapsed;
+        if (woodAt === null && minimumMaterialY(sim, MATERIAL.wood) <= 444) woodAt = elapsed;
+        if (crossingAt === null && sim.state.lemmings.some((lemming) => lemming.x >= 726 && lemming.state !== 'dead')) crossingAt = elapsed;
+        if (elapsed >= 10000) break;
+      }
+    }
+
+    expect(assignedAt).not.toBeNull();
+    expect(sandAt).not.toBeNull();
+    expect(waterAt).not.toBeNull();
+    expect(woodAt).not.toBeNull();
+    expect(crossingAt).not.toBeNull();
+    expect(Math.max(sandAt!, waterAt!, woodAt!, crossingAt!)).toBeLessThanOrEqual(10000);
+    expect(waterAt!).toBeLessThanOrEqual(woodAt!);
+    expect(woodAt!).toBeLessThanOrEqual(crossingAt!);
+  });
+
+  solvabilityIt(1, 'Float the Way', 'a marked water stroke lifts the timber bridge', () => {
+    const sim = run(1, () => {}, (s) => {
+      for (const x of [624, 638, 652, 666, 680, 694, 708, 720]) {
+        expect(s.paintLandscape(x, 390, 16, 'water')).toBe(true);
       }
     });
     expectWon(sim);
-    expect(sim.state.lemmings.filter((l) => l.state === 'exited').every((l) => l.isSwimmer)).toBe(true);
+    expect(sim.state.lost).toBe(0);
   });
 
-  it('level 2 (The Deep End) — cannot meet quota without swimmers', () => {
+  it('level 2 (Float the Way) — cannot meet quota without lifting the bridge', () => {
     const sim = run(1, () => {});
     expect(sim.state.outcome).toBe('lost');
     expect(sim.state.saved).toBeLessThan(sim.level.targetSaved);
@@ -182,13 +253,29 @@ describe('Level roster', () => {
 
   it('level 3 (Hold the Line) — sand charges ramp the wall, no lives spent', () => {
     let poured = 0;
+    let blockerId: number | null = null;
+    let blockedAt = 0;
+    let released = false;
     const sim = run(2, (s) => {
-      if (poured < 3 && s.state.timeMs > 1200 + poured * 400) {
+      if (blockerId === null) {
+        const walker = s.state.lemmings.find(
+          (lemming) => lemming.state === 'walker' && lemming.direction === 1 && lemming.x > 520 && lemming.x < 530,
+        );
+        if (walker && s.assignSkill(walker.id, 'blocker')) {
+          blockerId = walker.id;
+          blockedAt = s.state.timeMs;
+        }
+      }
+      if (blockerId !== null && poured < 3 && s.state.timeMs > blockedAt + 200 + poured * 400) {
         if (s.paintLandscape(564, 392, 16, 'sand')) poured += 1;
+      }
+      if (blockerId !== null && poured === 3 && !released && s.state.timeMs > blockedAt + 1800) {
+        released = s.assignSkill(blockerId, 'blocker');
       }
     });
     expectWon(sim);
     expect(sim.state.lost).toBe(0);
+    expect(released).toBe(true);
   });
 
   solvabilityIt(3, 'The Long March', 'bash all three walls and wade the marsh', () => {

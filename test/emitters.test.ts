@@ -50,6 +50,47 @@ function countMaterial(terrain: Terrain, material: number): number {
 }
 
 describe('material emitters', () => {
+  it('keeps a bash-triggered spout dormant until a Basher is assigned', () => {
+    const terrain = new Terrain(160, 120, 4);
+    terrain.fillRect(0, 80, 160, 40);
+    terrain.fillRect(52, 48, 16, 32);
+    const emitter: EmitterDefinition = {
+      x: 100,
+      y: 20,
+      material: 'water',
+      cellsPerSecond: 20,
+      budget: 5,
+      trigger: 'bash',
+    };
+    const sim = new GameSimulation(makeLevel(terrain, {
+      sandLab: false,
+      totalLemmings: 1,
+      targetSaved: 1,
+      spawn: { x: 40, y: 64 },
+      spawnIntervalMs: 1,
+      skills: {
+        climber: 0,
+        floater: 0,
+        bomber: 0,
+        blocker: 0,
+        builder: 0,
+        basher: 1,
+        miner: 0,
+        digger: 0,
+        swimmer: 0,
+      },
+      emitters: [emitter],
+    }));
+
+    for (let s = 0; s < 20; s += 1) sim.step(16);
+    expect(sim.state.emitters[0]).toMatchObject({ active: false, budgetLeft: 5 });
+    expect(sim.assignSkill(sim.state.lemmings[0].id, 'basher')).toBe(true);
+    for (let s = 0; s < 100; s += 1) sim.step(16);
+
+    expect(sim.state.emitters[0].active).toBe(true);
+    expect(sim.state.emitters[0].budgetLeft).toBeLessThan(5);
+  });
+
   it('pours sand until the budget is exhausted', () => {
     const terrain = new Terrain(120, 120, 4);
     terrain.fillRect(0, 100, 120, 20); // floor

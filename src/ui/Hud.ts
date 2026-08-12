@@ -86,6 +86,8 @@ export interface HudView {
   prompt: string | null;
   /** Whether this level exposes the terrain toolbar at all. */
   hasTerrainTools: boolean;
+  /** Short live-play onboarding cue; null once the taught action succeeds. */
+  actionCue: string | null;
   minimap: MinimapData | null;
 }
 
@@ -132,6 +134,7 @@ export class Hud {
   private readonly missionObjective: HTMLElement;
   private readonly missionHint: HTMLParagraphElement;
   private readonly missionPrompt: HTMLParagraphElement;
+  private readonly actionCue: HTMLDivElement;
   private readonly dock: HTMLDivElement;
   private readonly dragHandle: HTMLButtonElement;
   private readonly collapseButton: HTMLButtonElement;
@@ -158,7 +161,7 @@ export class Hud {
   private readonly nukeButton: HTMLButtonElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly speedButton: HTMLButtonElement;
-  private readonly debugLabelsButton: HTMLButtonElement;
+  private readonly debugLabelsButton?: HTMLButtonElement;
   private readonly randomButton: HTMLButtonElement;
   private readonly queueButton: HTMLButtonElement;
   private readonly unqueueButton: HTMLButtonElement;
@@ -171,6 +174,7 @@ export class Hud {
   private readonly freePlay: boolean;
   private readonly spawnMode: CrewSpawnMode;
   private readonly worldTools: readonly WorldEntityKind[];
+  private readonly playerBuild: boolean;
   private debugLabels: boolean;
   private readonly overlay: HTMLDivElement;
   private readonly minimap: HTMLCanvasElement;
@@ -194,8 +198,13 @@ export class Hud {
       openToolbox?: boolean;
       freePlay?: boolean;
       debugLabels?: boolean;
+      allowDebugLabels?: boolean;
       spawnMode?: CrewSpawnMode;
       worldTools?: readonly WorldEntityKind[];
+      playerBuild?: boolean;
+      availableSkills?: readonly Skill[];
+      availableTerrainTools?: readonly TerrainBrush[];
+      showRestart?: boolean;
     },
   ) {
     this.events = events;
@@ -203,10 +212,11 @@ export class Hud {
     this.freePlay = opts?.freePlay ?? false;
     this.spawnMode = opts?.spawnMode ?? 'automatic-hatch';
     this.worldTools = opts?.worldTools ?? [];
+    this.playerBuild = opts?.playerBuild ?? false;
     this.debugLabels = opts?.debugLabels ?? false;
     this.audio = audio ?? { musicMuted: true, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
-    this.root.className = 'hud';
+    this.root.className = this.playerBuild ? 'hud hud--player' : 'hud';
 
     // --- Top status bar: level name + live counters + timer ---
     this.statusBar = document.createElement('div');
@@ -229,6 +239,13 @@ export class Hud {
     startButton.className = 'hud__btn hud__primary hud__mission-start';
     this.mission.append(startButton);
     this.root.append(this.mission);
+
+    this.actionCue = document.createElement('div');
+    this.actionCue.className = 'hud__action-cue';
+    this.actionCue.setAttribute('role', 'status');
+    this.actionCue.setAttribute('aria-live', 'polite');
+    this.actionCue.hidden = true;
+    this.root.append(this.actionCue);
 
     // --- Bottom control dock ---
     const dock = document.createElement('div');
@@ -253,11 +270,15 @@ export class Hud {
     this.collapseButton.className = 'hud__btn hud__collapse';
     this.collapseButton.setAttribute('aria-expanded', 'true');
     windowControls.append(this.dragHandle, this.collapseButton);
+    windowControls.hidden = this.playerBuild;
 
     const tools = document.createElement('div');
     tools.className = 'hud__tools hud__tools--crew';
     tools.innerHTML = '<span class="hud__bar-label">Crew</span>';
-    for (const item of SKILLS) {
+    const availableSkills = opts?.availableSkills ?? ALL_SKILLS;
+    for (const skill of availableSkills) {
+      const item = SKILLS.find((candidate) => candidate.skill === skill);
+      if (!item) continue;
       const button = document.createElement('button');
       button.className = 'hud__tool';
       button.type = 'button';
@@ -296,15 +317,15 @@ export class Hud {
       '<span class="hud__hotkey">?</span>' + crewIconMarkup(null) +
       '<span class="hud__tool-name">Random</span><span class="hud__stock">↧</span>';
     this.randomButton.addEventListener('click', () => events.onEnqueueRandomRelease?.());
-    this.randomButton.hidden = this.spawnMode === 'tray-drop';
+    this.randomButton.hidden = this.playerBuild || this.spawnMode === 'tray-drop';
     tools.append(this.randomButton);
 
     this.queueButton = this.makeButton('⬇ Queue (Q)', 'Add selected skill to hatch queue', () => events.onEnqueueRelease?.());
     this.queueButton.className = 'hud__btn';
-    this.queueButton.hidden = this.spawnMode === 'tray-drop';
+    this.queueButton.hidden = this.playerBuild || this.spawnMode === 'tray-drop';
     this.unqueueButton = this.makeButton('⬆', 'Remove last from hatch queue', () => events.onPopQueue?.());
     this.unqueueButton.className = 'hud__btn';
-    this.unqueueButton.hidden = this.spawnMode === 'tray-drop';
+    this.unqueueButton.hidden = this.playerBuild || this.spawnMode === 'tray-drop';
     tools.append(this.queueButton, this.unqueueButton);
 
     // --- Prototype world entities: real authored things, not canvas-only ghosts. ---
@@ -349,7 +370,9 @@ export class Hud {
     this.terrainBar = document.createElement('div');
     this.terrainBar.className = 'hud__tools hud__tools--terrain';
     this.terrainBar.innerHTML = '<span class="hud__bar-label">Terrain</span>';
+    const availableTerrainTools = opts?.availableTerrainTools ?? TERRAIN_TOOLS.map(({ kind }) => kind);
     for (const tool of TERRAIN_TOOLS) {
+      if (!availableTerrainTools.includes(tool.kind)) continue;
       if (tool.openOnly && !this.openToolbox) continue;
       const button = document.createElement('button');
       button.className = 'hud__tool';
@@ -373,7 +396,7 @@ export class Hud {
 
     const release = document.createElement('div');
     release.className = 'hud__release';
-    release.hidden = this.spawnMode === 'tray-drop';
+    release.hidden = this.playerBuild || this.spawnMode === 'tray-drop';
     const minus = this.makeButton('−', 'Slower release rate', () => events.onReleaseRate(-5));
     this.releaseValue = document.createElement('span');
     this.releaseValue.className = 'hud__release-value';
@@ -392,16 +415,21 @@ export class Hud {
     this.nukeButton.innerHTML = '<span>☢ Nuke</span>';
     this.nukeButton.addEventListener('click', events.onNuke);
 
-    const restartButton = this.makeButton('⟲ Restart', 'Restart (R)', events.onRestart);
+    const restartButton = this.makeButton(this.playerBuild ? '↻' : '⟲ Restart', 'Retry (R)', events.onRestart);
     restartButton.className = 'hud__btn hud__restart';
+    restartButton.hidden = this.playerBuild && !opts?.showRestart;
+    this.speedButton.hidden = this.playerBuild;
+    this.nukeButton.hidden = this.playerBuild;
 
-    this.debugLabelsButton = this.makeButton('Labels', 'Toggle debug labels (L)', () => {
-      const enabled = !this.debugLabels;
-      this.setDebugLabels(enabled);
-      events.onDebugLabelsChange?.(enabled);
-    });
-    this.debugLabelsButton.className = 'hud__btn hud__debug-labels';
-    this.setDebugLabels(this.debugLabels);
+    if (!__PLAYER_BUILD__ && (opts?.allowDebugLabels ?? true)) {
+      this.debugLabelsButton = this.makeButton('Labels', 'Toggle debug labels (L)', () => {
+        const enabled = !this.debugLabels;
+        this.setDebugLabels(enabled);
+        events.onDebugLabelsChange?.(enabled);
+      });
+      this.debugLabelsButton.className = 'hud__btn hud__debug-labels';
+      this.setDebugLabels(this.debugLabels);
+    }
 
     controls.append(
       release,
@@ -409,9 +437,9 @@ export class Hud {
       this.speedButton,
       this.nukeButton,
       restartButton,
-      this.debugLabelsButton,
-      this.makeAudioCluster(),
     );
+    if (this.debugLabelsButton) controls.append(this.debugLabelsButton);
+    controls.append(this.makeAudioCluster());
     const panelContent = document.createElement('div');
     panelContent.className = 'hud__panel-content';
     panelContent.append(tools, this.worldBar, this.terrainBar, controls);
@@ -469,6 +497,7 @@ export class Hud {
       slider.value = String(Math.round(this.audio[volumeKey] * 100));
       slider.title = `${title} volume`;
       slider.className = 'hud__audio-slider';
+      slider.hidden = this.playerBuild;
       slider.addEventListener('input', () => {
         this.audio[volumeKey] = Number(slider.value) / 100;
         this.events.onAudioChange?.({ ...this.audio });
@@ -549,7 +578,7 @@ export class Hud {
   private moveTrayDrag(e: PointerEvent): void {
     const drag = this.trayDrag;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= 6) {
+    if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= 8) {
       drag.moved = true;
       drag.button.classList.add('is-dragging');
     }
@@ -627,7 +656,7 @@ export class Hud {
     this.debugLabels = enabled;
     this.debugLabelsButton?.classList.toggle('is-active', enabled);
     this.debugLabelsButton?.setAttribute('aria-pressed', String(enabled));
-    if (this.debugLabelsButton) this.debugLabelsButton.title = `Debug labels ${enabled ? 'on' : 'off'} (L)`;
+    if (this.debugLabelsButton) this.debugLabelsButton.title = `Labels ${enabled ? 'on' : 'off'} (L)`;
   }
 
   private minimapJump(e: PointerEvent): void {
@@ -722,7 +751,11 @@ export class Hud {
       state.timeRemainingMs !== null
         ? `<span class="hud__timer${state.timeRemainingMs < 15000 ? ' is-low' : ''}">⏱ ${formatTime(state.timeRemainingMs)}</span>`
         : '';
-    this.statusBar.innerHTML = this.freePlay
+    this.statusBar.innerHTML = this.playerBuild && !this.freePlay
+      ? `<span class="hud__level">${view.levelName}</span>` +
+        `<span class="hud__stat">Saved <strong>${state.saved}/${state.targetSaved}</strong></span>` +
+        timer
+      : this.freePlay
       ? `<span class="hud__level">${view.levelName}</span>` +
         '<span class="hud__stat hud__stat--pct"><strong>Free Play</strong></span>' +
         `<span class="hud__stat">Crew <strong>${state.spawned}/${state.totalLemmings}</strong></span>` +
@@ -742,6 +775,8 @@ export class Hud {
       this.missionPrompt.textContent = view.prompt ?? '';
       this.missionHint.textContent = view.hint;
     }
+    this.actionCue.hidden = view.actionCue === null;
+    this.actionCue.textContent = view.actionCue ?? '';
 
     this.releaseValue.textContent = `Rate ${state.releaseRate}`;
 
@@ -777,6 +812,7 @@ export class Hud {
 
     this.nukeButton.disabled = !view.nukeReady;
     this.pauseButton.classList.toggle('is-active', view.paused && !view.planning);
+    this.pauseButton.hidden = this.playerBuild && view.planning;
     this.pauseButton.textContent = view.planning ? 'Start' : view.paused ? '▶' : '▮▮';
     const pauseLabel = view.planning ? 'Start run (Space)' : 'Pause / resume (Space)';
     this.pauseButton.title = pauseLabel;
@@ -785,7 +821,7 @@ export class Hud {
     this.speedButton.classList.toggle('is-active', view.speed > 1);
 
     // Hatch queue strip
-    if (this.spawnMode === 'automatic-hatch' && state.hatchQueue.length > 0) {
+    if (!this.playerBuild && this.spawnMode === 'automatic-hatch' && state.hatchQueue.length > 0) {
       this.queueBar.hidden = false;
       this.queueBar.innerHTML =
         '<span class="hud__queue-label">Hatch queue</span>' +
@@ -824,12 +860,17 @@ export class Hud {
 
     const won = state.outcome === 'won';
     const pct = Math.round((state.saved / Math.max(1, state.totalLemmings)) * 100);
+    const failureReason = state.timeRemainingMs === 0
+      ? 'Time ran out before the route was safe.'
+      : state.lost > state.totalLemmings - state.targetSaved
+        ? 'Too many crew were lost.'
+        : 'The route was still blocked.';
     this.overlay.hidden = false;
     this.overlay.innerHTML = `
       <div class="hud__panel ${won ? 'is-win' : 'is-lose'}">
         <h1>${won ? 'Level Cleared!' : 'Out of Lemmings'}</h1>
         <p class="hud__panel-pct">${pct}%</p>
-        <p class="hud__panel-sub">${won ? 'You met the rescue quota.' : 'Not enough made it home.'}</p>
+        <p class="hud__panel-sub">${won ? 'You met the rescue quota.' : failureReason}</p>
         <div class="hud__panel-stats">
           <span>Saved <strong>${state.saved}/${state.targetSaved}</strong></span>
           <span>Home <strong>${state.saved}/${state.totalLemmings}</strong></span>
@@ -849,6 +890,7 @@ export class Hud {
     if (this.events.onLevelSelect) {
       const select = this.makeButton('Level Select', 'Back to level select (Esc)', this.events.onLevelSelect);
       select.className = 'hud__btn';
+      select.hidden = this.playerBuild && !won;
       actions.append(select);
     }
   }

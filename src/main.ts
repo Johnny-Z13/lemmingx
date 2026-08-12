@@ -1,9 +1,15 @@
 import Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
-import { BUILD_TAG } from './version';
 import './styles.css';
 
-document.title = `LemmingX · ${BUILD_TAG}`;
+document.title = __PLAYER_BUILD__ ? 'LemmingX' : `LemmingX · ${__BUILD_TAG__}`;
+document.body.classList.toggle('is-player-build', __PLAYER_BUILD__);
+if (__PLAYER_BUILD__) {
+  const rotateNotice = document.createElement('div');
+  rotateNotice.className = 'rotate-notice';
+  rotateNotice.innerHTML = '<strong>Rotate to play</strong><span>LemmingX is designed for landscape.</span>';
+  document.body.append(rotateNotice);
+}
 
 const GAME_WIDTH = 960;
 const GAME_HEIGHT = 540;
@@ -24,6 +30,9 @@ const game = new Phaser.Game({
 
 // Dev-only handle so the preview/devtools can inspect or drive the running game
 // even when the tab is backgrounded (and rAF is throttled).
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && !__PLAYER_BUILD__) {
   (window as unknown as { game: Phaser.Game }).game = game;
+  if (new URLSearchParams(window.location.search).has('playtest')) {
+    void import('./playtest-harness').then(({ installPlaytestHarness }) => installPlaytestHarness(game));
+  }
 }

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "deterministicStepMs": 16,
+  "level1": {
+    "outcome": "won",
+    "saved": 10,
+    "lost": 0,
+    "milestones": {
+      "orderAcceptedMs": 1120,
+      "assignmentMs": 4368,
+      "breachMs": 80,
+      "sandVisibleMs": 112,
+      "waterReleasedMs": 16,
+      "woodLiftMs": 112,
+      "walkableBridgeMs": 848,
+      "firstCrossingMs": 8816,
+      "firstSaveMs": 14912,
+      "completionMs": 24688
+    },
+    "chainWithinTenSeconds": true
+  },
+  "level2": {
+    "input": "reserved-endpoint landscape-touch stroke equivalent",
+    "stamps": [
+      624,
+      636,
+      648,
+      660,
+      672,
+      684,
+      696,
+      720
+    ],
+    "outcome": "won",
+    "saved": 10,
+    "lost": 0
+  },
+  "level3": [
+    {
+      "route": "bomber",
+      "actionCount": 1,
+      "released": false,
+      "outcome": "won",
+      "saved": 7,
+      "lost": 3
+    },
+    {
+      "route": "sand",
+      "actionCount": 3,
+      "released": true,
+      "outcome": "won",
+      "saved": 10,
+      "lost": 0
+    }
+  ]
+}

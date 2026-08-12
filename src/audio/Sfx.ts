@@ -29,6 +29,11 @@ export class Sfx {
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
+  /** Stop audio immediately when the page is hidden or loses focus. */
+  suspend(): void {
+    if (this.ctx?.state === 'running') void this.ctx.suspend();
+  }
+
   setMuted(muted: boolean): void {
     this.muted = muted;
   }

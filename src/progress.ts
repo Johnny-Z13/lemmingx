@@ -15,8 +15,8 @@ export interface ProgressOptions {
   unlockAll?: boolean;
 }
 
-/** Flip this off when campaign progression is ready to be player-facing again. */
-export const PLAYTEST_UNLOCK_ALL_LEVELS = true;
+/** Internal builds keep the roster open; player builds use the real unlock chain. */
+export const PLAYTEST_UNLOCK_ALL_LEVELS = !__PLAYER_BUILD__;
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 

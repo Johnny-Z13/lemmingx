@@ -1,5 +1,4 @@
 /** Full-screen DOM level-select: campaign cards + Sand Lab entry. */
-import { BUILD_TAG } from '../version';
 
 export interface LevelCard {
   index: number;
@@ -24,12 +23,13 @@ export class LevelSelect {
     this.root.innerHTML = `
       <div class="select__panel">
         <h1 class="select__title">LemmingX</h1>
-        <p class="select__sub">Campaign puzzles, two prototype slots, or the free-play Sand Lab.</p>
-        <p class="select__build"></p>
+        <p class="select__sub">${__PLAYER_BUILD__ ? 'Living-terrain rescue puzzles.' : 'Campaign puzzles, two prototype slots, or the free-play Sand Lab.'}</p>
+        ${__PLAYER_BUILD__ ? '' : '<p class="select__build"></p>'}
         <div class="select__grid"></div>
       </div>`;
     this.grid = this.root.querySelector('.select__grid') as HTMLDivElement;
-    (this.root.querySelector('.select__build') as HTMLParagraphElement).textContent = `build ${BUILD_TAG}`;
+    const build = this.root.querySelector('.select__build') as HTMLParagraphElement | null;
+    if (build) build.textContent = `build ${__BUILD_TAG__}`;
     document.body.append(this.root);
   }
 
@@ -48,7 +48,7 @@ export class LevelSelect {
         ? '<span class="select__lock">🔒</span>'
         : card.sandLab
           ? '<span class="select__best select__best--new">FREE PLAY</span>'
-          : card.prototype
+          : card.prototype && !__PLAYER_BUILD__
             ? '<span class="select__best select__best--new">PROTOTYPE</span>'
           : card.completed
             ? `<span class="select__best">★ ${card.bestSavedPct}%</span>`

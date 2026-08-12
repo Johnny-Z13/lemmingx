@@ -89,7 +89,12 @@ export class GameSimulation {
       outcome: 'running',
       nuking: false,
       traps: (level.traps ?? []).map((def) => ({ def, phase: 'idle' as const, timerMs: 0 })),
-      emitters: (level.emitters ?? []).map((def) => ({ def, budgetLeft: def.budget, accumulatorCells: 0 })),
+      emitters: (level.emitters ?? []).map((def) => ({
+        def,
+        active: def.trigger === undefined,
+        budgetLeft: def.budget,
+        accumulatorCells: 0,
+      })),
       hatchOpenMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
       hatchTotalMs: level.hatchOpenMs ?? HATCH_OPEN_MS,
       hatchQueue: [],
@@ -277,7 +282,7 @@ export class GameSimulation {
   private stepEmitters(deltaMs: number): void {
     const terrain = this.level.terrain;
     for (const emitter of this.state.emitters) {
-      if (emitter.budgetLeft <= 0) continue;
+      if (!emitter.active || emitter.budgetLeft <= 0) continue;
       emitter.accumulatorCells += emitter.def.cellsPerSecond * (deltaMs / 1000);
       const cellX = Math.floor(emitter.def.x / terrain.cellSize);
       const cellY = Math.floor(emitter.def.y / terrain.cellSize);
@@ -302,13 +307,23 @@ export class GameSimulation {
     const lemming = this.state.lemmings.find((candidate) => candidate.id === lemmingId);
     if (!lemming || lemming.state === 'dead' || lemming.state === 'exited') return false;
     if (!this.hasOpenToolbox() && this.state.skills[skill] <= 0) return false;
+    const bounds = this.level.skillAssignmentBounds?.[skill];
+    if (bounds && !this.isInsideSkillAssignmentBounds(lemming, skill)) {
+      if (lemming.pendingHatchSkill !== null) return false;
+      lemming.pendingHatchSkill = skill;
+      if (!this.hasOpenToolbox()) this.state.skills[skill] -= 1;
+      this.emit('assign', lemming.x, lemming.y);
+      return true;
+    }
 
     const def = SKILL_DEFS[skill];
     const ctx = this.skillContext();
     if (!def.canAssign(lemming, ctx)) return false;
 
+    const releasesBlocker = skill === 'blocker' && lemming.state === 'blocker';
     def.onAssign(lemming, ctx);
-    if (!this.hasOpenToolbox()) this.state.skills[skill] -= 1;
+    if (!this.hasOpenToolbox() && !releasesBlocker) this.state.skills[skill] -= 1;
+    this.activateSkillTriggers(skill);
     this.emit('assign', lemming.x, lemming.y);
     return true;
   }
@@ -441,11 +456,29 @@ export class GameSimulation {
   private tryApplyPendingHatchSkill(lemming: Lemming): void {
     const skill = lemming.pendingHatchSkill;
     if (!skill) return;
+    if (!this.isInsideSkillAssignmentBounds(lemming, skill)) return;
     const def = SKILL_DEFS[skill];
     if (!def.canAssign(lemming, this.skillContext())) return;
     def.onAssign(lemming, this.skillContext());
     lemming.pendingHatchSkill = null;
+    this.activateSkillTriggers(skill);
     this.emit('assign', lemming.x, lemming.y);
+  }
+
+  private isInsideSkillAssignmentBounds(lemming: Lemming, skill: Skill): boolean {
+    const bounds = this.level.skillAssignmentBounds?.[skill];
+    if (!bounds) return true;
+    return lemming.x >= bounds.minX &&
+      lemming.x <= bounds.maxX &&
+      (bounds.minY === undefined || lemming.y >= bounds.minY) &&
+      (bounds.maxY === undefined || lemming.y <= bounds.maxY);
+  }
+
+  private activateSkillTriggers(skill: Skill): void {
+    if (skill !== 'basher') return;
+    for (const emitter of this.state.emitters) {
+      if (emitter.def.trigger === 'bash') emitter.active = true;
+    }
   }
 
   /**
@@ -1199,11 +1232,6 @@ export class GameSimulation {
     // Sand Lab and prototype playsets are free-play — no win/lose from quota.
     if (this.level.sandLab || this.level.playMode?.goal === 'free-play') return;
 
-    if (this.state.saved >= this.level.targetSaved) {
-      this.state.outcome = 'won';
-      return;
-    }
-
     // Running out of time ends the level immediately on whatever's been saved.
     if (this.state.timeRemainingMs === 0) {
       this.state.outcome = this.state.saved >= this.level.targetSaved ? 'won' : 'lost';
@@ -1214,7 +1242,7 @@ export class GameSimulation {
       this.state.spawned === this.level.totalLemmings &&
       this.state.lemmings.every((lemming) => lemming.state === 'dead' || lemming.state === 'exited');
     if (allAccountedFor) {
-      this.state.outcome = 'lost';
+      this.state.outcome = this.state.saved >= this.level.targetSaved ? 'won' : 'lost';
     }
   }
 }

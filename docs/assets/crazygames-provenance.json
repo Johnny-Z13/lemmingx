@@ -1,0 +1,216 @@
+{
+  "inventoryVersion": 1,
+  "game": "LemmingX",
+  "scope": "Early local CrazyGames candidate",
+  "reviewDate": "2026-08-12",
+  "reviewer": "Codex automated inventory pass",
+  "releaseClaim": "blocked",
+  "releaseBlockers": [
+    "The shipped industrial backdrop has no verified originating output, prompt, model, seed, terms record, or transformation chain.",
+    "Repository-authored procedural visual and audio families have not received a human originality and commercial-rights review."
+  ],
+  "approvalStates": [
+    "prototype-only",
+    "rights-review",
+    "release-cleared",
+    "excluded"
+  ],
+  "assets": [
+    {
+      "id": "industrial-cavern-backdrop",
+      "runtimePath": "public/assets/industrial-cavern-backdrop.png",
+      "assetType": "raster-image/png",
+      "dimensions": "1672x941",
+      "source": "AI-assisted generated image or derivative; exact originating output is not established",
+      "creator": "Unknown OpenAI image model with Z13Labs direction",
+      "sourceUrl": null,
+      "sourceReferences": [
+        "/Users/johnnyvenables/.codex/generated_images/019f5ca8-b79c-7661-a640-af49a4f825ee/exec-0807e2f0-f870-40a3-b366-6c2351bd8ea9.png",
+        "/Users/johnnyvenables/.codex/generated_images/019f5ca8-b79c-7661-a640-af49a4f825ee/exec-93024325-4371-42c8-9a80-3208bcb2677b.png",
+        "/Users/johnnyvenables/.codex/generated_images/019f5ca8-b79c-7661-a640-af49a4f825ee/exec-6919c0fc-9a39-43db-8aed-c9dca213ad9b.png"
+      ],
+      "licenceOrTermsStatus": "unknown; no terms snapshot or commercial-use review recorded",
+      "originalHashSha256": null,
+      "runtimeHashSha256": "0fb0dc2f65996c976b983f7eac3ca84930dda0851676137cd4321da0fcbd42c1",
+      "generation": {
+        "prompt": null,
+        "model": null,
+        "seed": null,
+        "settings": null
+      },
+      "transformations": [
+        "Unknown processing between referenced concept outputs and the committed runtime PNG"
+      ],
+      "approvalState": "prototype-only",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12",
+      "notes": "The three referenced concept hashes do not match the runtime file. They are visual-direction evidence, not established byte provenance."
+    },
+    {
+      "id": "procedural-crew-renderer",
+      "runtimePath": "src/render/LemmingSprite.ts",
+      "assetType": "procedural-visual-source",
+      "source": "Repository-authored clean-room pixel renderer",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
+      "originalHashSha256": "0a0382a614ea5fa2b90af79688ae44b65c0691c0c8d00ffcb41e0af4c93a8229",
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "procedural-terrain-renderer",
+      "runtimePath": "src/render/TerrainRenderer.ts",
+      "assetType": "procedural-visual-source",
+      "source": "Repository-authored deterministic material renderer",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
+      "originalHashSha256": "a880e481686f6f2065eeb06c9d209d747e5da00d48dfbbc55a3c017f565474b0",
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "procedural-world-backdrop",
+      "runtimePath": "src/render/WorldBackdrop.ts",
+      "assetType": "procedural-visual-source",
+      "source": "Repository-authored sky, parallax, haze, and rain renderer",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
+      "originalHashSha256": "911843d23c8dc459034bc637e45d3d73ae20ebcdaa10109994d8a7fea2428007",
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "procedural-world-lights",
+      "runtimePath": "src/render/WorldLights.ts",
+      "assetType": "procedural-visual-source",
+      "source": "Repository-authored practical-light renderer",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
+      "originalHashSha256": "d40bd921ccd8ecd011471a07f05e29bd1ce401262afdfc197c891682bf909d21",
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "procedural-particles",
+      "runtimePath": "src/render/Particles.ts",
+      "assetType": "procedural-visual-source",
+      "source": "Repository-authored event-driven particle renderer",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
+      "originalHashSha256": "b70fc15df23aab3159ecad841aeaed71b47707c04f5d3ce7b125b185180cb90d",
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "visual-theme-and-identity",
+      "runtimePath": "src/render/visualTheme.ts; src/render/lemmingIdentity.ts; src/render/entityLabels.ts",
+      "assetType": "procedural-visual-data",
+      "source": "Repository-authored palette, role identity, and entity descriptor data",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
+      "originalHashSha256": {
+        "src/render/visualTheme.ts": "e10cac26712969bd22f440949616a61830197577dac6aa827bf387ae4a019ba4",
+        "src/render/lemmingIdentity.ts": "47e35a5cac0b9c98cf7fe2970d2caa96535b7180d1505bfa195e03566416de21",
+        "src/render/entityLabels.ts": "d598aa01f78fde1f0344c35fa7302a55a4829b6d71515e568d7917b84ba1ef1d"
+      },
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "procedural-sfx",
+      "runtimePath": "src/audio/Sfx.ts",
+      "assetType": "procedural-audio-source",
+      "source": "Repository-authored WebAudio oscillator and filtered-noise synthesis",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "No external audio files; human listening, originality, and commercial-rights review is pending",
+      "originalHashSha256": "4fd511cb29cc79c6fb64dc9b1eed74c7a737f44fc7ffc7f9fa74da1ee38c55a9",
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["Runtime WebAudio synthesis", "TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "procedural-music",
+      "runtimePath": "src/audio/Music.ts; src/audio/tracks.ts",
+      "assetType": "procedural-audio-source",
+      "source": "Repository-authored note data and WebAudio sequencer",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "No external audio files; human listening, originality, and commercial-rights review is pending",
+      "originalHashSha256": {
+        "src/audio/Music.ts": "be510e52b79b520a99378146ba41fcd2ca884174efb87417f31fd70729be0ede",
+        "src/audio/tracks.ts": "b60eb0587fc3662757579dd4cbfa00188f12ba84c018eab42a6b782cb465420c"
+      },
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["Runtime WebAudio synthesis", "TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "lucide-ui-icons",
+      "runtimePath": "src/ui/Hud.ts imports DoorOpen, Hand, Maximize2, Minus, and Warehouse from lucide@0.468.0",
+      "assetType": "third-party-svg-icon-data",
+      "source": "Lucide 0.468.0 npm package",
+      "creator": "Lucide contributors",
+      "sourceUrl": "https://lucide.dev/",
+      "licenceOrTermsStatus": "ISC licence present in installed package; attribution/notice handling must be verified in the player build",
+      "originalHashSha256": "1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc",
+      "runtimeHashSha256": null,
+      "packageIntegrity": "sha512-UFbgwji/ZnAV7iTTE4jujyTV7J95AILKyATDUrqOJrMcUGfXvGjw3c1mcuHZUX2oJfkrAGU9KoxkrLQk2jjtiA==",
+      "generation": null,
+      "transformations": ["Tree-shaken SVG node data", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-12"
+    }
+  ],
+  "excludedEvidence": [
+    {
+      "path": ".artifacts/**",
+      "reason": "Local screenshots and QA evidence; excluded from player builds"
+    },
+    {
+      "path": "design-qa.md",
+      "reason": "Local QA notes; excluded from player builds"
+    },
+    {
+      "path": "/Users/johnnyvenables/.codex/generated_images/**",
+      "reason": "External concept/reference outputs; not runtime files and not release-cleared"
+    }
+  ]
+}

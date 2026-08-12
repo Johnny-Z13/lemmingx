@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { createLevelAt, LEVEL_COUNT, PROTOTYPE_LEVEL_INDICES, PROTOTYPE_START_INDEX, SAND_LAB_INDEX } from '../levels';
 import { GameSimulation } from '../sim/GameSimulation';
+import { FixedStepClock } from '../sim/FixedStepClock';
 import type { Lemming, LevelDefinition, Skill, WorldEntityKind } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
@@ -22,11 +23,19 @@ import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../aud
 import { colorToCss, crewColor, crewLabel, skillPalette } from '../render/lemmingIdentity';
 import { worldEntityLabels } from '../render/entityLabels';
 import { loadUiSettings, saveUiSettings } from '../ui/settings';
+import { ResumeOverlay } from '../ui/ResumeOverlay';
+import { selectCrewTarget } from '../input/crewTargeting';
+import { ContinueOverlay } from '../ui/ContinueOverlay';
+import { interpolatePaintStroke } from '../input/paintStroke';
+import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
+import { CrewActionFeedback } from '../input/crewActionFeedback';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
 /** Pixels: how close the cursor must be to a lemming to hover/select it. */
 const HOVER_RADIUS = 16;
+const TOUCH_TARGET_RADIUS_CSS = 24;
+const GESTURE_THRESHOLD_CSS = 8;
 
 export class GameScene extends Phaser.Scene {
   private level!: LevelDefinition;
@@ -44,6 +53,8 @@ export class GameScene extends Phaser.Scene {
   private lemmingDisplayPoints = new Map<number, LemmingDisplayPoint>();
   private paused = false;
   private planning = false;
+  private readonly simClock = new FixedStepClock();
+  private readonly crewActionFeedback = new CrewActionFeedback();
   private speed = 1;
   private levelIndex = 0;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
@@ -53,7 +64,7 @@ export class GameScene extends Phaser.Scene {
   private readonly sfx = new Sfx();
   private readonly music = new Music();
   private audioSettings = loadAudioSettings();
-  private uiSettings = loadUiSettings();
+  private uiSettings = __PLAYER_BUILD__ ? { debugLabels: false } : loadUiSettings();
   private readonly lemmingLabels = new Map<number, Phaser.GameObjects.Text>();
   private readonly entityLabels = new Map<string, Phaser.GameObjects.Text>();
   private readonly progress = new Progress(localStorage);
@@ -67,19 +78,61 @@ export class GameScene extends Phaser.Scene {
   private worldTool: WorldEntityKind | null = null;
   private readonly placedWorldEntities = new Set<WorldEntityKind>();
   private painting = false;
+  private canvasGesture: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+    targetId: number | null;
+    panning: boolean;
+  } | null = null;
   /** Last paint stamp, used to space stamps when a level has limited charges. */
   private lastStampX = 0;
   private lastStampY = 0;
+  private resumeOverlay!: ResumeOverlay;
+  private continueOverlay?: ContinueOverlay;
+  private readonly lifecycle = new FocusLifecycle({
+    onSuspend: () => {
+      this.painting = false;
+      this.canvasGesture = null;
+      this.simClock.reset();
+      this.input.keyboard?.resetKeys();
+      this.resumeOverlay.show();
+    },
+    onResume: () => {
+      this.unlockAudio();
+      this.simClock.reset();
+      this.resumeOverlay.hide();
+    },
+  });
+  private readonly handleVisibilityChange = () => {
+    if (document.hidden) this.suspendForLifecycle();
+  };
+  private readonly handleWindowBlur = () => this.suspendForLifecycle();
 
   constructor() {
     super('GameScene');
   }
 
   preload(): void {
-    this.load.image(INDUSTRIAL_BACKDROP_KEY, '/assets/industrial-cavern-backdrop.png');
+    this.load.image(INDUSTRIAL_BACKDROP_KEY, `${import.meta.env.BASE_URL}assets/industrial-cavern-backdrop.png`);
   }
 
   create(): void {
+    this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
+    if (__PLAYER_BUILD__) {
+      this.continueOverlay = new ContinueOverlay(
+        () => this.continueOverlay?.hide(),
+        () => {
+          this.continueOverlay?.hide();
+          this.openLevelSelect();
+        },
+      );
+    }
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    window.addEventListener('blur', this.handleWindowBlur);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupLifecycle());
     this.installKeyboard();
     this.applyAudioSettings(this.audioSettings);
     // Audio contexts need a user gesture; unlock on the first pointer/key.
@@ -87,6 +140,7 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown', () => this.unlockAudio());
     // Click-to-assign / terrain paint. Left button only — right/middle drag-pan.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.lifecycle.isSuspended()) return;
       if (pointer.button !== 0) return;
       const brush = this.brush;
       if (brush === 'bomb') {
@@ -106,21 +160,76 @@ export class GameScene extends Phaser.Scene {
         this.placeCrew(pointer.worldX, pointer.worldY, this.crewPlacement);
         return;
       }
-      this.assignSelectedSkill(pointer.worldX, pointer.worldY);
+      const target = this.findNearestLemming(
+        pointer.worldX,
+        pointer.worldY,
+        this.crewTargetRadiusWorld(),
+      );
+      this.canvasGesture = {
+        pointerId: pointer.id,
+        startX: pointer.x,
+        startY: pointer.y,
+        lastX: pointer.x,
+        lastY: pointer.y,
+        targetId: target?.id ?? null,
+        panning: false,
+      };
     });
-    this.input.on('pointerup', () => {
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      const brush = this.brush;
+      if (
+        this.painting &&
+        brush &&
+        brush !== 'bomb' &&
+        !this.hasOpenToolbox() &&
+        this.sim.state.landscape[brush] > 0 &&
+        Math.hypot(pointer.worldX - this.lastStampX, pointer.worldY - this.lastStampY) >= 6
+      ) {
+        this.paintStamp(pointer.worldX, pointer.worldY, brush);
+      }
       this.painting = false;
+      const gesture = this.canvasGesture;
+      this.canvasGesture = null;
+      if (!gesture || gesture.pointerId !== pointer.id || gesture.panning) return;
+      if (gesture.targetId === null) {
+        if (__PLAYER_BUILD__ && this.levelIndex === 0 && this.sim.state.skills.basher > 0) {
+          this.crewActionFeedback.show('missed', this.animClockMs);
+        }
+        return;
+      }
+      const target = this.sim.state.lemmings.find(({ id }) => id === gesture.targetId);
+      if (target) this.assignSelectedSkillTo(target);
     });
     this.input.mouse?.disableContextMenu();
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.lifecycle.isSuspended()) return;
       this.pointerSeen = true;
       const brush = this.brush;
       if (this.painting && pointer.isDown && brush && brush !== 'bomb') {
         // Limited tools stamp once per brush radius; open toolboxes spray freely.
         const dist = Math.hypot(pointer.worldX - this.lastStampX, pointer.worldY - this.lastStampY);
-        if (this.hasOpenToolbox() || dist >= 16) {
+        if (this.hasOpenToolbox()) {
           this.paintStamp(pointer.worldX, pointer.worldY, brush);
+        } else if (dist >= 12) {
+          const from = { x: this.lastStampX, y: this.lastStampY };
+          for (const point of interpolatePaintStroke(from, { x: pointer.worldX, y: pointer.worldY }, 12)) {
+            if (this.sim.state.landscape[brush] <= 1) break;
+            this.paintStamp(point.x, point.y, brush);
+          }
         }
+      }
+      const gesture = this.canvasGesture;
+      if (gesture && gesture.pointerId === pointer.id && pointer.isDown && !brush) {
+        if (!gesture.panning && Math.hypot(pointer.x - gesture.startX, pointer.y - gesture.startY) >= this.gestureThresholdGamePx()) {
+          gesture.panning = true;
+        }
+        if (gesture.panning) {
+          const cam = this.cameras.main;
+          cam.scrollX -= pointer.x - gesture.lastX;
+          cam.scrollY -= pointer.y - gesture.lastY;
+        }
+        gesture.lastX = pointer.x;
+        gesture.lastY = pointer.y;
       }
       if (pointer.middleButtonDown() || pointer.rightButtonDown()) {
         const cam = this.cameras.main;
@@ -129,16 +238,27 @@ export class GameScene extends Phaser.Scene {
       }
     });
     this.levelSelect = new LevelSelect((index) => {
+      this.unlockAudio();
       this.levelIndex = index;
       this.selectOpen = false;
       this.levelSelect.hide();
       this.startLevel();
     });
-    this.openLevelSelect();
+    if (__PLAYER_BUILD__) {
+      this.levelIndex = this.nextUnsolvedLevelIndex();
+      this.startLevel();
+      if (this.levelIndex === 0) this.startRun();
+      else this.continueOverlay?.show(this.level.name ?? `Level ${this.levelIndex + 1}`);
+    } else {
+      this.openLevelSelect();
+    }
   }
 
   /** Show the campaign screen (boot, Esc, or from the win/lose overlay). */
   private openLevelSelect(): void {
+    this.lifecycle.clear();
+    this.resumeOverlay.hide();
+    this.simClock.reset();
     this.selectOpen = true;
     this.music.stop();
     const cards: LevelCard[] = Array.from({ length: LEVEL_COUNT }, (_, index) => {
@@ -166,7 +286,7 @@ export class GameScene extends Phaser.Scene {
     cards.push({
       index: SAND_LAB_INDEX,
       name: 'Sand Lab',
-      unlocked: true,
+      unlocked: !__PLAYER_BUILD__ || this.progress.get(2).completed,
       completed: false,
       bestSavedPct: 0,
       sandLab: true,
@@ -188,6 +308,13 @@ export class GameScene extends Phaser.Scene {
 
   private hasOpenToolbox(): boolean {
     return this.level?.openToolbox === true || this.isLab();
+  }
+
+  private nextUnsolvedLevelIndex(): number {
+    for (let index = 0; index < LEVEL_COUNT; index += 1) {
+      if (this.progress.isUnlocked(index) && !this.progress.get(index).completed) return index;
+    }
+    return LEVEL_COUNT - 1;
   }
 
   private clientToWorld(clientX: number, clientY: number): Phaser.Math.Vector2 {
@@ -255,16 +382,16 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (this.selectOpen || !this.sim) return; // frozen behind the level select
-    const clamped = Math.min(delta, 33);
+    if (this.lifecycle.isSuspended()) return;
     if (this.planning) {
       // Planning freezes the run, not the living world the player is shaping.
-      this.sim.stepLivingTerrain();
+      this.simClock.advance(delta, 1, () => this.sim.stepLivingTerrain());
     } else if (!this.paused) {
-      // Fast-forward runs extra sim sub-steps; rendering stays once per frame.
-      for (let i = 0; i < this.speed; i += 1) {
-        this.sim.step(clamped);
+      // Fast-forward increases fixed-tick throughput; rendering stays once per frame.
+      this.simClock.advance(delta, this.speed, (stepMs) => {
+        this.sim.step(stepMs);
         this.consumeEvents(this.sim.drainEvents());
-      }
+      });
     }
     if (this.sim.state.outcome === 'won' && !this.winRecorded) {
       this.winRecorded = true;
@@ -428,7 +555,7 @@ export class GameScene extends Phaser.Scene {
         ? `Prototype ${this.levelIndex + 1}`
         : `${this.levelIndex + 1}/${LEVEL_COUNT}`;
     return {
-      paused: this.paused,
+      paused: this.paused || this.lifecycle.isSuspended(),
       planning: this.planning,
       speed: this.speed,
       nukeReady: this.sim.state.outcome === 'running' && !this.planning && !this.sim.state.nuking,
@@ -443,6 +570,7 @@ export class GameScene extends Phaser.Scene {
       canPlaceWorldEntities: this.planning && this.sim.state.spawned === 0,
       prompt: this.prototypePrompt(),
       hasTerrainTools: this.hasOpenToolbox() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
+      actionCue: this.playerActionCue(),
       minimap: scrolls
         ? {
             terrain: this.level.terrain,
@@ -473,6 +601,24 @@ export class GameScene extends Phaser.Scene {
     return null;
   }
 
+  private playerActionCue(): string | null {
+    if (!__PLAYER_BUILD__ || this.planning) return null;
+    const feedback = this.crewActionFeedback.current(this.animClockMs);
+    if (feedback) return feedback;
+    if (this.levelIndex === 0 && this.sim.state.skills.basher > 0) {
+      return 'CLICK A WALKER — BASHER FIRES AT THE DAM';
+    }
+    if (this.levelIndex === 2 && this.sim.state.outcome === 'running') {
+      const blocker = this.sim.state.lemmings.find(({ state }) => state === 'blocker');
+      if (!blocker) return 'HOLD THEM — TAP A WALKER NEAR THE WALL';
+      if (this.sim.state.landscape.sand === 0 && blocker.fuseMs === null) {
+        return 'PATH READY — TAP THE BLOCKER AGAIN TO RELEASE';
+      }
+      return 'MAKE A PATH — CHOOSE BOMBER OR SAND';
+    }
+    return null;
+  }
+
   private titleCase(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
@@ -490,6 +636,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startLevel(): void {
+    this.lifecycle.clear();
+    this.resumeOverlay.hide();
     this.level = createLevelAt(this.levelIndex);
     this.sim = new GameSimulation(this.level);
     this.winRecorded = false;
@@ -510,6 +658,8 @@ export class GameScene extends Phaser.Scene {
     this.fxGraphics = this.add.graphics().setDepth(30);
 
     this.particles.clear();
+    this.simClock.reset();
+    this.crewActionFeedback.reset();
     this.planning = !this.isLab();
     this.paused = this.planning;
     this.speed = 1;
@@ -519,11 +669,15 @@ export class GameScene extends Phaser.Scene {
       !this.hasOpenToolbox() &&
       !ALL_SKILLS.some((skill) => this.level.skills[skill] > 0) &&
       (this.level.landscape?.fire ?? 0) > 0;
-    this.brush = this.isLab() ? 'sand' : terrainOnlyChallenge ? 'fire' : null;
+    this.brush = __PLAYER_BUILD__ && this.levelIndex === 1
+      ? 'water'
+      : this.isLab() ? 'sand' : terrainOnlyChallenge ? 'fire' : null;
+    if (__PLAYER_BUILD__ && this.levelIndex === 2) this.sim.setSelectedSkill('blocker');
     this.crewPlacement = null;
     this.worldTool = null;
     this.placedWorldEntities.clear();
     this.painting = false;
+    this.canvasGesture = null;
 
     this.hud?.destroy();
     this.hud = new Hud({
@@ -574,8 +728,13 @@ export class GameScene extends Phaser.Scene {
       openToolbox: this.hasOpenToolbox(),
       freePlay: this.isFreePlay(),
       debugLabels: this.uiSettings.debugLabels,
+      allowDebugLabels: !__PLAYER_BUILD__,
       spawnMode: this.level.playMode?.spawn,
       worldTools: this.level.playMode?.worldTools,
+      playerBuild: __PLAYER_BUILD__,
+      showRestart: __PLAYER_BUILD__ && (this.levelIndex === 1 || this.levelIndex === 2),
+      availableSkills: this.playerVisibleSkills(),
+      availableTerrainTools: this.playerVisibleTerrainTools(),
     });
     this.hud.update(this.sim.state, this.hudView());
 
@@ -596,6 +755,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setDebugLabels(enabled: boolean): void {
+    if (__PLAYER_BUILD__) return;
     this.uiSettings.debugLabels = enabled;
     saveUiSettings(this.uiSettings);
     this.hud?.setDebugLabels(enabled);
@@ -621,9 +781,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startRun(): void {
-    if (!this.planning || this.sim.state.outcome !== 'running') return;
+    if (this.lifecycle.isSuspended() || !this.planning || this.sim.state.outcome !== 'running') return;
     this.planning = false;
     this.paused = false;
+    this.simClock.reset();
     this.worldTool = null;
   }
 
@@ -634,6 +795,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.paused = !this.paused;
+    this.simClock.reset();
   }
 
   private cycleSpeed(): void {
@@ -647,6 +809,7 @@ export class GameScene extends Phaser.Scene {
     if (!kb) return;
     this.cursors = kb.createCursorKeys();
     kb.on('keydown', (event: KeyboardEvent) => {
+      if (this.lifecycle.isSuspended()) return;
       if (this.selectOpen) return; // the level select owns the keyboard
       const key = event.key.toLowerCase();
 
@@ -688,11 +851,11 @@ export class GameScene extends Phaser.Scene {
         this.triggerNuke();
       } else if (key === 'h') {
         this.hud.toggleCollapsed();
-      } else if (key === 'l') {
+      } else if (key === 'l' && !__PLAYER_BUILD__) {
         this.setDebugLabels(!this.uiSettings.debugLabels);
       } else if (key === 'r') {
         this.startLevel();
-      } else if (key === 'escape' && !this.selectOpen) {
+      } else if (key === 'escape' && !this.selectOpen && !__PLAYER_BUILD__) {
         // First Esc disarms a brush; the next one leaves the level.
         if (this.brush || this.crewPlacement || this.worldTool) {
           this.brush = null;
@@ -705,28 +868,84 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private assignSelectedSkill(worldX: number, worldY: number): void {
+  private suspendForLifecycle(): void {
+    this.sfx.suspend();
+    this.music.suspend();
+    if (this.selectOpen || !this.sim) return;
+    this.lifecycle.suspend();
+  }
+
+  private resumeFromLifecycle(): void {
+    this.lifecycle.resume();
+  }
+
+  private cleanupLifecycle(): void {
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    window.removeEventListener('blur', this.handleWindowBlur);
+    this.resumeOverlay.destroy();
+    this.continueOverlay?.destroy();
+  }
+
+  private assignSelectedSkillTo(target: Lemming): void {
     if (this.sim.state.outcome !== 'running') return;
-    const target = this.findNearestLemming(worldX, worldY);
-    if (target) {
-      this.sim.assignSkill(target.id, this.sim.state.selectedSkill);
+    if (this.sim.assignSkill(target.id, this.sim.state.selectedSkill)) {
+      if (__PLAYER_BUILD__ && this.levelIndex === 0) {
+        this.crewActionFeedback.show('accepted', this.animClockMs);
+      }
+      const point = this.lemmingDisplayPoints.get(target.id) ?? target;
+      this.particles.ring(point.x, point.y, 12, {
+        color: skillPalette(this.sim.state.selectedSkill).trim,
+        speed: 0.045,
+        lifeMs: 260,
+        size: 1.5,
+      });
+    } else {
+      const point = this.lemmingDisplayPoints.get(target.id) ?? target;
+      this.particles.ring(point.x, point.y, 9, {
+        color: 0xff5b7f,
+        speed: 0.035,
+        lifeMs: 220,
+        size: 1.25,
+      });
     }
   }
 
   private findNearestLemming(worldX: number, worldY: number, radius = 26): Lemming | null {
-    let nearest: Lemming | null = null;
-    let nearestDistanceSq = radius ** 2;
+    return selectCrewTarget(this.sim.state.lemmings, this.lemmingDisplayPoints, worldX, worldY, radius);
+  }
 
-    for (const lemming of this.sim.state.lemmings) {
-      if (lemming.state === 'dead' || lemming.state === 'exited') continue;
-      const point = this.lemmingDisplayPoints.get(lemming.id) ?? lemming;
-      const distanceSq = (point.x - worldX) ** 2 + (point.y + 4 - worldY) ** 2;
-      if (distanceSq < nearestDistanceSq) {
-        nearest = lemming;
-        nearestDistanceSq = distanceSq;
-      }
-    }
-    return nearest;
+  private crewTargetRadiusWorld(): number {
+    const rect = this.game.canvas.getBoundingClientRect();
+    if (rect.width <= 0) return 26;
+    return TOUCH_TARGET_RADIUS_CSS * (this.scale.width / rect.width) / this.cameras.main.zoom;
+  }
+
+  private gestureThresholdGamePx(): number {
+    const rect = this.game.canvas.getBoundingClientRect();
+    return rect.width > 0
+      ? GESTURE_THRESHOLD_CSS * (this.scale.width / rect.width)
+      : GESTURE_THRESHOLD_CSS;
+  }
+
+  private playerVisibleSkills(): readonly Skill[] | undefined {
+    if (!__PLAYER_BUILD__) return undefined;
+    if (this.levelIndex === 0) return ['basher'];
+    if (this.levelIndex === 1) return [];
+    if (this.levelIndex === 2) return ['blocker', 'bomber'];
+    return ALL_SKILLS.filter((skill) => this.level.skills[skill] > 0);
+  }
+
+  private playerVisibleTerrainTools(): readonly TerrainBrush[] | undefined {
+    if (!__PLAYER_BUILD__) return undefined;
+    if (this.levelIndex === 0) return [];
+    if (this.levelIndex === 1) return ['water'];
+    if (this.levelIndex === 2) return ['sand'];
+    return TERRAIN_TOOLS
+      .filter(({ kind, openOnly }) =>
+        (!openOnly || this.hasOpenToolbox()) &&
+        (this.hasOpenToolbox() || kind === 'bomb' || this.sim.state.landscape[kind] > 0),
+      )
+      .map(({ kind }) => kind);
   }
 
   private drawWorld(): void {
@@ -737,6 +956,7 @@ export class GameScene extends Phaser.Scene {
       this.level.terrain.consumeDirty();
     }
     this.setpieceGraphics.clear();
+    this.drawOnboardingMarkers();
     if (this.level.playMode?.spawn !== 'tray-drop') {
       this.drawHatch();
       const torch = this.torchPosition();
@@ -754,6 +974,19 @@ export class GameScene extends Phaser.Scene {
     this.drawBrushCursor();
     this.drawPlacementCursor();
     if (this.speed > 1 && !this.paused) this.drawFastForwardTint();
+  }
+
+  private drawOnboardingMarkers(): void {
+    if (!__PLAYER_BUILD__ || this.levelIndex !== 1 || !this.planning) return;
+    this.setpieceGraphics.lineStyle(2, 0x6ae1ff, 0.7);
+    for (let x = 624; x < 720; x += 18) {
+      this.setpieceGraphics.lineBetween(x, 382, Math.min(x + 10, 720), 382);
+    }
+    this.setpieceGraphics.lineBetween(624, 382, 624, 414);
+    this.setpieceGraphics.lineBetween(720, 382, 720, 414);
+    this.setpieceGraphics.fillStyle(0x6ae1ff, 0.75);
+    this.setpieceGraphics.fillTriangle(620, 408, 628, 408, 624, 416);
+    this.setpieceGraphics.fillTriangle(716, 408, 724, 408, 720, 416);
   }
 
   private torchPosition(): { x: number; y: number } {
@@ -1095,10 +1328,20 @@ export class GameScene extends Phaser.Scene {
     this.actorGraphics.clear();
     const frame = this.animFrame();
     const visibleLabels = new Set<number>();
+    const cueTargetId = __PLAYER_BUILD__ && this.levelIndex === 0 && this.sim.state.skills.basher > 0
+      ? this.sim.state.lemmings
+          .filter((lemming) => lemming.state === 'walker')
+          .sort((a, b) => b.x - a.x || a.id - b.id)[0]?.id ?? null
+      : null;
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'exited') continue;
       const point = this.lemmingDisplayPoints.get(lemming.id) ?? lemming;
       drawLemming(this.actorGraphics, lemming, frame, lemming.id === this.hoveredId, point);
+      if (lemming.id === cueTargetId) {
+        const pulse = 13 + Math.sin(this.animClockMs / 150) * 2;
+        this.actorGraphics.lineStyle(2, 0xffd96b, 0.9);
+        this.actorGraphics.strokeCircle(point.x, point.y + 3, pulse);
+      }
 
       if (!this.uiSettings.debugLabels) continue;
       visibleLabels.add(lemming.id);
