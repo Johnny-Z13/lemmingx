@@ -30,7 +30,8 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { PHONE_PORTRAIT_QUERY, PhoneOrientationGate } from '../lifecycle/PhoneOrientationGate';
-import { playerCameraFrame } from '../render/playerCamera';
+import { playerCameraFrame, playerCameraGestureFrame } from '../render/playerCamera';
+import { TouchCameraGesture } from '../input/TouchCameraGesture';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -89,6 +90,16 @@ export class GameScene extends Phaser.Scene {
     targetId: number | null;
     panning: boolean;
   } | null = null;
+  private pendingTouchBrush: {
+    pointerId: number;
+    brush: TerrainBrush;
+    startX: number;
+    startY: number;
+    worldX: number;
+    worldY: number;
+    cancelled: boolean;
+  } | null = null;
+  private readonly touchCameraGesture = new TouchCameraGesture();
   /** Last paint stamp, used to space stamps when a level has limited charges. */
   private lastStampX = 0;
   private lastStampY = 0;
@@ -100,6 +111,7 @@ export class GameScene extends Phaser.Scene {
     onSuspend: () => {
       this.painting = false;
       this.canvasGesture = null;
+      this.resetCameraGestures();
       this.simClock.reset();
       this.input.keyboard?.resetKeys();
       this.resumeOverlay.show(this.lifecycleReason);
@@ -142,6 +154,7 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('blur', this.handleWindowBlur);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupLifecycle());
     this.installKeyboard();
+    if (__PLAYER_BUILD__) this.input.addPointer(1);
     this.applyAudioSettings(this.audioSettings);
     // Audio contexts need a user gesture; unlock on the first pointer/key.
     this.input.on('pointerdown', () => this.unlockAudio());
@@ -150,7 +163,20 @@ export class GameScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.lifecycle.isSuspended()) return;
       if (pointer.button !== 0) return;
+      if (this.beginTouchCameraGesture(pointer)) return;
       const brush = this.brush;
+      if (brush && pointer.wasTouch) {
+        this.pendingTouchBrush = {
+          pointerId: pointer.id,
+          brush,
+          startX: pointer.x,
+          startY: pointer.y,
+          worldX: pointer.worldX,
+          worldY: pointer.worldY,
+          cancelled: false,
+        };
+        return;
+      }
       if (brush === 'bomb') {
         this.applyBomb(pointer.worldX, pointer.worldY);
         return;
@@ -184,6 +210,20 @@ export class GameScene extends Phaser.Scene {
       };
     });
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (this.endTouchCameraGesture(pointer)) return;
+      const pendingTouchBrush = this.pendingTouchBrush;
+      if (pendingTouchBrush?.pointerId === pointer.id) {
+        this.pendingTouchBrush = null;
+        this.painting = false;
+        if (!pendingTouchBrush.cancelled) {
+          if (pendingTouchBrush.brush === 'bomb') {
+            this.applyBomb(pointer.worldX, pointer.worldY);
+          } else {
+            this.paintStamp(pointer.worldX, pointer.worldY, pendingTouchBrush.brush);
+          }
+        }
+        return;
+      }
       const brush = this.brush;
       if (
         this.painting &&
@@ -211,8 +251,22 @@ export class GameScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (this.lifecycle.isSuspended()) return;
+      if (this.updateTouchCameraGesture(pointer)) return;
       this.pointerSeen = true;
       const brush = this.brush;
+      const pendingTouchBrush = this.pendingTouchBrush;
+      if (pendingTouchBrush?.pointerId === pointer.id && pointer.isDown) {
+        const moved = Math.hypot(pointer.x - pendingTouchBrush.startX, pointer.y - pendingTouchBrush.startY);
+        if (moved >= this.gestureThresholdGamePx()) {
+          if (pendingTouchBrush.brush === 'bomb') {
+            pendingTouchBrush.cancelled = true;
+            return;
+          }
+          this.pendingTouchBrush = null;
+          this.painting = true;
+          this.paintStamp(pendingTouchBrush.worldX, pendingTouchBrush.worldY, pendingTouchBrush.brush);
+        }
+      }
       if (this.painting && pointer.isDown && brush && brush !== 'bomb') {
         // Limited tools stamp once per brush radius; open toolboxes spray freely.
         const dist = Math.hypot(pointer.worldX - this.lastStampX, pointer.worldY - this.lastStampY);
@@ -232,19 +286,36 @@ export class GameScene extends Phaser.Scene {
           gesture.panning = true;
         }
         if (gesture.panning) {
-          const cam = this.cameras.main;
-          cam.scrollX -= pointer.x - gesture.lastX;
-          cam.scrollY -= pointer.y - gesture.lastY;
+          this.panCamera(
+            { x: gesture.lastX, y: gesture.lastY },
+            { x: pointer.x, y: pointer.y },
+          );
         }
         gesture.lastX = pointer.x;
         gesture.lastY = pointer.y;
       }
       if (pointer.middleButtonDown() || pointer.rightButtonDown()) {
-        const cam = this.cameras.main;
-        cam.scrollX -= pointer.position.x - pointer.prevPosition.x;
-        cam.scrollY -= pointer.position.y - pointer.prevPosition.y;
+        this.panCamera(
+          { x: pointer.prevPosition.x, y: pointer.prevPosition.y },
+          { x: pointer.position.x, y: pointer.position.y },
+        );
       }
     });
+    this.input.on(
+      'wheel',
+      (pointer: Phaser.Input.Pointer, _over: Phaser.GameObjects.GameObject[], _dx: number, dy: number) => {
+        if (
+          !__PLAYER_BUILD__
+          || this.lifecycle.isSuspended()
+          || this.selectOpen
+          || this.continueOverlay?.isVisible()
+          || !this.sim
+        ) return;
+        const anchor = { x: pointer.x, y: pointer.y };
+        this.applyPlayerCameraGesture(anchor, anchor, this.cameras.main.zoom * Math.exp(-dy * 0.0015));
+        (pointer.event as WheelEvent | undefined)?.preventDefault();
+      },
+    );
     this.levelSelect = new LevelSelect((index) => {
       this.unlockAudio();
       this.levelIndex = index;
@@ -336,6 +407,69 @@ export class GameScene extends Phaser.Scene {
   private isOverGame(clientX: number, clientY: number): boolean {
     const rect = this.game.canvas.getBoundingClientRect();
     return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  private beginTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
+    if (!__PLAYER_BUILD__ || !pointer.wasTouch) return false;
+    if (!this.touchCameraGesture.begin(pointer.id, { x: pointer.x, y: pointer.y })) return false;
+    this.painting = false;
+    this.pendingTouchBrush = null;
+    this.canvasGesture = null;
+    return true;
+  }
+
+  private updateTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
+    if (!__PLAYER_BUILD__ || !pointer.wasTouch) return false;
+    const move = this.touchCameraGesture.move(pointer.id, { x: pointer.x, y: pointer.y });
+    if (!move.owned) return false;
+    if (move.previousCenter && move.currentCenter && move.scale) {
+      this.applyPlayerCameraGesture(
+        move.previousCenter,
+        move.currentCenter,
+        this.cameras.main.zoom * move.scale,
+      );
+    }
+    return move.owned;
+  }
+
+  private endTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
+    return __PLAYER_BUILD__ && pointer.wasTouch
+      ? this.touchCameraGesture.end(pointer.id)
+      : false;
+  }
+
+  private panCamera(previous: { x: number; y: number }, current: { x: number; y: number }): void {
+    const camera = this.cameras.main;
+    if (__PLAYER_BUILD__) {
+      this.applyPlayerCameraGesture(previous, current, camera.zoom);
+      return;
+    }
+    camera.scrollX -= (current.x - previous.x) / camera.zoom;
+    camera.scrollY -= (current.y - previous.y) / camera.zoom;
+  }
+
+  private applyPlayerCameraGesture(
+    previousAnchor: { x: number; y: number },
+    currentAnchor: { x: number; y: number },
+    requestedZoom: number,
+  ): void {
+    if (!this.level) return;
+    const camera = this.cameras.main;
+    const frame = playerCameraGestureFrame(
+      { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY },
+      previousAnchor,
+      currentAnchor,
+      requestedZoom,
+      { x: camera.width, y: camera.height },
+      { width: this.level.width, height: this.level.height },
+    );
+    camera.setZoom(frame.zoom);
+    camera.setScroll(frame.scrollX, frame.scrollY);
+  }
+
+  private resetCameraGestures(): void {
+    this.touchCameraGesture.reset();
+    this.pendingTouchBrush = null;
   }
 
   private placeCrew(worldX: number, worldY: number, skill: Skill): void {
@@ -700,6 +834,7 @@ export class GameScene extends Phaser.Scene {
     this.placedWorldEntities.clear();
     this.painting = false;
     this.canvasGesture = null;
+    this.resetCameraGestures();
 
     this.hud?.destroy();
     this.hud = new Hud({

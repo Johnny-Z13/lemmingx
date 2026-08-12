@@ -171,6 +171,7 @@ body {
 
 canvas {
   display: block;
+  touch-action: none;
 }
 
 /* The HUD toggles elements via the `hidden` attribute; author `display` rules

@@ -39,6 +39,10 @@ export class ContinueOverlay {
     this.root.hidden = true;
   }
 
+  isVisible(): boolean {
+    return !this.root.hidden;
+  }
+
   destroy(): void {
     this.root.remove();
   }
