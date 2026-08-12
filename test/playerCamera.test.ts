@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PLAYER_CAMERA_MAX_ZOOM,
   PLAYER_CAMERA_ZOOM,
+  playerCameraCrewFocus,
   playerCameraFrame,
   playerCameraGestureFrame,
 } from '../src/render/playerCamera';
@@ -30,6 +31,25 @@ describe('playerCameraFrame', () => {
     expect(frame.scrollY).toBeGreaterThan(0);
   });
 
+  it('does not let vertical pan drag a compact-level ground line behind the dock', () => {
+    const initial = playerCameraFrame(
+      { width: 960, height: 540, spawn: { x: 400, y: 410 } },
+      { width: 960, height: 540 },
+    );
+    const frame = playerCameraGestureFrame(
+      initial,
+      { x: 480, y: 270 },
+      { x: 480, y: 500 },
+      initial.zoom,
+      { x: 960, y: 540 },
+      { width: 960, height: 540 },
+    );
+    const groundScreenY = (430 - frame.scrollY) * frame.zoom;
+
+    expect(frame.scrollY).toBeCloseTo(initial.scrollY);
+    expect(groundScreenY).toBeLessThan(422);
+  });
+
   it('keeps the pinched world point under the moving finger midpoint', () => {
     const frame = playerCameraGestureFrame(
       { zoom: 1.1, scrollX: 40, scrollY: 30 },
@@ -47,6 +67,50 @@ describe('playerCameraFrame', () => {
     expect(newWorldPoint.y).toBeCloseTo(oldWorldPoint.y);
   });
 
+  it('gently biases zoom-in toward the living crew focus', () => {
+    const current = { zoom: 1.1, scrollX: 200, scrollY: 100 };
+    const anchor = { x: 850, y: 440 };
+    const viewport = { x: 960, y: 540 };
+    const world = { width: 2000, height: 1200 };
+    const crewFocus = { x: 400, y: 260 };
+    const anchored = playerCameraGestureFrame(current, anchor, anchor, 1.45, viewport, world);
+    const focused = playerCameraGestureFrame(current, anchor, anchor, 1.45, viewport, world, crewFocus);
+    const visibleWidth = viewport.x / focused.zoom;
+    const visibleHeight = viewport.y / focused.zoom;
+    const anchoredCenter = { x: anchored.scrollX + visibleWidth / 2, y: anchored.scrollY + visibleHeight / 2 };
+    const focusedCenter = { x: focused.scrollX + visibleWidth / 2, y: focused.scrollY + visibleHeight / 2 };
+    const distance = (point: { x: number; y: number }) => Math.hypot(point.x - crewFocus.x, point.y - crewFocus.y);
+
+    expect(distance(focusedCenter)).toBeLessThan(distance(anchoredCenter) * 0.25);
+    expect(focusedCenter).not.toEqual(crewFocus);
+  });
+
+  it('leaves zoom-out anchored to the gesture instead of pulling at the crew', () => {
+    const current = { zoom: 1.45, scrollX: 200, scrollY: 100 };
+    const anchor = { x: 850, y: 440 };
+    const viewport = { x: 960, y: 540 };
+    const world = { width: 2000, height: 1200 };
+    const anchored = playerCameraGestureFrame(current, anchor, anchor, 1.1, viewport, world);
+    const focused = playerCameraGestureFrame(current, anchor, anchor, 1.1, viewport, world, { x: 400, y: 260 });
+
+    expect(focused).toEqual(anchored);
+  });
+
+  it('focuses living visible crew without letting dead or distant outliers pull the camera', () => {
+    const focus = playerCameraCrewFocus(
+      [
+        { x: 120, y: 200, state: 'walker' },
+        { x: 180, y: 220, state: 'basher' },
+        { x: 400, y: 260, state: 'dead' },
+        { x: 1400, y: 220, state: 'walker' },
+      ],
+      { zoom: 1.2, scrollX: 0, scrollY: 0 },
+      { x: 960, y: 540 },
+    );
+
+    expect(focus).toEqual({ x: 150, y: 210 });
+  });
+
   it('clamps zoom and camera scroll to the authored world', () => {
     const frame = playerCameraGestureFrame(
       { zoom: 1.1, scrollX: 0, scrollY: 0 },
@@ -59,6 +123,6 @@ describe('playerCameraFrame', () => {
 
     expect(frame.zoom).toBe(PLAYER_CAMERA_MAX_ZOOM);
     expect(frame.scrollX).toBe(0);
-    expect(frame.scrollY).toBe(0);
+    expect(frame.scrollY).toBe(240);
   });
 });

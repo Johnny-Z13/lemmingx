@@ -3,7 +3,7 @@
   "proofOnly": true,
   "releaseCleared": false,
   "branch": "codex/crazygames-candidate",
-  "commit": "3089c156d146cabbe7ffb8e68069ac943930cf6f",
+  "commit": "5fe9e0db249bf5e7d7b98ef11497fe2436cef123",
   "dirty": true,
   "excludedUserWork": [
     ".gitignore",
@@ -11,8 +11,8 @@
     "design-qa.md"
   ],
   "fileCount": 5,
-  "uncompressedBytes": 2970733,
-  "artifactSha256": "c97b1f3d579b6af36be5cd0cf83d0c16796c6dc85a82b376d7e9cf586db5f886",
+  "uncompressedBytes": 2975088,
+  "artifactSha256": "9cdefa8bb0eea24bb8d016c257bbb5955a75aeec486394c7301b9971dd285a7c",
   "unresolvedProvenance": [
     {
       "id": "industrial-cavern-backdrop",

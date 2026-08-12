@@ -30,7 +30,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { PHONE_PORTRAIT_QUERY, PhoneOrientationGate } from '../lifecycle/PhoneOrientationGate';
-import { playerCameraFrame, playerCameraGestureFrame } from '../render/playerCamera';
+import { playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
@@ -455,13 +455,15 @@ export class GameScene extends Phaser.Scene {
   ): void {
     if (!this.level) return;
     const camera = this.cameras.main;
+    const current = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
     const frame = playerCameraGestureFrame(
-      { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY },
+      current,
       previousAnchor,
       currentAnchor,
       requestedZoom,
       { x: camera.width, y: camera.height },
       { width: this.level.width, height: this.level.height },
+      playerCameraCrewFocus(this.sim.state.lemmings, current, { x: camera.width, y: camera.height }),
     );
     camera.setZoom(frame.zoom);
     camera.setScroll(frame.scrollX, frame.scrollY);
