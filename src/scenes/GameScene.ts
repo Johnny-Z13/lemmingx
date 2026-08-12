@@ -30,6 +30,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { PHONE_PORTRAIT_QUERY, PhoneOrientationGate } from '../lifecycle/PhoneOrientationGate';
+import { playerCameraFrame } from '../render/playerCamera';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -583,7 +584,12 @@ export class GameScene extends Phaser.Scene {
         ? {
             terrain: this.level.terrain,
             lemmings: this.sim.state.lemmings,
-            camera: { x: cam.scrollX, y: cam.scrollY, width: cam.width, height: cam.height },
+            camera: {
+              x: cam.worldView.x,
+              y: cam.worldView.y,
+              width: cam.worldView.width,
+              height: cam.worldView.height,
+            },
             width: this.level.width,
             height: this.level.height,
           }
@@ -654,9 +660,17 @@ export class GameScene extends Phaser.Scene {
     this.lemmingLabels.clear();
     this.entityLabels.clear();
     this.lemmingDisplayPoints.clear();
-    this.cameras.main.setBounds(0, 0, this.level.width, this.level.height);
-    this.cameras.main.setBackgroundColor('#12171f');
-    this.cameras.main.centerOn(this.level.spawn.x, this.level.spawn.y);
+    const camera = this.cameras.main;
+    camera.setBounds(0, 0, this.level.width, this.level.height);
+    camera.setBackgroundColor('#12171f');
+    if (__PLAYER_BUILD__) {
+      const frame = playerCameraFrame(this.level, { width: camera.width, height: camera.height });
+      camera.setZoom(frame.zoom);
+      camera.setScroll(frame.scrollX, frame.scrollY);
+    } else {
+      camera.setZoom(1);
+      camera.centerOn(this.level.spawn.x, this.level.spawn.y);
+    }
 
     this.worldBackdrop = new WorldBackdrop(this, this.level.width, this.level.height);
     this.terrainGraphics = this.add.graphics().setDepth(0);
