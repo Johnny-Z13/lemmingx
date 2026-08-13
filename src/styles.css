@@ -146,6 +146,33 @@ body {
   display: none;
 }
 
+.dev-sandbox-toggle {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 1100;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 217, 107, 0.58);
+  border-radius: 6px;
+  color: #fff3c2;
+  background: rgba(5, 8, 12, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dev-sandbox-toggle:hover,
+.dev-sandbox-toggle:focus-visible,
+.dev-sandbox-toggle[aria-pressed='true'] {
+  border-color: #ffd96b;
+  background: rgba(121, 90, 20, 0.88);
+  outline: none;
+}
+
 @media (orientation: portrait) and (max-width: 760px) {
   .is-player-build .rotate-notice {
     position: fixed;
@@ -863,6 +890,54 @@ input:focus-visible {
 
 .select__lock {
   opacity: 0.6;
+}
+
+@media (orientation: landscape) and (max-height: 480px) {
+  .select {
+    align-items: start;
+    overflow: auto;
+    padding: 8px;
+  }
+
+  .select__panel {
+    width: min(760px, calc(100vw - 16px));
+    padding: 10px 12px;
+  }
+
+  .select__title {
+    margin-bottom: 1px;
+    font-size: 1.35rem;
+  }
+
+  .select__sub {
+    margin-bottom: 4px;
+    font-size: 0.72rem;
+  }
+
+  .select__build {
+    margin: 0 0 5px;
+    font-size: 0.6rem;
+  }
+
+  .select__grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .select__card {
+    gap: 1px;
+    min-height: 48px;
+    padding: 4px;
+  }
+
+  .select__num {
+    font-size: 0.92rem;
+  }
+
+  .select__name,
+  .select__best {
+    font-size: 0.62rem;
+  }
 }
 
 /* ---- Audio cluster ---- */

@@ -15,8 +15,9 @@ Guidance for AI agents working in this repo.
 Modes:
 
 1. **Campaign** — 10 levels, quota + timer, progressive landscape intros.
-2. **Prototype 11/12** — always-unlocked mechanic slots outside progression.
-3. **Sand Lab** — free-play paint arena (Noita-lite), always unlocked.
+2. **Prototype 11/12** — development-only Sandbox slots outside progression.
+3. **Sand Lab** — free-play paint arena (Noita-lite), unlocked after Level 3
+   in the player game and always available in Sandbox.
 
 The current presentation layer includes full role uniforms + matching HUD
 icons, render-only crowd fan-out/jitter, a fixed-anchor collapsible control
@@ -33,7 +34,11 @@ dock, deterministic Random hatch roles, and event-driven impact FX.
 | Tests | Vitest — behavior + **level solvability scripts** |
 | Build | Vite + `tsc` |
 
-Commands: `npm run dev` · `npm test` · `npm run build`
+Commands: `npm run dev` · `npm test` · `npm run build` · `npm run build:crazygames`
+
+`npm run dev` and both build commands default to the canonical player/CrazyGames
+experience. The local-only **Dev Sandbox** button reloads the tab with the full
+test roster and diagnostics. Compiled builds fail closed with Sandbox unavailable.
 
 ## Hard rules for changes
 
@@ -105,9 +110,10 @@ Level 7 signature.
 | 9 | The Gauntlet | Locked Floater/Climber loadout + two fatal drops |
 | 10 | Sandworld Symphony | Full toolkit finale: all charges + dune emitter |
 
-Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain).
-Prototype slots are indices 10/11 in `PROTOTYPE_LEVEL_INDICES`; the campaign
-count remains 10 and Sand Lab follows at index 12.
+Sand Lab is index `SAND_LAB_INDEX` (not part of the unlock chain). In player
+builds it follows the 10-level campaign at index 10. In Dev Sandbox/test builds,
+Prototype slots occupy indices 10/11 in `PROTOTYPE_LEVEL_INDICES` and Sand Lab
+follows at index 12.
 
 ## Important APIs
 
@@ -132,9 +138,14 @@ count remains 10 and Sand Lab follows at index 12.
   but an explicit `openToolbox: false` is preserved for challenge-loadout stages.
   Levels 2, 7, and 9 are locked so their canonical Swimmer, Fire, and
   Floater/Climber mechanics are genuinely required.
-- `PLAYTEST_UNLOCK_ALL_LEVELS` in `progress.ts` is temporarily `true` so every
-  campaign layout is directly testable. Sequential progression remains covered
-  with `{ unlockAll: false }`; flip the constant off rather than deleting it.
+- `runtimeMode.ts` owns the fail-closed player/Sandbox boundary. Ordinary local
+  development boots Player; the session-scoped Dev Sandbox control enables the
+  internal roster after reload. Production builds cannot honor a stored Sandbox
+  preference, and prototype names/code must continue to pass the player-only
+  marker verifier.
+- `PLAYTEST_UNLOCK_ALL_LEVELS` in `progress.ts` follows Sandbox mode. Player
+  builds use sequential progression; explicit `{ unlockAll: false }` remains
+  available for progression tests.
 - Campaign levels start paused in a planning phase. `objective` and `hint` are
   shown while the player queues roles or reshapes terrain; Start/Space opens the
   hatch and clock. `GameScene` still calls `stepLivingTerrain()` while planning,

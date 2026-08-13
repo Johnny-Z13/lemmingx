@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 import { BUILD_TAG } from './src/version';
 
-export default defineConfig(({ mode }) => ({
-  base: mode === 'crazygames' ? './' : '/',
+export default defineConfig(({ command, mode }) => ({
+  base: command === 'build' ? './' : '/',
   define: {
-    __PLAYER_BUILD__: JSON.stringify(mode === 'crazygames'),
-    __BUILD_TAG__: JSON.stringify(mode === 'crazygames' ? '' : BUILD_TAG),
+    __PLAYER_BUILD__: JSON.stringify(mode !== 'test'),
+    __DEV_SANDBOX_AVAILABLE__: JSON.stringify(command === 'serve' && mode !== 'crazygames'),
+    __BUILD_TAG__: JSON.stringify(BUILD_TAG),
   },
   server: {
     host: '127.0.0.1',

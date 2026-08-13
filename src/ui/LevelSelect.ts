@@ -1,5 +1,10 @@
 /** Full-screen DOM level-select: campaign cards + Sand Lab entry. */
 
+import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
+
+const SANDBOX_UI_ENABLED = (!__PLAYER_BUILD__ || __DEV_SANDBOX_AVAILABLE__)
+  && !IS_PLAYER_EXPERIENCE;
+
 export interface LevelCard {
   index: number;
   name: string;
@@ -23,8 +28,8 @@ export class LevelSelect {
     this.root.innerHTML = `
       <div class="select__panel">
         <h1 class="select__title">LemmingX</h1>
-        <p class="select__sub">${__PLAYER_BUILD__ ? 'Living-terrain rescue puzzles.' : 'Campaign puzzles, two prototype slots, or the free-play Sand Lab.'}</p>
-        ${__PLAYER_BUILD__ ? '' : '<p class="select__build"></p>'}
+        <p class="select__sub">${SANDBOX_UI_ENABLED ? 'Sandbox: campaign, prototypes, and the free-play Sand Lab.' : 'Living-terrain rescue puzzles.'}</p>
+        ${SANDBOX_UI_ENABLED ? '<p class="select__build"></p>' : ''}
         <div class="select__grid"></div>
       </div>`;
     this.grid = this.root.querySelector('.select__grid') as HTMLDivElement;
@@ -48,8 +53,10 @@ export class LevelSelect {
         ? '<span class="select__lock">🔒</span>'
         : card.sandLab
           ? '<span class="select__best select__best--new">FREE PLAY</span>'
-          : card.prototype && !__PLAYER_BUILD__
-            ? '<span class="select__best select__best--new">PROTOTYPE</span>'
+          : card.prototype && SANDBOX_UI_ENABLED
+            ? __PLAYER_BUILD__ && !__DEV_SANDBOX_AVAILABLE__
+              ? ''
+              : '<span class="select__best select__best--new">PROTOTYPE</span>'
           : card.completed
             ? `<span class="select__best">★ ${card.bestSavedPct}%</span>`
             : '<span class="select__best select__best--new">NEW</span>';

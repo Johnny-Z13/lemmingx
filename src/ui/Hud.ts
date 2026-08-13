@@ -421,7 +421,7 @@ export class Hud {
     this.speedButton.hidden = this.playerBuild;
     this.nukeButton.hidden = this.playerBuild;
 
-    if (!__PLAYER_BUILD__ && (opts?.allowDebugLabels ?? true)) {
+    if (!this.playerBuild && (opts?.allowDebugLabels ?? true)) {
       this.debugLabelsButton = this.makeButton('Labels', 'Toggle debug labels (L)', () => {
         const enabled = !this.debugLabels;
         this.setDebugLabels(enabled);

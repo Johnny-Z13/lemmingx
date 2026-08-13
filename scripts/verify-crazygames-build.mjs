@@ -34,7 +34,17 @@ if (!relFiles.includes('THIRD_PARTY_NOTICES.txt')) errors.push('THIRD_PARTY_NOTI
 
 const textFiles = files.filter((path) => /\.(html|css|js|txt)$/i.test(path));
 const compiledText = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n');
-for (const marker of ['Drop Zone', 'World Kit', 'PROTOTYPE', 'Debug labels', 'industrial-reskin-v12', 'PLAYTEST_UNLOCK_ALL_LEVELS']) {
+for (const marker of [
+  'Drop Zone',
+  'World Kit',
+  'PROTOTYPE',
+  'Dev Sandbox',
+  'Exit Sandbox',
+  'Sandbox:',
+  'Debug labels',
+  'industrial-reskin-v12',
+  'PLAYTEST_UNLOCK_ALL_LEVELS',
+]) {
   if (compiledText.includes(marker)) errors.push(`player-only marker found: ${marker}`);
 }
 
@@ -77,14 +87,21 @@ const artifactHash = sha256(Buffer.concat(await Promise.all(
     .map(async ({ path, rel }) => Buffer.concat([Buffer.from(`${rel}\0`), await readFile(path)])),
 )));
 const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+const worktreeStatus = execFileSync(
+  'git',
+  ['status', '--porcelain=v1'],
+  { cwd: root, encoding: 'utf8' },
+).trimEnd();
 const metadata = {
   schemaVersion: 1,
   proofOnly: true,
   releaseCleared: unresolved.length === 0,
   branch: git(['branch', '--show-current']),
   commit: git(['rev-parse', 'HEAD']),
-  dirty: git(['status', '--porcelain=v1']).length > 0,
-  excludedUserWork: ['.gitignore', '.artifacts/', 'design-qa.md'],
+  dirty: worktreeStatus.length > 0,
+  excludedUserWork: worktreeStatus.length > 0
+    ? worktreeStatus.split('\n').map((line) => line.slice(3))
+    : [],
   fileCount: files.length,
   uncompressedBytes: bytes,
   artifactSha256: artifactHash,

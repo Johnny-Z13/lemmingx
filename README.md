@@ -17,29 +17,37 @@ npm run dev
 
 Open `http://127.0.0.1:5173/`.
 
+`npm run dev` boots the canonical player/CrazyGames experience. On the local
+development server only, the **Dev Sandbox** button reloads the tab with every
+campaign level unlocked, Prototype 11/12, Sand Lab, and diagnostic controls.
+Compiled builds cannot enter Sandbox mode.
+
 ```bash
 npm run test    # vitest: sim + CA + level solvability
-npm run build   # typecheck + production build
+npm run build   # canonical relative-path player build
+npm run build:crazygames  # explicit CrazyGames build (same player artifact)
 ```
 
 ## Current state
 
 LemmingX is a playable, guarded game rather than a loose prototype: the full
-10-level campaign, two mechanic-prototype slots, and Sand Lab ship from the same deterministic headless sim,
+10-level campaign and Sand Lab ship as the player game, while two development-only
+mechanic-prototype slots exercise the same deterministic headless sim,
 every campaign level has a scripted solvability path, and the rendered shell
 adds procedural sprites, role identity, crowd readability, particles, music,
 and SFX without leaking Phaser or browser state into simulation code.
 
 ## How to play
 
-- **Level select** — 10 campaign levels (progressive landscape intros),
-  always-unlocked **Prototype 11/12** slots, plus **Sand Lab**. The current playtest build temporarily unlocks every campaign
-  level; sequential progression and best Success % are still saved (localStorage).
+- **Player progression** — 10 campaign levels with progressive landscape
+  intros; Sand Lab opens after Level 3. Sequential progression and best Success
+  % are saved in localStorage. Local **Dev Sandbox** unlocks the entire roster
+  and adds Prototype 11/12 outside progression.
 - Meet the **save quota** before the **timer** ends. Live **Success %** is
   `saved / total` (100% = everyone home). Quota can be lower than 100%.
 - Most campaign levels have the **open toolbox**. Levels 2, 7, and 9 are
   **challenge loadouts** with deliberately limited roles/tools so Swimmer, Fire,
-  and Floater/Climber cannot be bypassed. All levels remain unlocked for playtesting.
+  and Floater/Climber cannot be bypassed. Sandbox unlocks all levels for testing.
 - Campaign levels open in a **planning phase** with a goal and route hint. The
   clock and hatch stay stopped while you queue roles or reshape terrain; press
   **Space** or **Start run** when ready. Painted sand, water, wood, and fire keep
@@ -52,7 +60,7 @@ and SFX without leaking Phaser or browser state into simulation code.
   job. **Swimmer (9)** is assignable mid-water — rescue a treading lemming.
 - Every crew role has a distinct hair + uniform palette, echoed by the miniature
   lemming on its HUD button. Armed bombers take priority while their fuse burns.
-  Toggle persisted debug labels with **Labels** or **L** to show
+  In Sandbox, toggle persisted debug labels with **Labels** or **L** to show
   `Name · Role · State` above every crew member. The same layer identifies
   hatches, exits, traps, hazards, and material spouts with their live status.
 - **Hatch queue (Q)** — select a role and press Q/Queue, or double-click its
@@ -95,7 +103,7 @@ and SFX without leaking Phaser or browser state into simulation code.
 
 ### Sand Lab
 
-Always-unlocked Noita-lite sandbox from the level select:
+Noita-lite free play from the level select after Level 3, or immediately in Dev Sandbox:
 
 | Key | Tool |
 |:---:|------|
@@ -107,7 +115,8 @@ Drag to paint. No quota — dig, flood, bomb, and shepherd the crew for fun.
 
 ### Prototype slots
 
-These are deliberately outside campaign progression and quota scoring:
+These development-only experiments are deliberately outside campaign progression
+and quota scoring. Enter them through the local Dev Sandbox:
 
 | # | Prototype | Experiment |
 |---|-----------|------------|
@@ -183,8 +192,9 @@ src/
   audio/              Runtime SFX + chiptune + persisted settings
   scenes/GameScene.ts Input, camera, Lab tools, juice
   ui/                 HUD (Success %, queue, landscape) + level select
-  levels/             Campaign factories + prototype slots + Sand Lab
-  progress.ts         Temporary playtest unlock override + progression + best save-%
+  levels/             Campaign + Sand Lab; prototypes compile only for dev/test
+  runtimeMode.ts      Fail-closed player/Sandbox boundary
+  progress.ts         Sandbox unlock override + player progression + best save-%
 test/                 Vitest: sim, CA, solvability guards
 docs/superpowers/     Design specs (Sand hybrid USP locked)
 CLAUDE.md             Agent-oriented project map

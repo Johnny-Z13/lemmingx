@@ -32,6 +32,7 @@ import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { PHONE_PORTRAIT_QUERY, PhoneOrientationGate } from '../lifecycle/PhoneOrientationGate';
 import { playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
+import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -67,7 +68,7 @@ export class GameScene extends Phaser.Scene {
   private readonly sfx = new Sfx();
   private readonly music = new Music();
   private audioSettings = loadAudioSettings();
-  private uiSettings = __PLAYER_BUILD__ ? { debugLabels: false } : loadUiSettings();
+  private uiSettings = IS_PLAYER_EXPERIENCE ? { debugLabels: false } : loadUiSettings();
   private readonly lemmingLabels = new Map<number, Phaser.GameObjects.Text>();
   private readonly entityLabels = new Map<string, Phaser.GameObjects.Text>();
   private readonly progress = new Progress(localStorage);
@@ -137,7 +138,7 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
-    if (__PLAYER_BUILD__) {
+    if (IS_PLAYER_EXPERIENCE) {
       this.phoneOrientationGate = new PhoneOrientationGate(
         window.matchMedia(PHONE_PORTRAIT_QUERY),
         () => this.suspendForLifecycle('orientation'),
@@ -154,7 +155,7 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('blur', this.handleWindowBlur);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupLifecycle());
     this.installKeyboard();
-    if (__PLAYER_BUILD__) this.input.addPointer(1);
+    if (IS_PLAYER_EXPERIENCE) this.input.addPointer(1);
     this.applyAudioSettings(this.audioSettings);
     // Audio contexts need a user gesture; unlock on the first pointer/key.
     this.input.on('pointerdown', () => this.unlockAudio());
@@ -240,7 +241,7 @@ export class GameScene extends Phaser.Scene {
       this.canvasGesture = null;
       if (!gesture || gesture.pointerId !== pointer.id || gesture.panning) return;
       if (gesture.targetId === null) {
-        if (__PLAYER_BUILD__ && this.levelIndex === 0 && this.sim.state.skills.basher > 0) {
+        if (IS_PLAYER_EXPERIENCE && this.levelIndex === 0 && this.sim.state.skills.basher > 0) {
           this.crewActionFeedback.show('missed', this.animClockMs);
         }
         return;
@@ -305,7 +306,7 @@ export class GameScene extends Phaser.Scene {
       'wheel',
       (pointer: Phaser.Input.Pointer, _over: Phaser.GameObjects.GameObject[], _dx: number, dy: number) => {
         if (
-          !__PLAYER_BUILD__
+          !IS_PLAYER_EXPERIENCE
           || this.lifecycle.isSuspended()
           || this.selectOpen
           || this.continueOverlay?.isVisible()
@@ -323,7 +324,7 @@ export class GameScene extends Phaser.Scene {
       this.levelSelect.hide();
       this.startLevel();
     });
-    if (__PLAYER_BUILD__) {
+    if (IS_PLAYER_EXPERIENCE) {
       this.levelIndex = this.nextUnsolvedLevelIndex();
       this.startLevel();
       if (this.levelIndex === 0) this.startRun();
@@ -366,7 +367,7 @@ export class GameScene extends Phaser.Scene {
     cards.push({
       index: SAND_LAB_INDEX,
       name: 'Sand Lab',
-      unlocked: !__PLAYER_BUILD__ || this.progress.get(2).completed,
+      unlocked: !IS_PLAYER_EXPERIENCE || this.progress.get(2).completed,
       completed: false,
       bestSavedPct: 0,
       sandLab: true,
@@ -410,7 +411,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private beginTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
-    if (!__PLAYER_BUILD__ || !pointer.wasTouch) return false;
+    if (!IS_PLAYER_EXPERIENCE || !pointer.wasTouch) return false;
     if (!this.touchCameraGesture.begin(pointer.id, { x: pointer.x, y: pointer.y })) return false;
     this.painting = false;
     this.pendingTouchBrush = null;
@@ -419,7 +420,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
-    if (!__PLAYER_BUILD__ || !pointer.wasTouch) return false;
+    if (!IS_PLAYER_EXPERIENCE || !pointer.wasTouch) return false;
     const move = this.touchCameraGesture.move(pointer.id, { x: pointer.x, y: pointer.y });
     if (!move.owned) return false;
     if (move.previousCenter && move.currentCenter && move.scale) {
@@ -433,14 +434,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private endTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
-    return __PLAYER_BUILD__ && pointer.wasTouch
+    return IS_PLAYER_EXPERIENCE && pointer.wasTouch
       ? this.touchCameraGesture.end(pointer.id)
       : false;
   }
 
   private panCamera(previous: { x: number; y: number }, current: { x: number; y: number }): void {
     const camera = this.cameras.main;
-    if (__PLAYER_BUILD__) {
+    if (IS_PLAYER_EXPERIENCE) {
       this.applyPlayerCameraGesture(previous, current, camera.zoom);
       return;
     }
@@ -752,7 +753,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private playerActionCue(): string | null {
-    if (!__PLAYER_BUILD__ || this.planning) return null;
+    if (!IS_PLAYER_EXPERIENCE || this.planning) return null;
     const feedback = this.crewActionFeedback.current(this.animClockMs);
     if (feedback) return feedback;
     if (this.levelIndex === 0 && this.sim.state.skills.basher > 0) {
@@ -799,7 +800,7 @@ export class GameScene extends Phaser.Scene {
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.level.width, this.level.height);
     camera.setBackgroundColor('#12171f');
-    if (__PLAYER_BUILD__) {
+    if (IS_PLAYER_EXPERIENCE) {
       const frame = playerCameraFrame(this.level, { width: camera.width, height: camera.height });
       camera.setZoom(frame.zoom);
       camera.setScroll(frame.scrollX, frame.scrollY);
@@ -827,10 +828,10 @@ export class GameScene extends Phaser.Scene {
       !this.hasOpenToolbox() &&
       !ALL_SKILLS.some((skill) => this.level.skills[skill] > 0) &&
       (this.level.landscape?.fire ?? 0) > 0;
-    this.brush = __PLAYER_BUILD__ && this.levelIndex === 1
+    this.brush = IS_PLAYER_EXPERIENCE && this.levelIndex === 1
       ? 'water'
       : this.isLab() ? 'sand' : terrainOnlyChallenge ? 'fire' : null;
-    if (__PLAYER_BUILD__ && this.levelIndex === 2) this.sim.setSelectedSkill('blocker');
+    if (IS_PLAYER_EXPERIENCE && this.levelIndex === 2) this.sim.setSelectedSkill('blocker');
     this.crewPlacement = null;
     this.worldTool = null;
     this.placedWorldEntities.clear();
@@ -887,11 +888,11 @@ export class GameScene extends Phaser.Scene {
       openToolbox: this.hasOpenToolbox(),
       freePlay: this.isFreePlay(),
       debugLabels: this.uiSettings.debugLabels,
-      allowDebugLabels: !__PLAYER_BUILD__,
+      allowDebugLabels: !IS_PLAYER_EXPERIENCE,
       spawnMode: this.level.playMode?.spawn,
       worldTools: this.level.playMode?.worldTools,
-      playerBuild: __PLAYER_BUILD__,
-      showRestart: __PLAYER_BUILD__ && (this.levelIndex === 1 || this.levelIndex === 2),
+      playerBuild: IS_PLAYER_EXPERIENCE,
+      showRestart: IS_PLAYER_EXPERIENCE && (this.levelIndex === 1 || this.levelIndex === 2),
       availableSkills: this.playerVisibleSkills(),
       availableTerrainTools: this.playerVisibleTerrainTools(),
     });
@@ -914,7 +915,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setDebugLabels(enabled: boolean): void {
-    if (__PLAYER_BUILD__) return;
+    if (IS_PLAYER_EXPERIENCE) return;
     this.uiSettings.debugLabels = enabled;
     saveUiSettings(this.uiSettings);
     this.hud?.setDebugLabels(enabled);
@@ -1010,11 +1011,11 @@ export class GameScene extends Phaser.Scene {
         this.triggerNuke();
       } else if (key === 'h') {
         this.hud.toggleCollapsed();
-      } else if (key === 'l' && !__PLAYER_BUILD__) {
+      } else if (key === 'l' && !IS_PLAYER_EXPERIENCE) {
         this.setDebugLabels(!this.uiSettings.debugLabels);
       } else if (key === 'r') {
         this.startLevel();
-      } else if (key === 'escape' && !this.selectOpen && !__PLAYER_BUILD__) {
+      } else if (key === 'escape' && !this.selectOpen && !IS_PLAYER_EXPERIENCE) {
         // First Esc disarms a brush; the next one leaves the level.
         if (this.brush || this.crewPlacement || this.worldTool) {
           this.brush = null;
@@ -1053,7 +1054,7 @@ export class GameScene extends Phaser.Scene {
   private assignSelectedSkillTo(target: Lemming): void {
     if (this.sim.state.outcome !== 'running') return;
     if (this.sim.assignSkill(target.id, this.sim.state.selectedSkill)) {
-      if (__PLAYER_BUILD__ && this.levelIndex === 0) {
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex === 0) {
         this.crewActionFeedback.show('accepted', this.animClockMs);
       }
       const point = this.lemmingDisplayPoints.get(target.id) ?? target;
@@ -1092,7 +1093,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private playerVisibleSkills(): readonly Skill[] | undefined {
-    if (!__PLAYER_BUILD__) return undefined;
+    if (!IS_PLAYER_EXPERIENCE) return undefined;
     if (this.levelIndex === 0) return ['basher'];
     if (this.levelIndex === 1) return [];
     if (this.levelIndex === 2) return ['blocker', 'bomber'];
@@ -1100,7 +1101,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private playerVisibleTerrainTools(): readonly TerrainBrush[] | undefined {
-    if (!__PLAYER_BUILD__) return undefined;
+    if (!IS_PLAYER_EXPERIENCE) return undefined;
     if (this.levelIndex === 0) return [];
     if (this.levelIndex === 1) return ['water'];
     if (this.levelIndex === 2) return ['sand'];
@@ -1141,7 +1142,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawOnboardingMarkers(): void {
-    if (!__PLAYER_BUILD__ || this.levelIndex !== 1 || !this.planning) return;
+    if (!IS_PLAYER_EXPERIENCE || this.levelIndex !== 1 || !this.planning) return;
     this.setpieceGraphics.lineStyle(2, 0x6ae1ff, 0.7);
     for (let x = 624; x < 720; x += 18) {
       this.setpieceGraphics.lineBetween(x, 382, Math.min(x + 10, 720), 382);
@@ -1492,7 +1493,7 @@ export class GameScene extends Phaser.Scene {
     this.actorGraphics.clear();
     const frame = this.animFrame();
     const visibleLabels = new Set<number>();
-    const cueTargetId = __PLAYER_BUILD__ && this.levelIndex === 0 && this.sim.state.skills.basher > 0
+    const cueTargetId = IS_PLAYER_EXPERIENCE && this.levelIndex === 0 && this.sim.state.skills.basher > 0
       ? this.sim.state.lemmings
           .filter((lemming) => lemming.state === 'walker')
           .sort((a, b) => b.x - a.x || a.id - b.id)[0]?.id ?? null

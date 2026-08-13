@@ -12,6 +12,7 @@ import { createLevel10 } from './level10';
 import { createLevel11 } from './level11';
 import { createLevel12 } from './level12';
 import { createLabLevel } from './lab';
+import { DEV_SANDBOX_ENABLED } from '../runtimeMode';
 
 /**
  * Ordered campaign roster. Each entry is a factory so a fresh, mutable terrain is
@@ -32,10 +33,14 @@ export const LEVELS: ReadonlyArray<() => LevelDefinition> = [
 
 export const LEVEL_COUNT = LEVELS.length;
 
-/** Always-unlocked mechanic experiments; deliberately outside campaign progression. */
-export const PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> = __PLAYER_BUILD__
-  ? []
-  : [createLevel11, createLevel12];
+/** Dev/test-only mechanic experiments; deliberately compiled out of player builds. */
+const COMPILED_PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> =
+  __PLAYER_BUILD__ && !__DEV_SANDBOX_AVAILABLE__
+    ? []
+    : [createLevel11, createLevel12];
+export const PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> = DEV_SANDBOX_ENABLED
+  ? COMPILED_PROTOTYPE_LEVELS
+  : [];
 export const PROTOTYPE_START_INDEX = LEVEL_COUNT;
 export const PROTOTYPE_LEVEL_INDICES = PROTOTYPE_LEVELS.map((_, offset) => PROTOTYPE_START_INDEX + offset);
 

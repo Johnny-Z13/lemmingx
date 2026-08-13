@@ -1,3 +1,5 @@
+import { DEV_SANDBOX_ENABLED } from './runtimeMode';
+
 /**
  * Campaign progress, persisted as one JSON blob. Storage is injected
  * (localStorage in the game, a fake in tests). Unlock rule: level 0 is always
@@ -15,8 +17,8 @@ export interface ProgressOptions {
   unlockAll?: boolean;
 }
 
-/** Internal builds keep the roster open; player builds use the real unlock chain. */
-export const PLAYTEST_UNLOCK_ALL_LEVELS = !__PLAYER_BUILD__;
+/** Sandbox keeps the roster open; the canonical player experience uses the real unlock chain. */
+export const PLAYTEST_UNLOCK_ALL_LEVELS = DEV_SANDBOX_ENABLED;
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
