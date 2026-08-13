@@ -6,12 +6,15 @@ import {
   IS_PLAYER_EXPERIENCE,
   setDevSandboxEnabled,
 } from './runtimeMode';
+import { DEVICE_PROFILE, IS_MOBILE_DEVICE } from './deviceProfile';
 import './styles.css';
 
 document.title = IS_PLAYER_EXPERIENCE ? 'LemmingX' : `LemmingX · ${__BUILD_TAG__}`;
 document.body.classList.toggle('is-player-build', IS_PLAYER_EXPERIENCE);
 document.body.classList.toggle('is-sandbox-build', DEV_SANDBOX_ENABLED);
-if (IS_PLAYER_EXPERIENCE) {
+document.body.classList.toggle('is-mobile-device', DEVICE_PROFILE === 'mobile');
+document.body.classList.toggle('is-desktop-device', DEVICE_PROFILE === 'desktop');
+if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) {
   const rotateNotice = document.createElement('div');
   rotateNotice.className = 'rotate-notice';
   rotateNotice.setAttribute('role', 'status');

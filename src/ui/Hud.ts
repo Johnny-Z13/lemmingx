@@ -204,7 +204,6 @@ export class Hud {
       playerBuild?: boolean;
       availableSkills?: readonly Skill[];
       availableTerrainTools?: readonly TerrainBrush[];
-      showRestart?: boolean;
     },
   ) {
     this.events = events;
@@ -405,7 +404,7 @@ export class Hud {
 
     this.pauseButton = this.makeButton('▮▮', 'Pause / resume (Space)', events.onTogglePause);
     this.pauseButton.className = 'hud__btn hud__pause';
-    this.speedButton = this.makeButton('▶', 'Speed (F)', events.onCycleSpeed);
+    this.speedButton = this.makeButton('⏩ 1×', 'Fast-forward (F)', events.onCycleSpeed);
     this.speedButton.className = 'hud__btn hud__speed';
 
     this.nukeButton = document.createElement('button');
@@ -415,10 +414,8 @@ export class Hud {
     this.nukeButton.innerHTML = '<span>☢ Nuke</span>';
     this.nukeButton.addEventListener('click', events.onNuke);
 
-    const restartButton = this.makeButton(this.playerBuild ? '↻' : '⟲ Restart', 'Retry (R)', events.onRestart);
+    const restartButton = this.makeButton(this.playerBuild ? '↻' : '⟲ Restart', 'Restart level (R)', events.onRestart);
     restartButton.className = 'hud__btn hud__restart';
-    restartButton.hidden = this.playerBuild && !opts?.showRestart;
-    this.speedButton.hidden = this.playerBuild;
     this.nukeButton.hidden = this.playerBuild;
 
     if (!this.playerBuild && (opts?.allowDebugLabels ?? true)) {
@@ -817,7 +814,11 @@ export class Hud {
     const pauseLabel = view.planning ? 'Start run (Space)' : 'Pause / resume (Space)';
     this.pauseButton.title = pauseLabel;
     this.pauseButton.setAttribute('aria-label', pauseLabel);
-    this.speedButton.textContent = view.speed > 1 ? `▶▶ ${view.speed}×` : '▶ 1×';
+    const nextSpeed = view.speed >= 3 ? 1 : view.speed + 1;
+    const speedLabel = `Fast-forward ${view.speed}× (F); next ${nextSpeed}×`;
+    this.speedButton.textContent = `⏩ ${view.speed}×`;
+    this.speedButton.title = speedLabel;
+    this.speedButton.setAttribute('aria-label', speedLabel);
     this.speedButton.classList.toggle('is-active', view.speed > 1);
 
     // Hatch queue strip

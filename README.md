@@ -22,6 +22,12 @@ development server only, the **Dev Sandbox** button reloads the tab with every
 campaign level unlocked, Prototype 11/12, Sand Lab, and diagnostic controls.
 Compiled builds cannot enter Sandbox mode.
 
+The runtime selects a **Desktop** or **Mobile** device profile from platform and
+input capabilities, never from viewport width alone. Desktop remains playable in
+narrow or portrait-shaped browser windows. Phones and iPads use the Mobile
+profile and show the landscape rotation gate only while the physical viewport is
+portrait; iPadOS desktop-style user agents are recognized through touch support.
+
 ```bash
 npm run test    # vitest: sim + CA + level solvability
 npm run build   # canonical relative-path player build
@@ -78,7 +84,8 @@ and SFX without leaking Phaser or browser state into simulation code.
 - **Space** pause · **F** speed (1×/2×/3×) · **N** nuke · **H** hide/show the
   control dock · **L** debug labels · **R** restart · **Esc** select. The dock
   uses a compact top-right hand/minimise cluster: drag by the hand, or toggle
-  the panel without moving the cursor.
+  the panel without moving the cursor. The canonical player belt keeps restart
+  and fast-forward visible on every level for quick retries and solved-route cleanup.
 - Pan big levels with **arrows**, edge scroll, or **right/middle-drag**; **minimap** jumps the camera.
 - **Traps** (crusher / zapper / chomper) kill one victim, then re-arm.
 - Fatal falls produce a deliberately OTT blood spray, impact flash, shake, and
@@ -194,6 +201,7 @@ src/
   ui/                 HUD (Success %, queue, landscape) + level select
   levels/             Campaign + Sand Lab; prototypes compile only for dev/test
   runtimeMode.ts      Fail-closed player/Sandbox boundary
+  deviceProfile.ts    Desktop/Mobile capability and iPad detection
   progress.ts         Sandbox unlock override + player progression + best save-%
 test/                 Vitest: sim, CA, solvability guards
 docs/superpowers/     Design specs (Sand hybrid USP locked)

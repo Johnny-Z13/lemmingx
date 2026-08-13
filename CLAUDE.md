@@ -40,6 +40,13 @@ Commands: `npm run dev` · `npm test` · `npm run build` · `npm run build:crazy
 experience. The local-only **Dev Sandbox** button reloads the tab with the full
 test roster and diagnostics. Compiled builds fail closed with Sandbox unavailable.
 
+`deviceProfile.ts` selects Desktop versus Mobile from pointer/touch/platform
+capabilities, including iPadOS desktop-UA detection (`MacIntel` with multiple
+touch points). Never infer a mobile device from viewport width alone. Only Mobile
+devices own the portrait rotation gate; desktop remains playable at any window
+shape. Validate phone portrait/landscape, iPad portrait/landscape, and a narrow
+portrait-shaped desktop browser whenever this boundary changes.
+
 ## Hard rules for changes
 
 1. **Never invent files/APIs** — inspect the repo first.
@@ -166,6 +173,9 @@ follows at index 12.
   hand is the drag handle and the adjacent minimise/maximise toggle is the fixed
   anchor. Collapse/expand must preserve that button's exact screen coordinates.
   Keep drag bounds on-screen and avoid permanent gameplay instructions.
+- The canonical player belt keeps restart and fast-forward visible on every
+  level. Fast-forward cycles deterministic fixed-tick throughput through
+  1×/2×/3×; do not hide either quick control behind progression gates.
 - Fatal falls emit `splat`; `GameScene` routes only that event to
   `Particles.bloodSplat()` (large transient spray + capped persistent stain).
   Drowning, burning, traps, and explosions retain separate feedback.

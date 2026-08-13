@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PhoneOrientationGate } from '../src/lifecycle/PhoneOrientationGate';
+import { TouchOrientationGate } from '../src/lifecycle/TouchOrientationGate';
 
 class FakeOrientationQuery {
   matches: boolean;
@@ -23,11 +23,11 @@ class FakeOrientationQuery {
   }
 }
 
-describe('PhoneOrientationGate', () => {
-  it('suspends immediately when the player build opens in phone portrait', () => {
+describe('TouchOrientationGate', () => {
+  it('suspends immediately when a Mobile device opens in portrait', () => {
     const query = new FakeOrientationQuery(true);
     const onPortrait = vi.fn();
-    const gate = new PhoneOrientationGate(query, onPortrait);
+    const gate = new TouchOrientationGate(query, onPortrait);
 
     gate.start();
 
@@ -38,7 +38,7 @@ describe('PhoneOrientationGate', () => {
   it('reports portrait transitions and stops listening after cleanup', () => {
     const query = new FakeOrientationQuery(false);
     const onPortrait = vi.fn();
-    const gate = new PhoneOrientationGate(query, onPortrait);
+    const gate = new TouchOrientationGate(query, onPortrait);
 
     gate.start();
     query.setPortrait(true);

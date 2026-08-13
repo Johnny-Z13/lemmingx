@@ -1,4 +1,4 @@
-export const PHONE_PORTRAIT_QUERY = '(orientation: portrait) and (max-width: 760px)';
+export const TOUCH_PORTRAIT_QUERY = '(orientation: portrait)';
 
 interface OrientationQuery {
   readonly matches: boolean;
@@ -7,11 +7,12 @@ interface OrientationQuery {
 }
 
 /**
- * Reports the initial and subsequent phone-portrait states. Leaving portrait
- * deliberately does not resume the game; the player must confirm through the
- * existing lifecycle overlay after rotating.
+ * Reports portrait transitions for devices already classified as Mobile.
+ * Desktop callers never construct this gate, regardless of viewport shape.
+ * Leaving portrait deliberately does not resume the game; the player confirms
+ * through the existing lifecycle overlay after rotating.
  */
-export class PhoneOrientationGate {
+export class TouchOrientationGate {
   private started = false;
   private readonly handleChange = () => {
     if (this.query.matches) this.onPortrait();

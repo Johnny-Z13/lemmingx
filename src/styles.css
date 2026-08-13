@@ -173,8 +173,8 @@ body {
   outline: none;
 }
 
-@media (orientation: portrait) and (max-width: 760px) {
-  .is-player-build .rotate-notice {
+@media (orientation: portrait) {
+  .is-player-build.is-mobile-device .rotate-notice {
     position: fixed;
     inset: 0;
     z-index: 1200;

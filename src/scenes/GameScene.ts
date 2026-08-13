@@ -29,10 +29,11 @@ import { ContinueOverlay } from '../ui/ContinueOverlay';
 import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
-import { PHONE_PORTRAIT_QUERY, PhoneOrientationGate } from '../lifecycle/PhoneOrientationGate';
+import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
 import { playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
+import { IS_MOBILE_DEVICE } from '../deviceProfile';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -106,7 +107,7 @@ export class GameScene extends Phaser.Scene {
   private lastStampY = 0;
   private resumeOverlay!: ResumeOverlay;
   private continueOverlay?: ContinueOverlay;
-  private phoneOrientationGate?: PhoneOrientationGate;
+  private touchOrientationGate?: TouchOrientationGate;
   private lifecycleReason: ResumeReason = 'focus';
   private readonly lifecycle = new FocusLifecycle({
     onSuspend: () => {
@@ -138,9 +139,9 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
-    if (IS_PLAYER_EXPERIENCE) {
-      this.phoneOrientationGate = new PhoneOrientationGate(
-        window.matchMedia(PHONE_PORTRAIT_QUERY),
+    if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) {
+      this.touchOrientationGate = new TouchOrientationGate(
+        window.matchMedia(TOUCH_PORTRAIT_QUERY),
         () => this.suspendForLifecycle('orientation'),
       );
       this.continueOverlay = new ContinueOverlay(
@@ -155,7 +156,7 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('blur', this.handleWindowBlur);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupLifecycle());
     this.installKeyboard();
-    if (IS_PLAYER_EXPERIENCE) this.input.addPointer(1);
+    if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) this.input.addPointer(1);
     this.applyAudioSettings(this.audioSettings);
     // Audio contexts need a user gesture; unlock on the first pointer/key.
     this.input.on('pointerdown', () => this.unlockAudio());
@@ -332,7 +333,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.openLevelSelect();
     }
-    this.phoneOrientationGate?.start();
+    this.touchOrientationGate?.start();
   }
 
   /** Show the campaign screen (boot, Esc, or from the win/lose overlay). */
@@ -411,7 +412,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private beginTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
-    if (!IS_PLAYER_EXPERIENCE || !pointer.wasTouch) return false;
+    if (!IS_PLAYER_EXPERIENCE || !IS_MOBILE_DEVICE || !pointer.wasTouch) return false;
     if (!this.touchCameraGesture.begin(pointer.id, { x: pointer.x, y: pointer.y })) return false;
     this.painting = false;
     this.pendingTouchBrush = null;
@@ -420,7 +421,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
-    if (!IS_PLAYER_EXPERIENCE || !pointer.wasTouch) return false;
+    if (!IS_PLAYER_EXPERIENCE || !IS_MOBILE_DEVICE || !pointer.wasTouch) return false;
     const move = this.touchCameraGesture.move(pointer.id, { x: pointer.x, y: pointer.y });
     if (!move.owned) return false;
     if (move.previousCenter && move.currentCenter && move.scale) {
@@ -434,7 +435,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private endTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
-    return IS_PLAYER_EXPERIENCE && pointer.wasTouch
+    return IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE && pointer.wasTouch
       ? this.touchCameraGesture.end(pointer.id)
       : false;
   }
@@ -892,7 +893,6 @@ export class GameScene extends Phaser.Scene {
       spawnMode: this.level.playMode?.spawn,
       worldTools: this.level.playMode?.worldTools,
       playerBuild: IS_PLAYER_EXPERIENCE,
-      showRestart: IS_PLAYER_EXPERIENCE && (this.levelIndex === 1 || this.levelIndex === 2),
       availableSkills: this.playerVisibleSkills(),
       availableTerrainTools: this.playerVisibleTerrainTools(),
     });
@@ -1039,14 +1039,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resumeFromLifecycle(): void {
-    if (this.phoneOrientationGate?.isPortrait()) return;
+    if (this.touchOrientationGate?.isPortrait()) return;
     this.lifecycle.resume();
   }
 
   private cleanupLifecycle(): void {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     window.removeEventListener('blur', this.handleWindowBlur);
-    this.phoneOrientationGate?.stop();
+    this.touchOrientationGate?.stop();
     this.resumeOverlay.destroy();
     this.continueOverlay?.destroy();
   }
