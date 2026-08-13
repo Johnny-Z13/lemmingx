@@ -3,3 +3,7 @@ dist
 .DS_Store
 *.log
 art/concepts/
+
+# Local environment secrets
+/.env.local
+.vercel
