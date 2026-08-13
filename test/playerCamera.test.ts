@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   PLAYER_CAMERA_MAX_ZOOM,
   PLAYER_CAMERA_ZOOM,
+  PLAYER_LOCKED_CAMERA_ZOOM,
   playerCameraCrewFocus,
   playerCameraFrame,
   playerCameraGestureFrame,
+  playerCameraLandmarkFrame,
 } from '../src/render/playerCamera';
 
 describe('playerCameraFrame', () => {
@@ -29,6 +31,27 @@ describe('playerCameraFrame', () => {
 
     expect(frame.scrollX).toBe(0);
     expect(frame.scrollY).toBeGreaterThan(0);
+  });
+
+  it('locks an authored one-screen room to the exact viewport', () => {
+    const frame = playerCameraFrame(
+      { width: 960, height: 540, spawn: { x: 80, y: 410 } },
+      { width: 960, height: 540 },
+      { locked: true },
+    );
+
+    expect(frame).toEqual({ zoom: PLAYER_LOCKED_CAMERA_ZOOM, scrollX: 0, scrollY: 0 });
+  });
+
+  it('frames hatch and exit landmarks without changing authored vertical composition', () => {
+    const level = { width: 1200, height: 540, spawn: { x: 80, y: 410 } };
+    const viewport = { width: 960, height: 540 };
+    const hatch = playerCameraLandmarkFrame(level, viewport, PLAYER_CAMERA_ZOOM, 80);
+    const exit = playerCameraLandmarkFrame(level, viewport, PLAYER_CAMERA_ZOOM, 1140);
+
+    expect(hatch.scrollX).toBe(0);
+    expect(exit.scrollX).toBeCloseTo(1200 - 960 / PLAYER_CAMERA_ZOOM);
+    expect(exit.scrollY).toBe(hatch.scrollY);
   });
 
   it('does not let vertical pan drag a compact-level ground line behind the dock', () => {

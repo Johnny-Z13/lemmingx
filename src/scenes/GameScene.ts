@@ -30,7 +30,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
-import { playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame } from '../render/playerCamera';
+import { playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
@@ -41,6 +41,7 @@ const ANIM_FPS = 12;
 const HOVER_RADIUS = 16;
 const TOUCH_TARGET_RADIUS_CSS = 24;
 const GESTURE_THRESHOLD_CSS = 8;
+const CAMERA_EVENT_FOCUS_MS = 650;
 
 export class GameScene extends Phaser.Scene {
   private level!: LevelDefinition;
@@ -77,6 +78,7 @@ export class GameScene extends Phaser.Scene {
   private selectOpen = false;
   private winRecorded = false;
   private celebrateFired = false;
+  private firstExitFocusShown = false;
   private ambientAccMs = 0;
   private brush: TerrainBrush | null = null;
   private crewPlacement: Skill | null = null;
@@ -311,6 +313,8 @@ export class GameScene extends Phaser.Scene {
           || this.lifecycle.isSuspended()
           || this.selectOpen
           || this.continueOverlay?.isVisible()
+          || this.isPlayerCameraLocked()
+          || this.cameras.main.panEffect.isRunning
           || !this.sim
         ) return;
         const anchor = { x: pointer.x, y: pointer.y };
@@ -412,7 +416,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private beginTouchCameraGesture(pointer: Phaser.Input.Pointer): boolean {
-    if (!IS_PLAYER_EXPERIENCE || !IS_MOBILE_DEVICE || !pointer.wasTouch) return false;
+    if (
+      !IS_PLAYER_EXPERIENCE
+      || !IS_MOBILE_DEVICE
+      || !pointer.wasTouch
+      || this.isPlayerCameraLocked()
+      || this.cameras.main.panEffect.isRunning
+    ) return false;
     if (!this.touchCameraGesture.begin(pointer.id, { x: pointer.x, y: pointer.y })) return false;
     this.painting = false;
     this.pendingTouchBrush = null;
@@ -443,6 +453,7 @@ export class GameScene extends Phaser.Scene {
   private panCamera(previous: { x: number; y: number }, current: { x: number; y: number }): void {
     const camera = this.cameras.main;
     if (IS_PLAYER_EXPERIENCE) {
+      if (this.isPlayerCameraLocked() || camera.panEffect.isRunning) return;
       this.applyPlayerCameraGesture(previous, current, camera.zoom);
       return;
     }
@@ -455,7 +466,7 @@ export class GameScene extends Phaser.Scene {
     currentAnchor: { x: number; y: number },
     requestedZoom: number,
   ): void {
-    if (!this.level) return;
+    if (!this.level || this.isPlayerCameraLocked() || this.cameras.main.panEffect.isRunning) return;
     const camera = this.cameras.main;
     const current = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
     const frame = playerCameraGestureFrame(
@@ -563,6 +574,7 @@ export class GameScene extends Phaser.Scene {
   /** Camera pan: arrow keys + screen-edge scroll (drag pan lives in create()). */
   private updateCamera(deltaMs: number): void {
     const cam = this.cameras.main;
+    if (this.isPlayerCameraLocked() || cam.panEffect.isRunning) return;
     const pan = 420 * (deltaMs / 1000);
 
     if (this.cursors) {
@@ -611,6 +623,10 @@ export class GameScene extends Phaser.Scene {
         case 'exit':
           this.particles.burst(e.x, e.y - 6, 14, { color: [0x78ffd6, 0x6ae1ff, 0xffffff], speed: 0.14, lifeMs: 750, size: 2.5, gravity: -0.0002, upward: true });
           this.addShake(2.5);
+          if (!this.firstExitFocusShown) {
+            this.firstExitFocusShown = true;
+            this.focusPlayerCamera(this.level.exit.x + this.level.exit.width / 2);
+          }
           break;
         case 'splat':
           this.particles.bloodSplat(e.x, e.y + 8);
@@ -793,6 +809,7 @@ export class GameScene extends Phaser.Scene {
     this.level = createLevelAt(this.levelIndex);
     this.sim = new GameSimulation(this.level);
     this.winRecorded = false;
+    this.firstExitFocusShown = false;
 
     this.children.removeAll(true);
     this.lemmingLabels.clear();
@@ -802,7 +819,11 @@ export class GameScene extends Phaser.Scene {
     camera.setBounds(0, 0, this.level.width, this.level.height);
     camera.setBackgroundColor('#12171f');
     if (IS_PLAYER_EXPERIENCE) {
-      const frame = playerCameraFrame(this.level, { width: camera.width, height: camera.height });
+      const frame = playerCameraFrame(
+        this.level,
+        { width: camera.width, height: camera.height },
+        { locked: this.isPlayerCameraLocked() },
+      );
       camera.setZoom(frame.zoom);
       camera.setScroll(frame.scrollX, frame.scrollY);
     } else {
@@ -878,7 +899,11 @@ export class GameScene extends Phaser.Scene {
       onTogglePause: () => this.togglePause(),
       onCycleSpeed: () => this.cycleSpeed(),
       onNext: () => this.nextLevel(),
-      onMinimapJump: (fx, fy) => this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height),
+      onMinimapJump: (fx, fy) => {
+        if (!this.cameras.main.panEffect.isRunning) {
+          this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height);
+        }
+      },
       onLevelSelect: () => this.openLevelSelect(),
       onAudioChange: (settings) => {
         this.applyAudioSettings(settings);
@@ -946,6 +971,32 @@ export class GameScene extends Phaser.Scene {
     this.paused = false;
     this.simClock.reset();
     this.worldTool = null;
+    this.focusPlayerCamera(this.level.spawn.x);
+  }
+
+  private isPlayerCameraLocked(): boolean {
+    return IS_PLAYER_EXPERIENCE && this.levelIndex < 2;
+  }
+
+  /** Briefly present a key hatch/exit landmark, then return control to input. */
+  private focusPlayerCamera(focusX: number): void {
+    if (!IS_PLAYER_EXPERIENCE || this.levelIndex < 2 || this.levelIndex >= LEVEL_COUNT) return;
+    const camera = this.cameras.main;
+    const frame = playerCameraLandmarkFrame(
+      this.level,
+      { width: camera.width, height: camera.height },
+      camera.zoom,
+      focusX,
+    );
+    const visibleWidth = camera.width / frame.zoom;
+    const visibleHeight = camera.height / frame.zoom;
+    camera.pan(
+      frame.scrollX + visibleWidth / 2,
+      frame.scrollY + visibleHeight / 2,
+      CAMERA_EVENT_FOCUS_MS,
+      'Sine.easeInOut',
+      true,
+    );
   }
 
   private togglePause(): void {
@@ -1143,15 +1194,17 @@ export class GameScene extends Phaser.Scene {
 
   private drawOnboardingMarkers(): void {
     if (!IS_PLAYER_EXPERIENCE || this.levelIndex !== 1 || !this.planning) return;
+    this.setpieceGraphics.fillStyle(0x247ba4, 0.12);
+    this.setpieceGraphics.fillRoundedRect(420, 372, 120, 108, 8);
     this.setpieceGraphics.lineStyle(2, 0x6ae1ff, 0.7);
-    for (let x = 624; x < 720; x += 18) {
-      this.setpieceGraphics.lineBetween(x, 382, Math.min(x + 10, 720), 382);
+    for (let x = 426; x < 534; x += 18) {
+      this.setpieceGraphics.lineBetween(x, 382, Math.min(x + 10, 534), 382);
     }
-    this.setpieceGraphics.lineBetween(624, 382, 624, 414);
-    this.setpieceGraphics.lineBetween(720, 382, 720, 414);
+    this.setpieceGraphics.lineBetween(420, 382, 420, 420);
+    this.setpieceGraphics.lineBetween(540, 382, 540, 420);
     this.setpieceGraphics.fillStyle(0x6ae1ff, 0.75);
-    this.setpieceGraphics.fillTriangle(620, 408, 628, 408, 624, 416);
-    this.setpieceGraphics.fillTriangle(716, 408, 724, 408, 720, 416);
+    this.setpieceGraphics.fillTriangle(416, 414, 424, 414, 420, 422);
+    this.setpieceGraphics.fillTriangle(536, 414, 544, 414, 540, 422);
   }
 
   private torchPosition(): { x: number; y: number } {

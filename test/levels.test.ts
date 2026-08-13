@@ -134,6 +134,18 @@ describe('Level roster', () => {
     }
   });
 
+  it('locks the first two rooms symmetrically and makes level 3 the first scrolling stage', () => {
+    for (const index of [0, 1]) {
+      const level = createLevelAt(index);
+      const hatchMargin = level.spawn.x;
+      const exitMargin = level.width - (level.exit.x + level.exit.width / 2);
+      expect(level.width).toBe(960);
+      expect(level.height).toBe(540);
+      expect(exitMargin).toBe(hatchMargin);
+    }
+    expect(createLevelAt(2).width).toBeGreaterThan(960);
+  });
+
   it('registers exactly one canonical solvability script per campaign level', () => {
     expect(canonicalCases.map(({ levelIndex }) => levelIndex)).toEqual(
       Array.from({ length: LEVEL_COUNT }, (_, index) => index),
@@ -157,7 +169,7 @@ describe('Level roster', () => {
     let bashed = false;
     const sim = run(0, (s) => {
       for (const l of s.state.lemmings) {
-        if (!bashed && l.state === 'walker' && l.direction === 1 && l.x > 484 && l.x < 498) {
+        if (!bashed && l.state === 'walker' && l.direction === 1 && l.x > 286 && l.x < 300) {
           bashed = s.assignSkill(l.id, 'basher');
         }
       }
@@ -195,7 +207,7 @@ describe('Level roster', () => {
       sim.step(STEP_MS);
       if (assignedAt === null) {
         const lead = sim.state.lemmings.find(
-          (lemming) => lemming.state === 'walker' && lemming.direction === 1 && lemming.x > 484 && lemming.x < 498,
+          (lemming) => lemming.state === 'walker' && lemming.direction === 1 && lemming.x > 286 && lemming.x < 300,
         );
         if (lead && sim.assignSkill(lead.id, 'basher')) assignedAt = sim.state.timeMs;
       }
@@ -204,7 +216,7 @@ describe('Level roster', () => {
         if (sandAt === null && materialCellCount(sim, MATERIAL.sand) > 0) sandAt = elapsed;
         if (waterAt === null && sim.state.emitters.some((emitter) => emitter.def.material === 'water' && emitter.budgetLeft < emitter.def.budget)) waterAt = elapsed;
         if (woodAt === null && minimumMaterialY(sim, MATERIAL.wood) <= 444) woodAt = elapsed;
-        if (crossingAt === null && sim.state.lemmings.some((lemming) => lemming.x >= 726 && lemming.state !== 'dead')) crossingAt = elapsed;
+        if (crossingAt === null && sim.state.lemmings.some((lemming) => lemming.x >= 540 && lemming.state !== 'dead')) crossingAt = elapsed;
         if (elapsed >= 10000) break;
       }
     }
@@ -221,7 +233,7 @@ describe('Level roster', () => {
 
   solvabilityIt(1, 'Float the Way', 'a marked water stroke lifts the timber bridge', () => {
     const sim = run(1, () => {}, (s) => {
-      for (const x of [624, 638, 652, 666, 680, 694, 708, 720]) {
+      for (const x of [426, 438, 450, 462, 474, 486, 498, 510, 522, 534]) {
         expect(s.paintLandscape(x, 390, 16, 'water')).toBe(true);
       }
     });

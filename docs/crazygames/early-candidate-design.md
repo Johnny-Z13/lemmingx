@@ -35,7 +35,10 @@
 ### Product recommendations (not platform mandates)
 
 - Keep the game 2D. A readable cross-section lets a player see the swarm, editable terrain, fluids, and cause-and-effect in one frame; a 3D conversion would dilute that legibility and spend the candidate scope on camera/asset problems rather than the distinctive system.
-- Make the first three levels a compact authored onboarding arc. Do not expose the entire toolbox, queue editor, debug labels, prototypes, or level grid before the player understands the basic fantasy.
+- Make the first three levels a compact authored onboarding arc. Levels 1 and 2
+  are locked one-screen rooms; Level 3 is the first scrolling stage and teaches
+  the camera/minimap. Do not expose the entire toolbox, queue editor, debug
+  labels, prototypes, or level grid before the player understands the basic fantasy.
 - Treat the early candidate as a product hypothesis: players will stay because they immediately alter a living landscape, then discover that skills and materials combine into multiple solutions.
 
 ### Unresolved or explicitly gated
@@ -161,7 +164,10 @@ The hatch queue remains a later precision verb, introduced after the player unde
 
 - Pointer: select a visible tool, click a crew member to assign, drag on the world to paint, drag empty world/right-drag to pan where needed.
 - Keyboard shortcuts are optional accelerators: `1–9` visible only for currently available roles, `Space` pause/resume, `R` retry. Avoid relying on `Escape` because the host owns fullscreen behavior.
-- First three levels fit within the 960×540 logical view and require no camera movement.
+- Levels 1 and 2 fit within the 960×540 logical view, use symmetric hatch/exit
+  margins, and lock camera movement. Level 3 is the first wider stage; Start
+  briefly focuses the hatch and the first rescue briefly focuses the exit, then
+  immediately returns camera control to the player.
 - A compact top status strip shows level, saved/quota, and time only when time matters. One contextual hint chip appears near—but never over—the current decision.
 - A contextual bottom tool belt shows only available tools. Release rate, speed, queue details, settings, and restart live in a pause/secondary drawer after onboarding.
 

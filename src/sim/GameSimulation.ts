@@ -156,9 +156,18 @@ export class GameSimulation {
         const wx = cx * cs + cs / 2;
         const wy = cy * cs + cs / 2;
         if ((wx - x) ** 2 + (wy - y) ** 2 <= r2) {
+          const existing = this.level.terrain.getCell(cx, cy);
           // Steel is the campaign's one immutable rule, even with the open
           // toolbox. Level authoring still has unconditional erase APIs.
-          if (this.level.terrain.getCell(cx, cy) === MATERIAL.steel) continue;
+          if (existing === MATERIAL.steel) continue;
+          // Pouring is additive: liquid occupies air or extinguishes fire, but
+          // never paints through dirt or replaces the timber it should float.
+          if (
+            material === MATERIAL.water
+            && existing !== MATERIAL.empty
+            && existing !== MATERIAL.fire
+            && existing !== MATERIAL.water
+          ) continue;
           this.level.terrain.setCell(cx, cy, material);
         }
       }

@@ -118,6 +118,34 @@ describe('sand CA', () => {
     expect(terrain.getCell(2, 6)).not.toBe(MATERIAL.water); // fell or moved
   });
 
+  it('water immediately seeks a diagonal low instead of balancing like powder', () => {
+    const terrain = new Terrain(32, 32, 4);
+    terrain.setCell(3, 3, MATERIAL.water);
+    terrain.setCell(3, 4, MATERIAL.steel);
+    const ca = new ChunkStepper(terrain, new SeededRng(5));
+
+    ca.step(1);
+
+    expect(terrain.getCell(3, 3)).toBe(MATERIAL.empty);
+    expect([
+      terrain.getCell(2, 4),
+      terrain.getCell(4, 4),
+    ]).toContain(MATERIAL.water);
+  });
+
+  it('pours water into open space without painting through terrain or timber', () => {
+    const terrain = new Terrain(80, 80, 4);
+    terrain.fillRect(28, 28, 8, 8, MATERIAL.dirt);
+    terrain.fillRect(36, 28, 8, 8, MATERIAL.wood);
+    const sim = new GameSimulation(makeLevel(terrain, { openToolbox: true }));
+
+    sim.paintLandscape(36, 32, 16, 'water');
+
+    expect(terrain.materialAt(30, 30)).toBe(MATERIAL.dirt);
+    expect(terrain.materialAt(38, 30)).toBe(MATERIAL.wood);
+    expect(terrain.materialAt(36, 18)).toBe(MATERIAL.water);
+  });
+
   it('bomber crater leaves settling sand debris', () => {
     const terrain = new Terrain(120, 120, 4);
     terrain.fillRect(0, 72, 120, 48);

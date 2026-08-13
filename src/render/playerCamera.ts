@@ -2,6 +2,7 @@ import type { Lemming, LevelDefinition } from '../sim/types';
 
 export const PLAYER_CAMERA_ZOOM = 1.1;
 export const PLAYER_CAMERA_MAX_ZOOM = 1.8;
+export const PLAYER_LOCKED_CAMERA_ZOOM = 1;
 const COMPACT_LEVEL_FOCUS_SHIFT_X = 8;
 const CREW_ZOOM_FOCUS_GAIN = 3.2;
 const CREW_ZOOM_FOCUS_MAX_BLEND = 0.82;
@@ -13,6 +14,11 @@ export interface PlayerCameraFrame {
 }
 
 export type PlayerCameraGestureFrame = PlayerCameraFrame;
+
+export interface PlayerCameraFrameOptions {
+  /** Fit the authored 960x540 room exactly and disable camera travel. */
+  locked?: boolean;
+}
 
 interface Point {
   x: number;
@@ -110,7 +116,11 @@ export function playerCameraGestureFrame(
 export function playerCameraFrame(
   level: Pick<LevelDefinition, 'width' | 'height' | 'spawn'>,
   viewport: { width: number; height: number },
+  options: PlayerCameraFrameOptions = {},
 ): PlayerCameraFrame {
+  if (options.locked) {
+    return { zoom: PLAYER_LOCKED_CAMERA_ZOOM, scrollX: 0, scrollY: 0 };
+  }
   const visibleWidth = viewport.width / PLAYER_CAMERA_ZOOM;
   const visibleHeight = viewport.height / PLAYER_CAMERA_ZOOM;
   const compactWidth = level.width <= viewport.width;
@@ -121,6 +131,23 @@ export function playerCameraFrame(
   return {
     zoom: PLAYER_CAMERA_ZOOM,
     scrollX: clampScroll(targetX, level.width, visibleWidth),
+    scrollY: clampPlayerVerticalScroll(level.spawn.y, level.height, visibleHeight, viewport.height),
+  };
+}
+
+/** Authored vertical framing plus a horizontal landmark target for short pans. */
+export function playerCameraLandmarkFrame(
+  level: Pick<LevelDefinition, 'width' | 'height' | 'spawn'>,
+  viewport: { width: number; height: number },
+  zoom: number,
+  focusX: number,
+): PlayerCameraFrame {
+  const safeZoom = clampZoom(zoom);
+  const visibleWidth = viewport.width / safeZoom;
+  const visibleHeight = viewport.height / safeZoom;
+  return {
+    zoom: safeZoom,
+    scrollX: clampScroll(focusX, level.width, visibleWidth),
     scrollY: clampPlayerVerticalScroll(level.spawn.y, level.height, visibleHeight, viewport.height),
   };
 }

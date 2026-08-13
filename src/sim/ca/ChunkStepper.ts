@@ -3,6 +3,7 @@ import { FIRE_TUNING } from '../terrainTuning';
 import type { SeededRng } from './SeededRng';
 
 const CHUNK = 16;
+const WATER_DISPERSION = 5;
 
 /**
  * Cellular-automata stepper for living terrain (sand powder, water liquid,
@@ -291,9 +292,26 @@ export class ChunkStepper {
       this.terrain.setCell(x, y + 1, MATERIAL.water);
       return true;
     }
+    // A cell directly carrying timber is displaced water, not a free surface
+    // droplet. Keep it in place so the raft remains buoyant after the lift.
+    if (this.terrain.getCell(x, y - 1) === MATERIAL.wood) return false;
+    // Give adjacent floor-bound timber its turn to displace this cell. Keeping
+    // the actual lift in stepWood makes a raft rise one layer at a time instead
+    // of individual water cells punching uneven holes through it.
+    if (this.canLiftAdjacentWood(x, y, -1) || this.canLiftAdjacentWood(x, y, 1)) return false;
+
+    // Liquids seek lower neighboring space before spreading across a shelf.
+    // This is the key visual difference from a powder pile: water rounds a
+    // corner immediately instead of taking a horizontal step and appearing to
+    // balance like a grain for a pass.
     const dir = this.rng.sign();
-    const dispersion = 3;
-    for (let i = 1; i <= dispersion; i += 1) {
+    if (this.tryWaterDiagonal(x, y, dir)) return true;
+    if (this.tryWaterDiagonal(x, y, -dir as -1 | 1)) return true;
+
+    // Equalize along the current surface. Looking through contiguous water to
+    // the nearest air pocket lets a poured column spread into a pool rather
+    // than retaining a sand-like cone.
+    for (let i = 1; i <= WATER_DISPERSION; i += 1) {
       const nx = x + dir * i;
       const material = this.terrain.getCell(nx, y);
       if (material === MATERIAL.empty) {
@@ -307,7 +325,7 @@ export class ChunkStepper {
       }
       if (material !== MATERIAL.water) break;
     }
-    for (let i = 1; i <= dispersion; i += 1) {
+    for (let i = 1; i <= WATER_DISPERSION; i += 1) {
       const nx = x - dir * i;
       const material = this.terrain.getCell(nx, y);
       if (material === MATERIAL.empty) {
@@ -320,6 +338,29 @@ export class ChunkStepper {
         return true;
       }
       if (material !== MATERIAL.water) break;
+    }
+    return false;
+  }
+
+  private canLiftAdjacentWood(x: number, y: number, dir: -1 | 1): boolean {
+    const woodX = x + dir;
+    if (this.terrain.getCell(woodX, y) !== MATERIAL.wood) return false;
+    if (this.terrain.getCell(woodX, y - 1) !== MATERIAL.empty) return false;
+    if (this.terrain.getCell(woodX, y + 1) === MATERIAL.water) return false;
+    return true;
+  }
+
+  private tryWaterDiagonal(x: number, y: number, dir: -1 | 1): boolean {
+    const nx = x + dir;
+    const material = this.terrain.getCell(nx, y + 1);
+    if (material === MATERIAL.empty) {
+      this.terrain.swapCells(x, y, nx, y + 1);
+      return true;
+    }
+    if (material === MATERIAL.fire) {
+      this.terrain.setCell(x, y, MATERIAL.empty);
+      this.terrain.setCell(nx, y + 1, MATERIAL.water);
+      return true;
     }
     return false;
   }

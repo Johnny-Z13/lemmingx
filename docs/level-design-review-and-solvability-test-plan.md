@@ -6,15 +6,15 @@
 ## Design review
 
 The ten-level campaign should alternate spatial shape, terrain material, primary
-skill, and pressure source. Water is used in five levels, but with a different
+skill, and pressure source. Water is used in six levels, but with a different
 purpose each time; the dry levels preserve contrast and keep every stage from
 becoming a swimming puzzle.
 
 | # | Level | Layout and lesson | Water role | Canonical automated route |
 |---|-------|-------------------|------------|---------------------------|
-| 1 | First Steps | Compact, single wall; basic carving | Dry tutorial for maximum readability | Bash the wall |
-| 2 | The Deep End | Locked Swimmer loadout; two banks and a 90px-deep pool | Mandatory deep crossing; non-swimmers tread without progressing | Give every rescue Swimmer |
-| 3 | Hold the Line | Thin wall on a flat arena; blocker/bomber and sand | Dry so the sand ramp is visually distinct | Blocker-bomber breach |
+| 1 | First Steps | Locked one-screen waterworks; basic carving | Distributed jets level into a basin and lift timber after the dam is breached | Bash the dam |
+| 2 | Float the Way | Locked one-screen hydraulic lock with a broad marked pour target | Player-authored water levels across the basin and raises the timber bridge | Fill the marked lock, then Start |
+| 3 | Hold the Line | First scrolling arena; blocker/bomber and sand | Dry so the sand ramp is visually distinct | Blocker-bomber breach |
 | 4 | The Long March | Wide scrolling trek with three spaced walls | Broad ankle-deep marsh; teaches safe wading without adding another hard gate | Bash all three walls |
 | 5 | Steel Yourself | Layered slab, steel cap, lower gallery, sand spout | Dry underground contrast; steel and falling sand remain the focus | Dig west of the steel cap |
 | 6 | Trap House | Horizontal trap corridor with a lower industrial layer | A finite water spout visibly fills the settling tank beneath a safe steel catwalk | Tight mob rush |
@@ -35,8 +35,9 @@ becoming a swimming puzzle.
   `openToolbox: false`, preventing generic terrain tools from bypassing the lesson.
 - Level 7 advertises combustion immediately: fire is the only supplied terrain
   tool, steel protects the lock, and its two charges match the two timber obstacles.
-- Levels 1, 3, 5, 8, and 9 stay dry on purpose. This gives water visual impact
-  when it appears and protects the bash, sand, steel, miner, and floater lessons.
+- Levels 1 and 2 deliberately contrast automatic and player-authored water.
+  Levels 3, 5, 8, and 9 stay dry to protect the sand, steel, miner, and floater
+  lessons.
 - Campaign routes remain deterministic. Every authored water body uses the
   seeded cellular automaton and is either contained or shallow enough not to
   change the canonical route.
@@ -60,7 +61,8 @@ For every campaign factory:
 5. Require one registered canonical solution for every level index and verify
    the registered name still matches the factory name.
 6. Require at least five levels to contain a substantial authored water body
-   (50 or more material cells), including Levels 2, 4, 6, 7, and 10.
+   or player water charges, including Levels 2, 4, 6, 7, and 10. Level 1's
+   triggered water chain is covered by its separate ten-second route guard.
 
 ### Layer 2: canonical completion guards
 
@@ -81,7 +83,8 @@ Keep extra tests where a level's identity depends on genuine solution variety:
 
 - Level 3: sand-ramp solution wins without sacrificing a bomber.
 - Level 6: burying the crusher reduces trap losses versus the bare mob rush.
-- Level 2: a no-skill control cannot meet quota; every canonical rescue is a Swimmer.
+- Level 2: the marked full-width pour raises the bridge and wins; the no-pour
+  control cannot meet quota.
 - Level 7: a no-fire control saves nobody; the canonical setup consumes both charges.
 - Level 9: a no-skill control loses the whole crew at the sheer drop; every
   canonical rescue carries both Floater and Climber.

@@ -86,7 +86,10 @@ and SFX without leaking Phaser or browser state into simulation code.
   uses a compact top-right hand/minimise cluster: drag by the hand, or toggle
   the panel without moving the cursor. The canonical player belt keeps restart
   and fast-forward visible on every level for quick retries and solved-route cleanup.
-- Pan big levels with **arrows**, edge scroll, or **right/middle-drag**; **minimap** jumps the camera.
+- Levels 1–2 are locked one-screen rooms with symmetric hatch/exit margins.
+  From Level 3 onward, pan with **arrows**, edge scroll, or **right/middle-drag**;
+  the **minimap** jumps the camera. Start briefly presents the hatch, and the
+  first rescue presents the exit before returning camera control.
 - **Traps** (crusher / zapper / chomper) kill one victim, then re-arm.
 - Fatal falls produce a deliberately OTT blood spray, impact flash, shake, and
   a ground stain that lasts until restart; other death types keep distinct FX.
@@ -98,8 +101,8 @@ and SFX without leaking Phaser or browser state into simulation code.
 | # | Level | Introduces |
 |---|-------|------------|
 | 1 | First Steps | Bash (optional hatch-queue diggers) |
-| 2 | The Deep End | Locked Swimmer loadout + deep crossing pool |
-| 3 | Hold the Line | Blocker + bomber — or a poured sand ramp |
+| 2 | Float the Way | Pour and level water in a hydraulic lock to lift timber |
+| 3 | Hold the Line | First scrolling map; blocker + bomber or a poured sand ramp |
 | 4 | The Long March | Wide map / camera / multi-bash + a shallow marsh |
 | 5 | Steel Yourself | Dig under steel + a sand spout duning the cap |
 | 6 | Trap House | Traps + a water spout filling the reservoir catwalk |

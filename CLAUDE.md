@@ -107,8 +107,8 @@ Level 7 signature.
 | # | Name | Teaches |
 |---|------|---------|
 | 1 | First Steps | Bash (+ optional hatch-queue diggers) |
-| 2 | The Deep End | Locked Swimmer loadout + deep crossing pool |
-| 3 | Hold the Line | Blocker + bomber (sand crater) — or sand-ramp charges |
+| 2 | Float the Way | Water leveling + hydraulic timber lift |
+| 3 | Hold the Line | First scrolling map; blocker + bomber or sand-ramp charges |
 | 4 | The Long March | Wide level / camera / multi-bash |
 | 5 | Steel Yourself | Dig under steel + sand debris + a cap-duning emitter |
 | 6 | Trap House | Traps + a timed water spout filling the catwalk reservoir |
@@ -176,6 +176,13 @@ follows at index 12.
 - The canonical player belt keeps restart and fast-forward visible on every
   level. Fast-forward cycles deterministic fixed-tick throughput through
   1×/2×/3×; do not hide either quick control behind progression gates.
+- Player camera policy is progressive: Levels 1–2 are exact 960×540 locked
+  rooms with symmetric hatch/exit margins; Level 3 is the first scrolling map.
+  On Level 3+, Start briefly pans to the hatch and the first `exit` event pans
+  to the exit, then ordinary pan/zoom/minimap control resumes.
+- Water seeks diagonal lows before laterally equalizing, never paints through
+  solid terrain or timber, and renders as a continuous animated surface. Keep
+  that liquid distinction and the Level 2 hydraulic-lock solvability guard.
 - Fatal falls emit `splat`; `GameScene` routes only that event to
   `Particles.bloodSplat()` (large transient spray + capped persistent stain).
   Drowning, burning, traps, and explosions retain separate feedback.

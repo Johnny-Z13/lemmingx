@@ -82,14 +82,16 @@ export function drawTerrain(
     }
 
     if (material === MATERIAL.water) {
-      graphics.fillStyle(hash % 5 === 0 ? WORLD_THEME.water : WORLD_THEME.waterDeep, 0.94);
-      graphics.fillRect(x, y, width, height);
+      // A continuous body colour and overlapping edge remove the granular,
+      // sand-cell read. Only the exposed surface carries animated variation.
+      graphics.fillStyle(WORLD_THEME.waterDeep, 0.9);
+      graphics.fillRect(x - 0.5, y, width + 1, height + 0.5);
+      graphics.fillStyle(WORLD_THEME.water, 0.26);
+      graphics.fillRect(x, y + Math.max(1, height / 2), width, Math.max(1, height / 2));
       if (above !== MATERIAL.water) {
-        graphics.fillStyle(WORLD_THEME.waterLight, 0.8);
-        graphics.fillRect(x, y, width, Math.max(1, height / 3));
-      } else if (hash % 7 === 0) {
-        graphics.fillStyle(WORLD_THEME.water, 0.45);
-        graphics.fillRect(x, y, 1, height);
+        const wave = (cellX + Math.floor(timeMs / 110)) % 4 === 0 ? 1 : 0;
+        graphics.fillStyle(WORLD_THEME.waterLight, 0.9);
+        graphics.fillRect(x, y + wave, width, Math.max(1, height / 3));
       }
       return;
     }
