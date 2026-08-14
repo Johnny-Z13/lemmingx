@@ -30,7 +30,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
-import { playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame } from '../render/playerCamera';
+import { playerCameraAttentionFrame, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
@@ -612,6 +612,20 @@ export class GameScene extends Phaser.Scene {
         if (pointer.y < edge) cam.scrollY -= pan;
         else if (pointer.y > this.scale.height - edge) cam.scrollY += pan;
       }
+    }
+
+    if (IS_PLAYER_EXPERIENCE && this.heroMovePhase === 'idle') {
+      const current = { zoom: cam.zoom, scrollX: cam.scrollX, scrollY: cam.scrollY };
+      const attention = playerCameraAttentionFrame(
+        this.sim.state.lemmings,
+        current,
+        { x: cam.width, y: cam.height },
+        { width: this.level.width, height: this.level.height },
+        { top: 48, right: 12, bottom: 76, left: 12 },
+      );
+      const ease = Math.min(1, deltaMs / 180);
+      cam.scrollX += (attention.scrollX - cam.scrollX) * ease;
+      cam.scrollY += (attention.scrollY - cam.scrollY) * ease;
     }
   }
 

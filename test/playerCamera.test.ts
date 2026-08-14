@@ -3,6 +3,7 @@ import {
   PLAYER_CAMERA_MAX_ZOOM,
   PLAYER_CAMERA_ZOOM,
   PLAYER_LOCKED_CAMERA_ZOOM,
+  playerCameraAttentionFrame,
   playerCameraCrewFocus,
   playerCameraFrame,
   playerCameraGestureFrame,
@@ -147,5 +148,37 @@ describe('playerCameraFrame', () => {
     expect(frame.zoom).toBe(PLAYER_CAMERA_MAX_ZOOM);
     expect(frame.scrollX).toBe(0);
     expect(frame.scrollY).toBe(240);
+  });
+
+  it('nudges an active worker out from beneath the control belt', () => {
+    const frame = playerCameraAttentionFrame(
+      [
+        { x: 500, y: 505, state: 'builder', fuseMs: null },
+        { x: 300, y: 250, state: 'walker', fuseMs: null },
+      ],
+      { zoom: 1, scrollX: 0, scrollY: 0 },
+      { x: 960, y: 540 },
+      { width: 1200, height: 900 },
+      { top: 48, right: 12, bottom: 76, left: 12 },
+    );
+
+    expect(frame.scrollY).toBe(63);
+    expect((505 - frame.scrollY) * frame.zoom).toBe(442);
+  });
+
+  it('prioritizes an endangered lemming over ordinary walkers', () => {
+    const frame = playerCameraAttentionFrame(
+      [
+        { x: 100, y: 250, state: 'walker', fuseMs: null },
+        { x: 1100, y: 250, state: 'faller', fuseMs: null },
+      ],
+      { zoom: 1, scrollX: 0, scrollY: 0 },
+      { x: 960, y: 540 },
+      { width: 1600, height: 900 },
+      { top: 48, right: 12, bottom: 76, left: 12 },
+    );
+
+    expect(frame.scrollX).toBe(174);
+    expect((1100 - frame.scrollX) * frame.zoom).toBe(926);
   });
 });
