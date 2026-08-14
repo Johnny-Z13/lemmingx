@@ -37,6 +37,38 @@ export interface PlayerCameraSafeInsets {
   left: number;
 }
 
+interface ClientRectLike {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/** Convert persistent DOM chrome at the canvas edges into Phaser camera pixels. */
+export function playerCameraOcclusionInsets(
+  canvas: ClientRectLike,
+  viewport: Point,
+  occluders: readonly ClientRectLike[],
+): PlayerCameraSafeInsets {
+  const canvasWidth = Math.max(1, canvas.right - canvas.left);
+  const canvasHeight = Math.max(1, canvas.bottom - canvas.top);
+  let top = 0;
+  let bottom = 0;
+  for (const rect of occluders) {
+    if (rect.right <= canvas.left || rect.left >= canvas.right) continue;
+    const overlapTop = Math.max(canvas.top, rect.top);
+    const overlapBottom = Math.min(canvas.bottom, rect.bottom);
+    if (overlapBottom <= overlapTop) continue;
+    const midpoint = (overlapTop + overlapBottom) / 2;
+    if (midpoint <= (canvas.top + canvas.bottom) / 2) {
+      top = Math.max(top, (overlapBottom - canvas.top) * viewport.y / canvasHeight);
+    } else {
+      bottom = Math.max(bottom, (canvas.bottom - overlapTop) * viewport.y / canvasHeight);
+    }
+  }
+  return { top, right: 12 * viewport.x / canvasWidth, bottom, left: 12 * viewport.x / canvasWidth };
+}
+
 function clampScroll(targetCenter: number, worldSize: number, visibleSize: number): number {
   if (worldSize <= visibleSize) return (worldSize - visibleSize) / 2;
   return Math.min(worldSize - visibleSize, Math.max(0, targetCenter - visibleSize / 2));

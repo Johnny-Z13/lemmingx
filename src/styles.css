@@ -23,9 +23,19 @@ html,
 body,
 #app {
   width: 100%;
-  height: 100%;
   margin: 0;
   overflow: hidden;
+}
+
+html,
+body {
+  height: 100%;
+  height: 100dvh;
+}
+
+#app {
+  height: 100%;
+  min-height: 100svh;
 }
 
 body {
@@ -198,6 +208,8 @@ body {
 
 canvas {
   display: block;
+  max-width: 100%;
+  max-height: 100%;
   touch-action: none;
 }
 
@@ -1250,4 +1262,30 @@ input:focus-visible {
   .hud--player .hud__tool-name {
     font-size: 0.62rem;
   }
+}
+
+/* Mobile is capability-selected, not inferred from viewport width. Collapse
+   secondary labels before the open toolbox can cover the playfield. */
+.is-mobile-device .hud--player .hud__dock {
+  width: auto;
+  max-width: calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
+}
+
+.is-mobile-device .hud--player .hud__panel-content,
+.is-mobile-device .hud--player .hud__tools,
+.is-mobile-device .hud--player .hud__controls,
+.is-mobile-device .hud--player .hud__audio {
+  gap: 4px;
+}
+
+.is-mobile-device .hud--player .hud__tool-name {
+  display: none;
+}
+
+.is-mobile-device .hud--player .hud__tool,
+.is-mobile-device .hud--player .hud__tools--terrain .hud__tool,
+.is-mobile-device .hud--player .hud__bar .hud__btn {
+  min-width: 42px;
+  min-height: 42px;
+  padding: 2px 4px;
 }

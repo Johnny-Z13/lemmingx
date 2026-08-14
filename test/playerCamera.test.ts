@@ -8,6 +8,7 @@ import {
   playerCameraFrame,
   playerCameraGestureFrame,
   playerCameraLandmarkFrame,
+  playerCameraOcclusionInsets,
 } from '../src/render/playerCamera';
 
 describe('playerCameraFrame', () => {
@@ -180,5 +181,19 @@ describe('playerCameraFrame', () => {
 
     expect(frame.scrollX).toBe(174);
     expect((1100 - frame.scrollX) * frame.zoom).toBe(926);
+  });
+
+  it('measures a letterboxed mobile dock in camera pixels instead of guessing CSS pixels', () => {
+    const insets = playerCameraOcclusionInsets(
+      { left: 100, top: 70, right: 1180, bottom: 610 },
+      { x: 960, y: 540 },
+      [
+        { left: 420, top: 10, right: 860, bottom: 62 },
+        { left: 90, top: 500, right: 1210, bottom: 600 },
+      ],
+    );
+
+    expect(insets.top).toBe(0);
+    expect(insets.bottom).toBe(110);
   });
 });

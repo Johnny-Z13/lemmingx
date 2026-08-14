@@ -5,6 +5,7 @@ import { MATERIAL, type Terrain } from '../sim/Terrain';
 import type { AudioSettings } from '../audio/settings';
 import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIdentity';
 import { createElement as createLucideIcon, DoorOpen, Hand, Maximize2, Minus, Warehouse, type IconNode } from 'lucide';
+import { IS_MOBILE_DEVICE } from '../deviceProfile';
 
 /** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
 export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'fire' | 'erase' | 'bomb';
@@ -247,7 +248,8 @@ export class Hud {
     this.missionObjective = this.mission.querySelector('.hud__mission-objective') as HTMLElement;
     this.missionPrompt = this.mission.querySelector('.hud__mission-prompt') as HTMLParagraphElement;
     this.missionHint = this.mission.querySelector('.hud__mission-hint') as HTMLParagraphElement;
-    const startButton = this.makeButton('Start run', 'Start run (Space)', () => events.onStart?.());
+    const startLabel = this.playerBuild && IS_MOBILE_DEVICE ? 'Play fullscreen' : 'Start run';
+    const startButton = this.makeButton(startLabel, 'Start run (Space)', () => events.onStart?.());
     startButton.className = 'hud__btn hud__primary hud__mission-start';
     this.mission.append(startButton);
     this.root.append(this.mission);
@@ -526,6 +528,13 @@ export class Hud {
     make('♪', 'musicMuted', 'musicVolume', 'Music');
     make('🔊', 'sfxMuted', 'sfxVolume', 'Sound effects');
     return cluster;
+  }
+
+  /** Persistent edge chrome the camera must keep live crew clear of. */
+  gameplayOcclusions(): DOMRect[] {
+    return [this.statusBar, this.dock]
+      .filter((element) => !element.hidden && element.getClientRects().length > 0)
+      .map((element) => element.getBoundingClientRect());
   }
 
   /** Collapse the bottom bar to a slim pill so it stops occluding gameplay. */

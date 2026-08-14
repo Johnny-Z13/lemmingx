@@ -7,6 +7,7 @@ import {
   setDevSandboxEnabled,
 } from './runtimeMode';
 import { DEVICE_PROFILE, IS_MOBILE_DEVICE } from './deviceProfile';
+import { installMobileFullscreen } from './lifecycle/MobileFullscreen';
 import './styles.css';
 
 document.title = IS_PLAYER_EXPERIENCE ? 'LemmingX' : `LemmingX · ${__BUILD_TAG__}`;
@@ -21,6 +22,7 @@ if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) {
   rotateNotice.setAttribute('aria-live', 'polite');
   rotateNotice.innerHTML = '<strong>Rotate to play</strong><span>LemmingX is designed for landscape.</span>';
   document.body.append(rotateNotice);
+  installMobileFullscreen();
 }
 
 if (DEV_SANDBOX_AVAILABLE) {

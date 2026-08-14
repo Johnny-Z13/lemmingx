@@ -30,7 +30,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
-import { playerCameraAttentionFrame, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame } from '../render/playerCamera';
+import { playerCameraAttentionFrame, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraOcclusionInsets } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
@@ -343,8 +343,7 @@ export class GameScene extends Phaser.Scene {
     if (IS_PLAYER_EXPERIENCE) {
       this.levelIndex = this.nextUnsolvedLevelIndex();
       this.startLevel();
-      if (this.levelIndex === 0) this.startRun();
-      else this.continueOverlay?.show(this.level.name ?? `Level ${this.levelIndex + 1}`);
+      if (this.levelIndex > 0) this.continueOverlay?.show(this.level.name ?? `Level ${this.levelIndex + 1}`);
     } else {
       this.openLevelSelect();
     }
@@ -616,12 +615,18 @@ export class GameScene extends Phaser.Scene {
 
     if (IS_PLAYER_EXPERIENCE && this.heroMovePhase === 'idle') {
       const current = { zoom: cam.zoom, scrollX: cam.scrollX, scrollY: cam.scrollY };
+      const viewport = { x: cam.width, y: cam.height };
+      const insets = playerCameraOcclusionInsets(
+        this.game.canvas.getBoundingClientRect(),
+        viewport,
+        this.hud.gameplayOcclusions(),
+      );
       const attention = playerCameraAttentionFrame(
         this.sim.state.lemmings,
         current,
-        { x: cam.width, y: cam.height },
+        viewport,
         { width: this.level.width, height: this.level.height },
-        { top: 48, right: 12, bottom: 76, left: 12 },
+        insets,
       );
       const ease = Math.min(1, deltaMs / 180);
       cam.scrollX += (attention.scrollX - cam.scrollX) * ease;
@@ -767,7 +772,7 @@ export class GameScene extends Phaser.Scene {
       crewPlacement: this.crewPlacement,
       worldTool: this.worldTool,
       canPlaceWorldEntities: this.planning && this.sim.state.spawned === 0,
-      prompt: this.prototypePrompt(),
+      prompt: this.planningPrompt(),
       hasTerrainTools: this.hasOpenToolbox() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
       actionCue: this.playerActionCue(),
       heroMove: {
@@ -809,6 +814,15 @@ export class GameScene extends Phaser.Scene {
       return 'World ready. Add more queued roles, reshape the terrain, or press Start.';
     }
     return null;
+  }
+
+  private planningPrompt(): string | null {
+    if (IS_PLAYER_EXPERIENCE && this.planning && this.levelIndex === 0) {
+      return IS_MOBILE_DEVICE
+        ? 'Tap Play fullscreen when you are ready. The hatch and timer stay frozen until then.'
+        : 'Press Start when you are ready. The hatch and timer stay frozen until then.';
+    }
+    return this.prototypePrompt();
   }
 
   private playerActionCue(): string | null {
