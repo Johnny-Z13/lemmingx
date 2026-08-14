@@ -39,6 +39,10 @@ export type HudEvents = {
   onRestart: () => void;
   onTogglePause: () => void;
   onCycleSpeed: () => void;
+  /** Arm, commit, or cancel the limited cinematic crew intervention. */
+  onArmHeroMove?: () => void;
+  onCommitHeroMove?: () => void;
+  onCancelHeroMove?: () => void;
   onNext?: () => void;
   onLevelSelect?: () => void;
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
@@ -88,6 +92,12 @@ export interface HudView {
   hasTerrainTools: boolean;
   /** Short live-play onboarding cue; null once the taught action succeeds. */
   actionCue: string | null;
+  heroMove: {
+    phase: 'idle' | 'armed' | 'focused' | 'resolving';
+    charges: number;
+    skillLabel: string;
+    crewLabel: string | null;
+  };
   minimap: MinimapData | null;
 }
 
@@ -161,6 +171,9 @@ export class Hud {
   private readonly nukeButton: HTMLButtonElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly speedButton: HTMLButtonElement;
+  private readonly heroButton: HTMLButtonElement;
+  private readonly heroPanel: HTMLDivElement;
+  private heroPanelKey = '';
   private readonly debugLabelsButton?: HTMLButtonElement;
   private readonly randomButton: HTMLButtonElement;
   private readonly queueButton: HTMLButtonElement;
@@ -245,6 +258,11 @@ export class Hud {
     this.actionCue.setAttribute('aria-live', 'polite');
     this.actionCue.hidden = true;
     this.root.append(this.actionCue);
+
+    this.heroPanel = document.createElement('div');
+    this.heroPanel.className = 'hud__hero-panel';
+    this.heroPanel.hidden = true;
+    this.root.append(this.heroPanel);
 
     // --- Bottom control dock ---
     const dock = document.createElement('div');
@@ -406,6 +424,8 @@ export class Hud {
     this.pauseButton.className = 'hud__btn hud__pause';
     this.speedButton = this.makeButton('⏩ 1×', 'Fast-forward (F)', events.onCycleSpeed);
     this.speedButton.className = 'hud__btn hud__speed';
+    this.heroButton = this.makeButton('★ Hero', 'Arm a Hero Move (E)', () => events.onArmHeroMove?.());
+    this.heroButton.className = 'hud__btn hud__hero';
 
     this.nukeButton = document.createElement('button');
     this.nukeButton.className = 'hud__btn hud__nuke';
@@ -432,6 +452,7 @@ export class Hud {
       release,
       this.pauseButton,
       this.speedButton,
+      this.heroButton,
       this.nukeButton,
       restartButton,
     );
@@ -775,9 +796,32 @@ export class Hud {
     this.actionCue.hidden = view.actionCue === null;
     this.actionCue.textContent = view.actionCue ?? '';
 
+    const running = state.outcome === 'running';
+    const hero = view.heroMove;
+    this.heroButton.hidden = this.freePlay || hero.charges === 0 && hero.phase === 'idle';
+    this.heroButton.disabled = !running || view.planning || view.paused || hero.charges <= 0 || hero.phase !== 'idle';
+    this.heroButton.textContent = `★ ${hero.charges}`;
+    this.heroButton.classList.toggle('is-active', hero.phase !== 'idle');
+    this.heroPanel.hidden = hero.phase === 'idle';
+    this.heroPanel.dataset.phase = hero.phase;
+    const heroPanelKey = `${hero.phase}:${hero.skillLabel}:${hero.crewLabel ?? ''}`;
+    if (heroPanelKey !== this.heroPanelKey) {
+      this.heroPanelKey = heroPanelKey;
+      if (hero.phase === 'armed') {
+        this.heroPanel.innerHTML = `<strong>Hero Move</strong><span>Tap a crew member for a precise ${hero.skillLabel}.</span><button type="button" data-hero-cancel>Cancel</button>`;
+      } else if (hero.phase === 'focused') {
+        this.heroPanel.innerHTML = `<strong>${hero.crewLabel ?? 'Crew member'} · ${hero.skillLabel}</strong><span>Commit one world beat?</span><button class="hud__hero-clock" type="button" data-hero-commit>⏱ Commit</button><button type="button" data-hero-cancel>Cancel</button>`;
+      } else if (hero.phase === 'resolving') {
+        this.heroPanel.innerHTML = `<strong>Move committed</strong><span>The world advances…</span>`;
+      } else {
+        this.heroPanel.innerHTML = '';
+      }
+      this.heroPanel.querySelector('[data-hero-commit]')?.addEventListener('click', () => this.events.onCommitHeroMove?.());
+      this.heroPanel.querySelector('[data-hero-cancel]')?.addEventListener('click', () => this.events.onCancelHeroMove?.());
+    }
+
     this.releaseValue.textContent = `Rate ${state.releaseRate}`;
 
-    const running = state.outcome === 'running';
     for (const [skill, button] of this.skillButtons) {
       const stock = button.querySelector('.hud__stock');
       if (stock) {

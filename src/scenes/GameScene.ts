@@ -34,6 +34,7 @@ import { playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, pla
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
+import { heroMoveChargesForLevel, type HeroMovePhase } from '../input/heroMove';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -42,6 +43,8 @@ const HOVER_RADIUS = 16;
 const TOUCH_TARGET_RADIUS_CSS = 24;
 const GESTURE_THRESHOLD_CSS = 8;
 const CAMERA_EVENT_FOCUS_MS = 650;
+const HERO_MOVE_ZOOM = 3.2;
+const HERO_MOVE_BEAT_MS = 650;
 
 export class GameScene extends Phaser.Scene {
   private level!: LevelDefinition;
@@ -62,6 +65,11 @@ export class GameScene extends Phaser.Scene {
   private readonly simClock = new FixedStepClock();
   private readonly crewActionFeedback = new CrewActionFeedback();
   private speed = 1;
+  private heroMovePhase: HeroMovePhase = 'idle';
+  private heroMoveCharges = 0;
+  private heroMoveTargetId: number | null = null;
+  private heroMoveBeatRemainingMs = 0;
+  private heroReturnCamera: { zoom: number; scrollX: number; scrollY: number } | null = null;
   private levelIndex = 0;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
   /** Edge-scroll only engages once the mouse has actually entered the game. */
@@ -250,7 +258,10 @@ export class GameScene extends Phaser.Scene {
         return;
       }
       const target = this.sim.state.lemmings.find(({ id }) => id === gesture.targetId);
-      if (target) this.assignSelectedSkillTo(target);
+      if (target) {
+        if (this.heroMovePhase === 'armed') this.focusHeroMove(target);
+        else if (this.heroMovePhase === 'idle') this.assignSelectedSkillTo(target);
+      }
     });
     this.input.mouse?.disableContextMenu();
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
@@ -544,6 +555,14 @@ export class GameScene extends Phaser.Scene {
     if (this.planning) {
       // Planning freezes the run, not the living world the player is shaping.
       this.simClock.advance(delta, 1, () => this.sim.stepLivingTerrain());
+    } else if (this.heroMovePhase === 'resolving') {
+      const beatDelta = Math.min(delta, this.heroMoveBeatRemainingMs);
+      this.simClock.advance(beatDelta, 1, (stepMs) => {
+        this.sim.step(stepMs);
+        this.consumeEvents(this.sim.drainEvents());
+      });
+      this.heroMoveBeatRemainingMs -= beatDelta;
+      if (this.heroMoveBeatRemainingMs <= 0 || this.sim.state.outcome !== 'running') this.finishHeroMove();
     } else if (!this.paused) {
       // Fast-forward increases fixed-tick throughput; rendering stays once per frame.
       this.simClock.advance(delta, this.speed, (stepMs) => {
@@ -710,6 +729,9 @@ export class GameScene extends Phaser.Scene {
     const hovered = this.hoveredId
       ? this.sim.state.lemmings.find((l) => l.id === this.hoveredId)
       : null;
+    const heroTarget = this.heroMoveTargetId === null
+      ? null
+      : this.sim.state.lemmings.find(({ id }) => id === this.heroMoveTargetId) ?? null;
     const cam = this.cameras.main;
     const scrolls = this.level.width > this.scale.width || this.level.height > this.scale.height;
     const levelPrefix = this.isLab()
@@ -734,6 +756,12 @@ export class GameScene extends Phaser.Scene {
       prompt: this.prototypePrompt(),
       hasTerrainTools: this.hasOpenToolbox() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
       actionCue: this.playerActionCue(),
+      heroMove: {
+        phase: this.heroMovePhase,
+        charges: this.heroMoveCharges,
+        skillLabel: SKILL_DEFS[this.sim.state.selectedSkill].label,
+        crewLabel: heroTarget ? crewLabel(heroTarget) : null,
+      },
       minimap: scrolls
         ? {
             terrain: this.level.terrain,
@@ -844,6 +872,11 @@ export class GameScene extends Phaser.Scene {
     this.planning = !this.isLab();
     this.paused = this.planning;
     this.speed = 1;
+    this.heroMovePhase = 'idle';
+    this.heroMoveCharges = heroMoveChargesForLevel(this.levelIndex, LEVEL_COUNT);
+    this.heroMoveTargetId = null;
+    this.heroMoveBeatRemainingMs = 0;
+    this.heroReturnCamera = null;
     this.celebrateFired = false;
     this.ambientAccMs = 0;
     const terrainOnlyChallenge =
@@ -898,6 +931,9 @@ export class GameScene extends Phaser.Scene {
       onRestart: () => this.startLevel(),
       onTogglePause: () => this.togglePause(),
       onCycleSpeed: () => this.cycleSpeed(),
+      onArmHeroMove: () => this.armHeroMove(),
+      onCommitHeroMove: () => this.commitHeroMove(),
+      onCancelHeroMove: () => this.cancelHeroMove(),
       onNext: () => this.nextLevel(),
       onMinimapJump: (fx, fy) => {
         if (!this.cameras.main.panEffect.isRunning) {
@@ -1058,6 +1094,8 @@ export class GameScene extends Phaser.Scene {
         this.togglePause();
       } else if (key === 'f') {
         this.cycleSpeed();
+      } else if (key === 'e') {
+        this.armHeroMove();
       } else if (key === 'n') {
         this.triggerNuke();
       } else if (key === 'h') {
@@ -1124,6 +1162,67 @@ export class GameScene extends Phaser.Scene {
         size: 1.25,
       });
     }
+  }
+
+  private armHeroMove(): void {
+    if (
+      this.heroMovePhase !== 'idle' || this.heroMoveCharges <= 0 || this.planning || this.paused ||
+      this.sim.state.outcome !== 'running' || this.brush || this.crewPlacement || this.worldTool
+    ) return;
+    this.heroMovePhase = 'armed';
+    this.canvasGesture = null;
+  }
+
+  private focusHeroMove(target: Lemming): void {
+    if (this.heroMovePhase !== 'armed' || target.state === 'dead' || target.state === 'exited') return;
+    const camera = this.cameras.main;
+    this.heroReturnCamera = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
+    this.heroMoveTargetId = target.id;
+    this.heroMovePhase = 'focused';
+    this.paused = true;
+    this.simClock.reset();
+    camera.pan(target.x, target.y, 280, 'Sine.easeOut', true);
+    camera.zoomTo(HERO_MOVE_ZOOM, 280, 'Sine.easeOut', true);
+  }
+
+  private commitHeroMove(): void {
+    if (this.heroMovePhase !== 'focused' || this.heroMoveTargetId === null) return;
+    const target = this.sim.state.lemmings.find(({ id }) => id === this.heroMoveTargetId);
+    if (!target || !this.sim.assignSkill(target.id, this.sim.state.selectedSkill)) return;
+    this.heroMoveCharges -= 1;
+    this.heroMovePhase = 'resolving';
+    this.heroMoveBeatRemainingMs = HERO_MOVE_BEAT_MS;
+    this.paused = false;
+    this.simClock.reset();
+    const point = this.lemmingDisplayPoints.get(target.id) ?? target;
+    this.particles.ring(point.x, point.y, 18, {
+      color: skillPalette(this.sim.state.selectedSkill).trim,
+      speed: 0.055,
+      lifeMs: 420,
+      size: 2,
+    });
+  }
+
+  private cancelHeroMove(): void {
+    if (this.heroMovePhase === 'idle' || this.heroMovePhase === 'resolving') return;
+    this.finishHeroMove();
+  }
+
+  private finishHeroMove(): void {
+    const frame = this.heroReturnCamera;
+    this.heroMovePhase = 'idle';
+    this.heroMoveTargetId = null;
+    this.heroMoveBeatRemainingMs = 0;
+    this.paused = false;
+    this.simClock.reset();
+    if (frame) {
+      const camera = this.cameras.main;
+      const visibleWidth = camera.width / frame.zoom;
+      const visibleHeight = camera.height / frame.zoom;
+      camera.pan(frame.scrollX + visibleWidth / 2, frame.scrollY + visibleHeight / 2, 320, 'Sine.easeInOut', true);
+      camera.zoomTo(frame.zoom, 320, 'Sine.easeInOut', true);
+    }
+    this.heroReturnCamera = null;
   }
 
   private findNearestLemming(worldX: number, worldY: number, radius = 26): Lemming | null {

@@ -765,6 +765,48 @@ input:focus-visible {
   background: rgba(106, 225, 255, 0.18);
 }
 
+.hud__hero {
+  color: #fff1a8;
+  border-color: rgba(255, 217, 107, 0.55);
+  background: rgba(255, 180, 58, 0.14);
+}
+
+.hud__hero-panel {
+  position: fixed;
+  z-index: 32;
+  left: 50%;
+  bottom: max(76px, calc(env(safe-area-inset-bottom) + 68px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 217, 107, 0.72);
+  border-radius: 12px;
+  color: #fff8d8;
+  background: rgba(18, 23, 31, 0.94);
+  box-shadow: 0 0 28px rgba(255, 180, 58, 0.2);
+  pointer-events: auto;
+}
+
+.hud__hero-panel[hidden] { display: none; }
+.hud__hero-panel[data-phase='armed'] {
+  top: max(88px, calc(env(safe-area-inset-top) + 78px));
+  bottom: auto;
+}
+.hud__hero-panel span { font-size: 0.76rem; }
+.hud__hero-panel button {
+  min-height: 42px;
+  padding: 0 12px;
+}
+.hud__hero-panel .hud__hero-clock {
+  color: #18202a;
+  border-color: #ffd96b;
+  background: #ffd96b;
+  font-weight: 900;
+}
+
 .hud__release {
   display: inline-grid;
   grid-template-columns: 30px minmax(62px, auto) 30px;
