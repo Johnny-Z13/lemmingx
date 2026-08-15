@@ -30,7 +30,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
-import { playerCameraAttentionFrame, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraOcclusionInsets } from '../render/playerCamera';
+import { playerCameraAttentionFrame, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, type PlayerCameraSafeInsets } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
@@ -74,6 +74,8 @@ export class GameScene extends Phaser.Scene {
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
   /** Edge-scroll only engages once the mouse has actually entered the game. */
   private pointerSeen = false;
+  /** Respect deliberate pan/zoom before automatic crew framing resumes. */
+  private manualCameraUntilMs = 0;
   private readonly particles = new Particles();
   private readonly sfx = new Sfx();
   private readonly music = new Music();
@@ -479,17 +481,21 @@ export class GameScene extends Phaser.Scene {
     if (!this.level || this.isPlayerCameraLocked() || this.cameras.main.panEffect.isRunning) return;
     const camera = this.cameras.main;
     const current = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
+    const insets = this.playerCameraInsets();
+    const worldHeight = playerCameraOccludedWorldHeight(this.level.height, insets.bottom, camera.zoom);
+    camera.setBounds(0, this.playerCameraBoundsY(), this.level.width, worldHeight);
     const frame = playerCameraGestureFrame(
       current,
       previousAnchor,
       currentAnchor,
       requestedZoom,
       { x: camera.width, y: camera.height },
-      { width: this.level.width, height: this.level.height },
+      { width: this.level.width, height: worldHeight },
       playerCameraCrewFocus(this.sim.state.lemmings, current, { x: camera.width, y: camera.height }),
     );
     camera.setZoom(frame.zoom);
     camera.setScroll(frame.scrollX, frame.scrollY);
+    this.manualCameraUntilMs = this.animClockMs + 2500;
   }
 
   private resetCameraGestures(): void {
@@ -593,6 +599,15 @@ export class GameScene extends Phaser.Scene {
   private updateCamera(deltaMs: number): void {
     const cam = this.cameras.main;
     if (this.isPlayerCameraLocked() || cam.panEffect.isRunning) return;
+    const insets = IS_PLAYER_EXPERIENCE ? this.playerCameraInsets() : null;
+    if (insets) {
+      cam.setBounds(
+        0,
+        this.playerCameraBoundsY(),
+        this.level.width,
+        playerCameraOccludedWorldHeight(this.level.height, insets.bottom, cam.zoom),
+      );
+    }
     const pan = 420 * (deltaMs / 1000);
 
     if (this.cursors) {
@@ -613,24 +628,52 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (IS_PLAYER_EXPERIENCE && this.heroMovePhase === 'idle') {
+    if (
+      IS_PLAYER_EXPERIENCE
+      && this.heroMovePhase === 'idle'
+      && this.animClockMs >= this.manualCameraUntilMs
+    ) {
       const current = { zoom: cam.zoom, scrollX: cam.scrollX, scrollY: cam.scrollY };
       const viewport = { x: cam.width, y: cam.height };
-      const insets = playerCameraOcclusionInsets(
-        this.game.canvas.getBoundingClientRect(),
-        viewport,
-        this.hud.gameplayOcclusions(),
-      );
+      const safeInsets = insets ?? this.playerCameraInsets();
       const attention = playerCameraAttentionFrame(
         this.sim.state.lemmings,
         current,
         viewport,
-        { width: this.level.width, height: this.level.height },
-        insets,
+        {
+          width: this.level.width,
+          height: playerCameraOccludedWorldHeight(this.level.height, safeInsets.bottom, cam.zoom),
+        },
+        safeInsets,
       );
       const ease = Math.min(1, deltaMs / 180);
       cam.scrollX += (attention.scrollX - cam.scrollX) * ease;
       cam.scrollY += (attention.scrollY - cam.scrollY) * ease;
+    }
+  }
+
+  private playerCameraInsets(): PlayerCameraSafeInsets {
+    const cam = this.cameras.main;
+    return playerCameraOcclusionInsets(
+      this.game.canvas.getBoundingClientRect(),
+      { x: cam.width, y: cam.height },
+      this.hud.gameplayOcclusions(),
+    );
+  }
+
+  private playerCameraBoundsY(): number {
+    const cam = this.cameras.main;
+    return Math.max(0, (cam.height - cam.displayHeight) / 2);
+  }
+
+  private frameScrollingRoomAboveHud(): void {
+    if (!IS_PLAYER_EXPERIENCE || this.isPlayerCameraLocked()) return;
+    const cam = this.cameras.main;
+    const insets = this.playerCameraInsets();
+    const worldHeight = playerCameraOccludedWorldHeight(this.level.height, insets.bottom, cam.zoom);
+    cam.setBounds(0, this.playerCameraBoundsY(), this.level.width, worldHeight);
+    if (this.level.width > cam.width && this.level.height <= cam.height) {
+      cam.scrollY = playerCameraBottomSafeScroll(this.level.height, cam.height, insets.bottom, cam.zoom);
     }
   }
 
@@ -904,6 +947,7 @@ export class GameScene extends Phaser.Scene {
     this.heroMoveCharges = heroMoveChargesForLevel(this.levelIndex, LEVEL_COUNT);
     this.heroMoveTargetId = null;
     this.heroMoveBeatRemainingMs = 0;
+    this.manualCameraUntilMs = 0;
     this.heroReturnCamera = null;
     this.celebrateFired = false;
     this.ambientAccMs = 0;
@@ -986,6 +1030,7 @@ export class GameScene extends Phaser.Scene {
       availableTerrainTools: this.playerVisibleTerrainTools(),
     });
     this.hud.update(this.sim.state, this.hudView());
+    this.frameScrollingRoomAboveHud();
 
     this.music.play(this.levelIndex);
   }

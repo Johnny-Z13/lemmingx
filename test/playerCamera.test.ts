@@ -4,10 +4,12 @@ import {
   PLAYER_CAMERA_ZOOM,
   PLAYER_LOCKED_CAMERA_ZOOM,
   playerCameraAttentionFrame,
+  playerCameraBottomSafeScroll,
   playerCameraCrewFocus,
   playerCameraFrame,
   playerCameraGestureFrame,
   playerCameraLandmarkFrame,
+  playerCameraOccludedWorldHeight,
   playerCameraOcclusionInsets,
 } from '../src/render/playerCamera';
 
@@ -195,5 +197,15 @@ describe('playerCameraFrame', () => {
 
     expect(insets.top).toBe(0);
     expect(insets.bottom).toBe(110);
+  });
+
+  it('reserves dock space below a wide room so its lower gallery can be dragged into view', () => {
+    const worldHeight = playerCameraOccludedWorldHeight(540, 110, 1.1);
+    const scrollY = playerCameraBottomSafeScroll(540, 540, 110, 1.1);
+    const galleryFloorScreenY = (492 - scrollY) * 1.1;
+
+    expect(worldHeight).toBe(640);
+    expect(scrollY).toBeCloseTo(149.09);
+    expect(galleryFloorScreenY).toBeLessThan(430);
   });
 });

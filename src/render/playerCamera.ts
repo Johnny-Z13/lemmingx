@@ -69,6 +69,26 @@ export function playerCameraOcclusionInsets(
   return { top, right: 12 * viewport.x / canvasWidth, bottom, left: 12 * viewport.x / canvasWidth };
 }
 
+/** Add scrollable world space behind the dock so real terrain can move above it. */
+export function playerCameraOccludedWorldHeight(
+  worldHeight: number,
+  bottomInset: number,
+  zoom: number,
+): number {
+  return worldHeight + Math.max(0, bottomInset) / Math.max(zoom, 0.001);
+}
+
+/** Frame the authored world bottom at the bottom of the unobscured playfield. */
+export function playerCameraBottomSafeScroll(
+  worldHeight: number,
+  viewportHeight: number,
+  bottomInset: number,
+  zoom: number,
+): number {
+  const safeHeight = Math.max(1, viewportHeight - Math.max(0, bottomInset));
+  return Math.max(0, worldHeight - safeHeight / Math.max(zoom, 0.001));
+}
+
 function clampScroll(targetCenter: number, worldSize: number, visibleSize: number): number {
   if (worldSize <= visibleSize) return (worldSize - visibleSize) / 2;
   return Math.min(worldSize - visibleSize, Math.max(0, targetCenter - visibleSize / 2));
