@@ -15,6 +15,15 @@ export interface PlayerCameraFrame {
 
 export type PlayerCameraGestureFrame = PlayerCameraFrame;
 
+/** Scripted event pans yield to active and recently released user camera control. */
+export function canScriptPlayerCameraFocus(
+  minimapActive: boolean,
+  nowMs: number,
+  blockedUntilMs: number,
+): boolean {
+  return !minimapActive && nowMs >= blockedUntilMs;
+}
+
 export interface PlayerCameraFrameOptions {
   /** Fit the authored 960x540 room exactly and disable camera travel. */
   locked?: boolean;

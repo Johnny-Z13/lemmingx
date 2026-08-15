@@ -46,7 +46,9 @@ export type HudEvents = {
   onCancelHeroMove?: () => void;
   onNext?: () => void;
   onLevelSelect?: () => void;
+  onMinimapControlStart?: () => void;
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
+  onMinimapControlEnd?: () => void;
   onAudioChange?: (settings: AudioSettings) => void;
   onDebugLabelsChange?: (enabled: boolean) => void;
   /** Arm a terrain paint brush (limited charges or open-toolbox infinite). */
@@ -482,11 +484,19 @@ export class Hud {
     this.minimap.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.minimap.setPointerCapture(e.pointerId);
+      this.events.onMinimapControlStart?.();
       this.minimapJump(e);
     });
     this.minimap.addEventListener('pointermove', (e) => {
       if (this.minimap.hasPointerCapture(e.pointerId)) this.minimapJump(e);
     });
+    const endMinimapControl = (e: PointerEvent) => {
+      if (!this.minimap.hasPointerCapture(e.pointerId)) return;
+      this.minimap.releasePointerCapture(e.pointerId);
+      this.events.onMinimapControlEnd?.();
+    };
+    this.minimap.addEventListener('pointerup', endMinimapControl);
+    this.minimap.addEventListener('pointercancel', endMinimapControl);
     this.root.append(this.minimap);
 
     // --- Win/lose overlay (hidden until outcome resolves) ---

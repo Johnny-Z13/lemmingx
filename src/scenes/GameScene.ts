@@ -30,7 +30,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
-import { playerCameraAttentionFrame, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, type PlayerCameraSafeInsets } from '../render/playerCamera';
+import { canScriptPlayerCameraFocus, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, type PlayerCameraSafeInsets } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
@@ -43,6 +43,7 @@ const HOVER_RADIUS = 16;
 const TOUCH_TARGET_RADIUS_CSS = 24;
 const GESTURE_THRESHOLD_CSS = 8;
 const CAMERA_EVENT_FOCUS_MS = 650;
+const CAMERA_USER_GRACE_MS = 1600;
 const HERO_MOVE_ZOOM = 3.2;
 const HERO_MOVE_BEAT_MS = 650;
 
@@ -76,6 +77,7 @@ export class GameScene extends Phaser.Scene {
   private pointerSeen = false;
   /** Respect deliberate pan/zoom before automatic crew framing resumes. */
   private manualCameraUntilMs = 0;
+  private minimapCameraActive = false;
   private readonly particles = new Particles();
   private readonly sfx = new Sfx();
   private readonly music = new Music();
@@ -495,7 +497,7 @@ export class GameScene extends Phaser.Scene {
     );
     camera.setZoom(frame.zoom);
     camera.setScroll(frame.scrollX, frame.scrollY);
-    this.manualCameraUntilMs = this.animClockMs + 2500;
+    this.manualCameraUntilMs = this.animClockMs + CAMERA_USER_GRACE_MS;
   }
 
   private resetCameraGestures(): void {
@@ -628,28 +630,6 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (
-      IS_PLAYER_EXPERIENCE
-      && this.heroMovePhase === 'idle'
-      && this.animClockMs >= this.manualCameraUntilMs
-    ) {
-      const current = { zoom: cam.zoom, scrollX: cam.scrollX, scrollY: cam.scrollY };
-      const viewport = { x: cam.width, y: cam.height };
-      const safeInsets = insets ?? this.playerCameraInsets();
-      const attention = playerCameraAttentionFrame(
-        this.sim.state.lemmings,
-        current,
-        viewport,
-        {
-          width: this.level.width,
-          height: playerCameraOccludedWorldHeight(this.level.height, safeInsets.bottom, cam.zoom),
-        },
-        safeInsets,
-      );
-      const ease = Math.min(1, deltaMs / 180);
-      cam.scrollX += (attention.scrollX - cam.scrollX) * ease;
-      cam.scrollY += (attention.scrollY - cam.scrollY) * ease;
-    }
   }
 
   private playerCameraInsets(): PlayerCameraSafeInsets {
@@ -948,6 +928,7 @@ export class GameScene extends Phaser.Scene {
     this.heroMoveTargetId = null;
     this.heroMoveBeatRemainingMs = 0;
     this.manualCameraUntilMs = 0;
+    this.minimapCameraActive = false;
     this.heroReturnCamera = null;
     this.celebrateFired = false;
     this.ambientAccMs = 0;
@@ -1007,10 +988,17 @@ export class GameScene extends Phaser.Scene {
       onCommitHeroMove: () => this.commitHeroMove(),
       onCancelHeroMove: () => this.cancelHeroMove(),
       onNext: () => this.nextLevel(),
+      onMinimapControlStart: () => {
+        this.minimapCameraActive = true;
+        this.cameras.main.panEffect.reset();
+      },
       onMinimapJump: (fx, fy) => {
-        if (!this.cameras.main.panEffect.isRunning) {
-          this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height);
-        }
+        this.cameras.main.panEffect.reset();
+        this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height);
+      },
+      onMinimapControlEnd: () => {
+        this.minimapCameraActive = false;
+        this.manualCameraUntilMs = this.animClockMs + CAMERA_USER_GRACE_MS;
       },
       onLevelSelect: () => this.openLevelSelect(),
       onAudioChange: (settings) => {
@@ -1090,6 +1078,7 @@ export class GameScene extends Phaser.Scene {
   /** Briefly present a key hatch/exit landmark, then return control to input. */
   private focusPlayerCamera(focusX: number): void {
     if (!IS_PLAYER_EXPERIENCE || this.levelIndex < 2 || this.levelIndex >= LEVEL_COUNT) return;
+    if (!canScriptPlayerCameraFocus(this.minimapCameraActive, this.animClockMs, this.manualCameraUntilMs)) return;
     const camera = this.cameras.main;
     const frame = playerCameraLandmarkFrame(
       this.level,

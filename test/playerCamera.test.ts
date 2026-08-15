@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canScriptPlayerCameraFocus,
   PLAYER_CAMERA_MAX_ZOOM,
   PLAYER_CAMERA_ZOOM,
   PLAYER_LOCKED_CAMERA_ZOOM,
@@ -14,6 +15,12 @@ import {
 } from '../src/render/playerCamera';
 
 describe('playerCameraFrame', () => {
+  it('gives minimap control complete ownership plus a release grace period', () => {
+    expect(canScriptPlayerCameraFocus(true, 10_000, 0)).toBe(false);
+    expect(canScriptPlayerCameraFocus(false, 11_599, 11_600)).toBe(false);
+    expect(canScriptPlayerCameraFocus(false, 11_600, 11_600)).toBe(true);
+  });
+
   it('lifts the compact-level ground line while magnifying the crew', () => {
     const frame = playerCameraFrame(
       { width: 960, height: 540, spawn: { x: 400, y: 410 } },
