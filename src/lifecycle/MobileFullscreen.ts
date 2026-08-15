@@ -21,12 +21,14 @@ export function installMobileFullscreen(doc: FullscreenDocument = document): () 
 
   if (!request) return () => {};
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (event: PointerEvent) => {
     if (doc.fullscreenElement || doc.webkitFullscreenElement) {
       doc.removeEventListener('pointerup', handlePointerUp, true);
       return;
     }
     if (window.matchMedia('(orientation: portrait)').matches) return;
+    const target = event.target as { closest?: (selector: string) => Element | null } | null;
+    if (!target?.closest?.('.hud__mission-start')) return;
 
     doc.removeEventListener('pointerup', handlePointerUp, true);
     try {

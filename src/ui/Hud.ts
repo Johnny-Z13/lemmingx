@@ -460,9 +460,12 @@ export class Hud {
     );
     if (this.debugLabelsButton) controls.append(this.debugLabelsButton);
     controls.append(this.makeAudioCluster());
+    const toolRail = document.createElement('div');
+    toolRail.className = 'hud__tool-rail';
+    toolRail.append(tools, this.worldBar, this.terrainBar);
     const panelContent = document.createElement('div');
     panelContent.className = 'hud__panel-content';
-    panelContent.append(tools, this.worldBar, this.terrainBar, controls);
+    panelContent.append(toolRail, controls);
     bar.append(panelContent, windowControls);
     dock.append(bar);
     this.dock = dock;

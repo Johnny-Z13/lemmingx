@@ -444,6 +444,10 @@ input:focus-visible {
   gap: 4px;
 }
 
+.hud__tool-rail {
+  display: contents;
+}
+
 .hud__window-controls {
   position: absolute;
   top: 7px;
@@ -1158,6 +1162,12 @@ input:focus-visible {
   align-items: center;
 }
 
+.hud--player .hud__tool-rail {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .hud--player .hud__tools,
 .hud--player .hud__controls,
 .hud--player .hud__audio {
@@ -1267,15 +1277,42 @@ input:focus-visible {
 /* Mobile is capability-selected, not inferred from viewport width. Collapse
    secondary labels before the open toolbox can cover the playfield. */
 .is-mobile-device .hud--player .hud__dock {
-  width: auto;
+  width: calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
   max-width: calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
 }
 
-.is-mobile-device .hud--player .hud__panel-content,
+.is-mobile-device .hud--player .hud__panel-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+  gap: 4px;
+}
+
+.is-mobile-device .hud--player .hud__tool-rail {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.is-mobile-device .hud--player .hud__tool-rail::-webkit-scrollbar {
+  display: none;
+}
+
 .is-mobile-device .hud--player .hud__tools,
 .is-mobile-device .hud--player .hud__controls,
 .is-mobile-device .hud--player .hud__audio {
   gap: 4px;
+}
+
+.is-mobile-device .hud--player .hud__tools,
+.is-mobile-device .hud--player .hud__controls {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
 }
 
 .is-mobile-device .hud--player .hud__tool-name {
@@ -1285,7 +1322,7 @@ input:focus-visible {
 .is-mobile-device .hud--player .hud__tool,
 .is-mobile-device .hud--player .hud__tools--terrain .hud__tool,
 .is-mobile-device .hud--player .hud__bar .hud__btn {
-  min-width: 42px;
-  min-height: 42px;
+  min-width: 48px;
+  min-height: 48px;
   padding: 2px 4px;
 }
