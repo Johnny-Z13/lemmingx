@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canScriptPlayerCameraFocus,
   PLAYER_CAMERA_MAX_ZOOM,
+  PLAYER_CAMERA_MIN_ZOOM,
   PLAYER_CAMERA_ZOOM,
   PLAYER_LOCKED_CAMERA_ZOOM,
   playerCameraAttentionFrame,
@@ -10,6 +11,7 @@ import {
   playerCameraFrame,
   playerCameraGestureFrame,
   playerCameraLandmarkFrame,
+  playerCameraMinimapFrame,
   playerCameraOccludedWorldHeight,
   playerCameraOcclusionInsets,
 } from '../src/render/playerCamera';
@@ -29,9 +31,9 @@ describe('playerCameraFrame', () => {
     const groundScreenY = (430 - frame.scrollY) * frame.zoom;
 
     expect(frame.zoom).toBe(PLAYER_CAMERA_ZOOM);
-    expect(frame.zoom).toBeGreaterThan(1);
-    expect(groundScreenY).toBeLessThan(422);
-    expect(groundScreenY).toBeGreaterThan(416);
+    expect(frame.zoom).toBeGreaterThan(PLAYER_CAMERA_MIN_ZOOM);
+    expect(groundScreenY).toBeLessThan(412);
+    expect(groundScreenY).toBeGreaterThan(404);
   });
 
   it('opens wide levels around the hatch instead of jumping to world centre', () => {
@@ -128,6 +130,7 @@ describe('playerCameraFrame', () => {
     const focused = playerCameraGestureFrame(current, anchor, anchor, 1.1, viewport, world, { x: 400, y: 260 });
 
     expect(focused).toEqual(anchored);
+    expect(focused.zoom).toBe(PLAYER_CAMERA_MIN_ZOOM);
   });
 
   it('focuses living visible crew without letting dead or distant outliers pull the camera', () => {
@@ -214,5 +217,27 @@ describe('playerCameraFrame', () => {
     expect(worldHeight).toBe(640);
     expect(scrollY).toBeCloseTo(149.09);
     expect(galleryFloorScreenY).toBeLessThan(430);
+  });
+
+  it('keeps short-room minimap X while forcing the route above the dock', () => {
+    const frame = playerCameraMinimapFrame(
+      { width: 2880, height: 540 },
+      { width: 960, height: 540 },
+      1.2,
+      105,
+      0.42,
+      0.5,
+    );
+
+    expect(frame.scrollX).toBeCloseTo(809.6);
+    expect(frame.scrollY).toBeCloseTo(playerCameraBottomSafeScroll(540, 540, 105, 1.2));
+  });
+
+  it('clamps tall-room minimap Y within the HUD-extended world', () => {
+    const top = playerCameraMinimapFrame({ width: 960, height: 1080 }, { width: 960, height: 540 }, 1.2, 105, 0.5, 0);
+    const bottom = playerCameraMinimapFrame({ width: 960, height: 1080 }, { width: 960, height: 540 }, 1.2, 105, 0.5, 1);
+
+    expect(top.scrollY).toBe(0);
+    expect(bottom.scrollY).toBeCloseTo(playerCameraOccludedWorldHeight(1080, 105, 1.2) - 540 / 1.2);
   });
 });

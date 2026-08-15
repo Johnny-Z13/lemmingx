@@ -1,6 +1,7 @@
 import type { Lemming, LevelDefinition } from '../sim/types';
 
-export const PLAYER_CAMERA_ZOOM = 1.1;
+export const PLAYER_CAMERA_ZOOM = 1.2;
+export const PLAYER_CAMERA_MIN_ZOOM = 1.1;
 export const PLAYER_CAMERA_MAX_ZOOM = 1.8;
 export const PLAYER_LOCKED_CAMERA_ZOOM = 1;
 const COMPACT_LEVEL_FOCUS_SHIFT_X = 8;
@@ -98,6 +99,39 @@ export function playerCameraBottomSafeScroll(
   return Math.max(0, worldHeight - safeHeight / Math.max(zoom, 0.001));
 }
 
+/** Absolute minimap framing that keeps the chosen X and respects HUD space. */
+export function playerCameraMinimapFrame(
+  world: { width: number; height: number },
+  viewport: { width: number; height: number },
+  zoom: number,
+  bottomInset: number,
+  fractionX: number,
+  fractionY: number,
+): PlayerCameraFrame {
+  const safeZoom = clampZoom(zoom);
+  const visibleWidth = viewport.width / safeZoom;
+  const visibleHeight = viewport.height / safeZoom;
+  const scrollX = clampScroll(
+    Math.min(1, Math.max(0, fractionX)) * world.width,
+    world.width,
+    visibleWidth,
+  );
+  if (world.height <= viewport.height) {
+    return {
+      zoom: safeZoom,
+      scrollX,
+      scrollY: playerCameraBottomSafeScroll(world.height, viewport.height, bottomInset, safeZoom),
+    };
+  }
+  const extendedHeight = playerCameraOccludedWorldHeight(world.height, bottomInset, safeZoom);
+  const desiredScrollY = Math.min(1, Math.max(0, fractionY)) * world.height - visibleHeight / 2;
+  return {
+    zoom: safeZoom,
+    scrollX,
+    scrollY: Math.min(Math.max(0, extendedHeight - visibleHeight), Math.max(0, desiredScrollY)),
+  };
+}
+
 function clampScroll(targetCenter: number, worldSize: number, visibleSize: number): number {
   if (worldSize <= visibleSize) return (worldSize - visibleSize) / 2;
   return Math.min(worldSize - visibleSize, Math.max(0, targetCenter - visibleSize / 2));
@@ -191,7 +225,7 @@ export function playerCameraAttentionFrame(
 }
 
 function clampZoom(zoom: number): number {
-  return Math.min(PLAYER_CAMERA_MAX_ZOOM, Math.max(PLAYER_CAMERA_ZOOM, zoom));
+  return Math.min(PLAYER_CAMERA_MAX_ZOOM, Math.max(PLAYER_CAMERA_MIN_ZOOM, zoom));
 }
 
 /** Keep the world point under `previousAnchor` beneath `currentAnchor`. */

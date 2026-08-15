@@ -1,15 +1,55 @@
 {
   "schemaVersion": 1,
   "proofOnly": true,
+  "evidenceScope": "pre-merge working-tree build",
   "releaseCleared": false,
-  "branch": "codex/crazygames-candidate",
-  "commit": "2b199f238df66dd9837a0577221d7f0a5f0d4847",
-  "dirty": false,
-  "excludedUserWork": [],
-  "fileCount": 5,
-  "uncompressedBytes": 2977714,
-  "artifactSha256": "41c3f4edcc019b75e577275c00e6bb58440b731cff435f918f33cfa9b76d55ef",
+  "branch": "main",
+  "commit": "f869134c2ac729a9ad187c47f45581f0e7bb265c",
+  "dirty": true,
+  "excludedUserWork": [
+    ".artifacts/crazygames-candidate/proof-metadata.json",
+    ".gitignore",
+    "docs/assets/crazygames-provenance.json",
+    "scripts/verify-crazygames-build.mjs",
+    "src/input/crewTargeting.ts",
+    "src/render/crowdLayout.ts",
+    "src/render/playerCamera.ts",
+    "src/scenes/GameScene.ts",
+    "src/styles.css",
+    "src/ui/Hud.ts",
+    "src/version.ts",
+    "src/vite-env.d.ts",
+    "test/crewTargeting.test.ts",
+    "test/crowdLayout.test.ts",
+    "test/playerCamera.test.ts",
+    "vite.config.ts",
+    "docs/assets/sources/",
+    "docs/presentation-gauntlet.md",
+    "public/assets/crew-salvager.png",
+    "public/assets/title-splash.png",
+    "scripts/prepare-generated-sprite-strip.py",
+    "scripts/requirements-assets.txt",
+    "src/render/CampaignSetpieces.ts",
+    "src/render/CrewSpriteRenderer.ts",
+    "src/ui/TitleScreen.ts",
+    "test/crewSpriteRenderer.test.ts"
+  ],
+  "fileCount": 7,
+  "uncompressedBytes": 4687170,
+  "artifactSha256": "3c1b2d1af465889a3f974955d394358928cdacb0e28e7e2918f37bf7f68cde37",
   "unresolvedProvenance": [
+    {
+      "id": "title-splash",
+      "approvalState": "prototype-only"
+    },
+    {
+      "id": "crew-salvager",
+      "approvalState": "prototype-only"
+    },
+    {
+      "id": "presentation-slice-renderers",
+      "approvalState": "rights-review"
+    },
     {
       "id": "industrial-cavern-backdrop",
       "approvalState": "prototype-only"

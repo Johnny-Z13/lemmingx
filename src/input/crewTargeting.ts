@@ -11,12 +11,13 @@ export function selectCrewTarget(
   worldX: number,
   worldY: number,
   radius: number,
+  targetYFor: (lemming: Lemming, point: LemmingDisplayPoint) => number = (_lemming, point) => point.y + 4,
 ): Lemming | null {
   const radiusSq = radius ** 2;
   const candidates = lemmings.flatMap((lemming) => {
     if (lemming.state === 'dead' || lemming.state === 'exited') return [];
     const point = displayPoints.get(lemming.id) ?? lemming;
-    const targetY = point.y + 4;
+    const targetY = targetYFor(lemming, point);
     const distanceSq = (point.x - worldX) ** 2 + (targetY - worldY) ** 2;
     return distanceSq <= radiusSq ? [{ lemming, distanceSq, displayY: point.y }] : [];
   });

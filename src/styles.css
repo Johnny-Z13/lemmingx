@@ -43,6 +43,143 @@ body {
   background: #080c12;
 }
 
+/* ---- Title screen ---- */
+.title-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  color: #eff7ff;
+  background: #050810;
+}
+
+.title-screen__art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  user-select: none;
+}
+
+.title-screen::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(3, 6, 14, 0.3), rgba(3, 6, 14, 0.02) 52%, rgba(3, 6, 14, 0.48)),
+    radial-gradient(circle at 50% 26%, rgba(8, 18, 39, 0.08), rgba(3, 6, 14, 0.46) 72%);
+  content: '';
+}
+
+.title-screen__content {
+  display: grid;
+  justify-items: center;
+  align-self: start;
+  gap: 10px;
+  width: min(700px, calc(100vw - 28px));
+  margin-top: clamp(28px, 8vh, 84px);
+  text-align: center;
+  filter: drop-shadow(0 4px 0 rgba(2, 5, 12, 0.9)) drop-shadow(0 12px 28px rgba(0, 0, 0, 0.8));
+}
+
+.title-screen__kicker {
+  margin: 0;
+  color: #8de9ff;
+  font-size: clamp(0.62rem, 1.2vw, 0.82rem);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.title-screen__title {
+  margin: 0;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: clamp(3rem, 9vw, 6.8rem);
+  font-weight: 1000;
+  letter-spacing: -0.09em;
+  line-height: 0.86;
+  text-transform: uppercase;
+  -webkit-text-stroke: 2px #07111d;
+  text-shadow:
+    0 5px 0 #1d6b87,
+    0 9px 0 #082f43,
+    0 0 26px rgba(106, 225, 255, 0.4);
+}
+
+.title-screen__title b {
+  color: #ffd65c;
+  text-shadow:
+    0 5px 0 #b96018,
+    0 9px 0 #5f290b,
+    0 0 30px rgba(255, 157, 44, 0.58);
+}
+
+.title-screen__start {
+  min-width: 180px;
+  min-height: 52px;
+  margin-top: 6px;
+  padding: 8px 30px;
+  border: 2px solid #8ff7ff;
+  border-radius: 4px;
+  color: #081019;
+  background: #72e5ef;
+  box-shadow: 0 5px 0 #14627b, 0 0 24px rgba(106, 225, 255, 0.28);
+  font: 1000 1rem/1 "Courier New", ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+}
+
+.title-screen__start::before { content: '< '; }
+.title-screen__start::after { content: ' >'; }
+
+.title-screen__start:hover,
+.title-screen__start:focus-visible {
+  transform: translateY(-2px);
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  box-shadow: 0 7px 0 #14627b, 0 0 32px rgba(106, 225, 255, 0.46);
+}
+
+.title-screen__debug {
+  position: fixed;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(6px, env(safe-area-inset-bottom));
+  display: grid;
+  justify-items: end;
+  max-width: min(92vw, 620px);
+  color: rgba(213, 230, 241, 0.58);
+  font: 700 0.58rem/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.025em;
+  text-align: right;
+}
+
+@media (orientation: landscape) and (max-height: 480px) {
+  .title-screen__content {
+    gap: 6px;
+    margin-top: max(14px, env(safe-area-inset-top));
+  }
+
+  .title-screen__title {
+    font-size: clamp(2.6rem, 10vw, 4.5rem);
+  }
+
+  .title-screen__start {
+    min-height: 48px;
+    margin-top: 2px;
+  }
+
+  .title-screen__debug {
+    max-width: 70vw;
+    font-size: 0.5rem;
+  }
+}
+
 .resume-overlay {
   position: fixed;
   inset: 0;
@@ -187,7 +324,7 @@ body {
   .is-player-build.is-mobile-device .rotate-notice {
     position: fixed;
     inset: 0;
-    z-index: 1200;
+    z-index: 1500;
     display: grid;
     place-content: center;
     gap: 6px;
@@ -607,9 +744,9 @@ input:focus-visible {
   --crew-trim: #a7ffd0;
   position: relative;
   display: block;
-  width: 18px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 24px;
+  height: 22px;
+  flex: 0 0 24px;
 }
 
 .hud__crew-icon.is-random {
@@ -629,37 +766,54 @@ input:focus-visible {
 
 .hud__crew-hair {
   top: 0;
-  left: 5px;
-  width: 8px;
-  height: 4px;
+  left: 6px;
+  width: 12px;
+  height: 5px;
   background: var(--crew-hair);
+  box-shadow: inset 0 -2px 0 var(--crew-shade);
 }
 
 .hud__crew-hair::after {
   position: absolute;
-  top: 2px;
+  top: 4px;
   right: -2px;
-  width: 2px;
+  width: 16px;
   height: 2px;
   background: var(--crew-hair);
   content: '';
 }
 
 .hud__crew-head {
-  top: 4px;
-  left: 5px;
-  width: 8px;
-  height: 6px;
-  background: #f2c9a0;
-  box-shadow: inset 0 -2px 0 #d9a87f;
+  top: 6px;
+  left: 6px;
+  width: 12px;
+  height: 7px;
+  background: #07111d;
+  border: 1px solid #26384a;
+  box-shadow: inset 0 -2px 0 #02060b;
 }
 
+.hud__crew-head::before,
+.hud__crew-head::after {
+  position: absolute;
+  top: 2px;
+  width: 2px;
+  height: 3px;
+  background: #7ff6ff;
+  box-shadow: 0 0 3px rgba(106, 225, 255, 0.8);
+  content: '';
+}
+
+.hud__crew-head::before { left: 2px; }
+.hud__crew-head::after { right: 2px; }
+
 .hud__crew-body {
-  top: 10px;
-  left: 4px;
+  top: 13px;
+  left: 7px;
   width: 10px;
-  height: 7px;
+  height: 6px;
   background: var(--crew-body);
+  box-shadow: -3px 1px 0 var(--crew-shade), 3px 0 0 var(--crew-trim);
 }
 
 .hud__crew-body::before,
@@ -671,7 +825,7 @@ input:focus-visible {
 }
 
 .hud__crew-body::before {
-  top: 3px;
+  top: 2px;
   height: 2px;
   background: var(--crew-trim);
 }
@@ -683,12 +837,40 @@ input:focus-visible {
 }
 
 .hud__crew-feet {
-  top: 17px;
-  left: 4px;
-  width: 4px;
-  height: 2px;
-  background: #d9a87f;
-  box-shadow: 6px 0 0 #d9a87f;
+  top: 19px;
+  left: 5px;
+  width: 6px;
+  height: 3px;
+  background: #3b4654;
+  box-shadow: 8px 0 0 #3b4654;
+}
+
+.hud__crew-icon[data-skill='basher']:not(.is-salvager-slice)::after {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 16px;
+  width: 9px;
+  height: 4px;
+  background: linear-gradient(90deg, #485769 0 35%, #c7d2dc 35% 70%, #708296 70%);
+  clip-path: polygon(0 0, 72% 0, 100% 50%, 72% 100%, 0 100%);
+  content: '';
+}
+
+.hud__crew-icon.is-salvager-slice {
+  width: 28px;
+  height: 22px;
+  flex-basis: 28px;
+  background-image: var(--crew-atlas);
+  background-repeat: no-repeat;
+  background-position: -128px -9px;
+  background-size: 256px 32px;
+  image-rendering: pixelated;
+}
+
+.hud__crew-icon.is-salvager-slice > span,
+.hud__crew-icon.is-salvager-slice::after {
+  display: none;
 }
 
 .hud__tool.is-active {
@@ -1279,6 +1461,66 @@ input:focus-visible {
 .is-mobile-device .hud--player .hud__dock {
   width: calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
   max-width: calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
+}
+
+.is-mobile-device .hud--player .hud__mission {
+  top: max(50px, calc(env(safe-area-inset-top) + 44px));
+  left: 50%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  width: min(600px, calc(100vw - max(24px, env(safe-area-inset-left)) - max(24px, env(safe-area-inset-right))));
+  padding: 7px 8px 7px 12px;
+  transform: translateX(-50%);
+}
+
+.is-mobile-device .hud--player .hud__mission-kicker,
+.is-mobile-device .hud--player .hud__mission-hint,
+.is-mobile-device .hud--player .hud__mission-prompt {
+  display: none;
+}
+
+.is-mobile-device .hud--player .hud__mission-objective {
+  font-size: 0.78rem;
+  line-height: 1.22;
+}
+
+.is-mobile-device .hud--player .hud__mission-start {
+  justify-self: end;
+  margin: 0;
+}
+
+/* Short landscape windows need the same route-preserving briefing shape even
+   on desktop; device capability still owns the touch/rotation behavior. */
+@media (max-height: 520px) {
+  .hud--player .hud__mission {
+    top: max(50px, calc(env(safe-area-inset-top) + 44px));
+    left: 50%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    width: min(600px, calc(100vw - 24px));
+    padding: 7px 8px 7px 12px;
+    transform: translateX(-50%);
+  }
+
+  .hud--player .hud__mission-kicker,
+  .hud--player .hud__mission-hint,
+  .hud--player .hud__mission-prompt {
+    display: none;
+  }
+
+  .hud--player .hud__mission-objective {
+    font-size: 0.78rem;
+    line-height: 1.22;
+  }
+
+  .hud--player .hud__mission-start {
+    justify-self: end;
+    margin: 0;
+  }
+
+  .hud--player:has(.hud__minimap:not([hidden])) .hud__mission {
+    width: min(450px, calc(100vw - 24px));
+  }
 }
 
 .is-mobile-device .hud--player .hud__panel-content {

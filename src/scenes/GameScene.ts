@@ -8,12 +8,21 @@ import { SKILL_DEFS } from '../sim/skills/registry';
 import type { SimEvent } from '../sim/types';
 import { Hud, TERRAIN_TOOLS, type TerrainBrush } from '../ui/Hud';
 import { LevelSelect, type LevelCard } from '../ui/LevelSelect';
+import { TitleScreen } from '../ui/TitleScreen';
 import { Progress } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
-import { layoutLemmingCrowds, type LemmingDisplayPoint } from '../render/crowdLayout';
+import {
+  CREW_SALVAGER_FRAME_SIZE,
+  CREW_SALVAGER_TEXTURE_KEY,
+  CREW_SALVAGER_TEXTURE_PATH,
+  CrewSpriteRenderer,
+  canDrawSalvager,
+} from '../render/CrewSpriteRenderer';
+import { layoutLemmingCrowds, SALVAGER_CROWD_SPACING, type LemmingDisplayPoint } from '../render/crowdLayout';
 import { EXPLOSION_TUNING } from '../sim/terrainTuning';
 import { Particles } from '../render/Particles';
 import { drawTerrain as drawTerrainLayer } from '../render/TerrainRenderer';
+import { drawCampaignSetpieces } from '../render/CampaignSetpieces';
 import { INDUSTRIAL_BACKDROP_KEY, WorldBackdrop } from '../render/WorldBackdrop';
 import { drawIndustrialTorch, drawWorldLights, type WorldLightSource } from '../render/WorldLights';
 import { WORLD_THEME } from '../render/visualTheme';
@@ -30,7 +39,7 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
-import { canScriptPlayerCameraFocus, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, type PlayerCameraSafeInsets } from '../render/playerCamera';
+import { canScriptPlayerCameraFocus, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraMinimapFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, type PlayerCameraSafeInsets } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
@@ -55,6 +64,7 @@ export class GameScene extends Phaser.Scene {
   private lightGraphics!: Phaser.GameObjects.Graphics;
   private setpieceGraphics!: Phaser.GameObjects.Graphics;
   private actorGraphics!: Phaser.GameObjects.Graphics;
+  private crewSpriteRenderer?: CrewSpriteRenderer;
   private fxGraphics!: Phaser.GameObjects.Graphics;
   private worldBackdrop?: WorldBackdrop;
   private fireLights: WorldLightSource[] = [];
@@ -75,7 +85,7 @@ export class GameScene extends Phaser.Scene {
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
   /** Edge-scroll only engages once the mouse has actually entered the game. */
   private pointerSeen = false;
-  /** Respect deliberate pan/zoom before automatic crew framing resumes. */
+  /** Suppress scripted event pans briefly after deliberate user camera input. */
   private manualCameraUntilMs = 0;
   private minimapCameraActive = false;
   private readonly particles = new Particles();
@@ -87,6 +97,8 @@ export class GameScene extends Phaser.Scene {
   private readonly entityLabels = new Map<string, Phaser.GameObjects.Text>();
   private readonly progress = new Progress(localStorage);
   private levelSelect!: LevelSelect;
+  private titleScreen?: TitleScreen;
+  private titleOpen = true;
   private selectOpen = false;
   private winRecorded = false;
   private celebrateFired = false;
@@ -149,6 +161,10 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image(INDUSTRIAL_BACKDROP_KEY, `${import.meta.env.BASE_URL}assets/industrial-cavern-backdrop.png`);
+    this.load.spritesheet(CREW_SALVAGER_TEXTURE_KEY, `${import.meta.env.BASE_URL}${CREW_SALVAGER_TEXTURE_PATH}`, {
+      frameWidth: CREW_SALVAGER_FRAME_SIZE,
+      frameHeight: CREW_SALVAGER_FRAME_SIZE,
+    });
   }
 
   create(): void {
@@ -344,13 +360,17 @@ export class GameScene extends Phaser.Scene {
       this.levelSelect.hide();
       this.startLevel();
     });
-    if (IS_PLAYER_EXPERIENCE) {
-      this.levelIndex = this.nextUnsolvedLevelIndex();
-      this.startLevel();
-      if (this.levelIndex > 0) this.continueOverlay?.show(this.level.name ?? `Level ${this.levelIndex + 1}`);
-    } else {
-      this.openLevelSelect();
-    }
+    this.titleScreen = new TitleScreen(() => {
+      this.unlockAudio();
+      this.titleOpen = false;
+      if (IS_PLAYER_EXPERIENCE) {
+        this.levelIndex = this.nextUnsolvedLevelIndex();
+        this.startLevel();
+        if (this.levelIndex > 0) this.continueOverlay?.show(this.level.name ?? `Level ${this.levelIndex + 1}`);
+      } else {
+        this.openLevelSelect();
+      }
+    });
     this.touchOrientationGate?.start();
   }
 
@@ -500,6 +520,27 @@ export class GameScene extends Phaser.Scene {
     this.manualCameraUntilMs = this.animClockMs + CAMERA_USER_GRACE_MS;
   }
 
+  private applyMinimapCamera(fractionX: number, fractionY: number): void {
+    if (!IS_PLAYER_EXPERIENCE || this.isPlayerCameraLocked()) return;
+    const camera = this.cameras.main;
+    const insets = this.playerCameraInsets();
+    camera.setBounds(
+      0,
+      this.playerCameraBoundsY(),
+      this.level.width,
+      playerCameraOccludedWorldHeight(this.level.height, insets.bottom, camera.zoom),
+    );
+    const frame = playerCameraMinimapFrame(
+      this.level,
+      { width: camera.width, height: camera.height },
+      camera.zoom,
+      insets.bottom,
+      fractionX,
+      fractionY,
+    );
+    camera.setScroll(frame.scrollX, frame.scrollY);
+  }
+
   private resetCameraGestures(): void {
     this.touchCameraGesture.reset();
     this.pendingTouchBrush = null;
@@ -557,7 +598,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.selectOpen || !this.sim) return; // frozen behind the level select
+    if (this.titleOpen || this.selectOpen || !this.sim) return; // frozen behind title / level select
     if (this.lifecycle.isSuspended()) return;
     if (this.planning) {
       // Planning freezes the run, not the living world the player is shaping.
@@ -591,7 +632,11 @@ export class GameScene extends Phaser.Scene {
     this.particles.update(this.paused ? 0 : delta * this.speed);
     this.updateAmbient(delta);
     this.updateCamera(delta);
-    this.lemmingDisplayPoints = layoutLemmingCrowds(this.sim.state.lemmings, this.animClockMs);
+    this.lemmingDisplayPoints = layoutLemmingCrowds(
+      this.sim.state.lemmings,
+      this.animClockMs,
+      this.levelIndex === 0 ? SALVAGER_CROWD_SPACING : undefined,
+    );
     this.updateHover();
     this.drawWorld();
     this.hud.update(this.sim.state, this.hudView());
@@ -890,6 +935,8 @@ export class GameScene extends Phaser.Scene {
     this.winRecorded = false;
     this.firstExitFocusShown = false;
 
+    this.crewSpriteRenderer?.clear();
+    this.crewSpriteRenderer = undefined;
     this.children.removeAll(true);
     this.lemmingLabels.clear();
     this.entityLabels.clear();
@@ -914,7 +961,10 @@ export class GameScene extends Phaser.Scene {
     this.terrainGraphics = this.add.graphics().setDepth(0);
     this.lightGraphics = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
     this.setpieceGraphics = this.add.graphics().setDepth(10);
-    this.actorGraphics = this.add.graphics().setDepth(20);
+    this.actorGraphics = this.add.graphics().setDepth(21);
+    // M1 is intentionally contained to the authored Level-1 Walker/Basher
+    // slice. Other levels keep their complete role/state renderer until M2.
+    if (this.levelIndex === 0) this.crewSpriteRenderer = new CrewSpriteRenderer(this);
     this.fxGraphics = this.add.graphics().setDepth(30);
 
     this.particles.clear();
@@ -994,7 +1044,7 @@ export class GameScene extends Phaser.Scene {
       },
       onMinimapJump: (fx, fy) => {
         this.cameras.main.panEffect.reset();
-        this.cameras.main.centerOn(fx * this.level.width, fy * this.level.height);
+        this.applyMinimapCamera(fx, fy);
       },
       onMinimapControlEnd: () => {
         this.minimapCameraActive = false;
@@ -1016,6 +1066,7 @@ export class GameScene extends Phaser.Scene {
       playerBuild: IS_PLAYER_EXPERIENCE,
       availableSkills: this.playerVisibleSkills(),
       availableTerrainTools: this.playerVisibleTerrainTools(),
+      useSalvagerSlice: this.levelIndex === 0,
     });
     this.hud.update(this.sim.state, this.hudView());
     this.frameScrollingRoomAboveHud();
@@ -1119,6 +1170,7 @@ export class GameScene extends Phaser.Scene {
     this.cursors = kb.createCursorKeys();
     kb.on('keydown', (event: KeyboardEvent) => {
       if (this.lifecycle.isSuspended()) return;
+      if (this.titleOpen) return;
       if (this.selectOpen) return; // the level select owns the keyboard
       const key = event.key.toLowerCase();
 
@@ -1198,6 +1250,9 @@ export class GameScene extends Phaser.Scene {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     window.removeEventListener('blur', this.handleWindowBlur);
     this.touchOrientationGate?.stop();
+    this.titleScreen?.destroy();
+    this.crewSpriteRenderer?.clear();
+    this.crewSpriteRenderer = undefined;
     this.resumeOverlay.destroy();
     this.continueOverlay?.destroy();
   }
@@ -1288,7 +1343,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private findNearestLemming(worldX: number, worldY: number, radius = 26): Lemming | null {
-    return selectCrewTarget(this.sim.state.lemmings, this.lemmingDisplayPoints, worldX, worldY, radius);
+    return selectCrewTarget(
+      this.sim.state.lemmings,
+      this.lemmingDisplayPoints,
+      worldX,
+      worldY,
+      radius,
+      (lemming, point) => this.levelIndex === 0 && canDrawSalvager(lemming) ? point.y - 3 : point.y + 4,
+    );
   }
 
   private crewTargetRadiusWorld(): number {
@@ -1334,6 +1396,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.setpieceGraphics.clear();
     this.drawOnboardingMarkers();
+    drawCampaignSetpieces(this.setpieceGraphics, this.levelIndex, this.sim.state.timeMs);
     if (this.level.playMode?.spawn !== 'tray-drop') {
       this.drawHatch();
       const torch = this.torchPosition();
@@ -1381,16 +1444,16 @@ export class GameScene extends Phaser.Scene {
         x: exit.x + exit.width / 2,
         y: exit.y + exit.height / 2,
         color: WORLD_THEME.mint,
-        radius: 54,
-        strength: 0.9,
+        radius: 82,
+        strength: 1,
       },
     ];
 
     if (this.level.playMode?.spawn !== 'tray-drop') {
       const torch = this.torchPosition();
       sources.push(
-        { x: this.level.spawn.x, y: this.level.spawn.y - 22, color: WORLD_THEME.sand, radius: 34, strength: 0.45 },
-        { x: torch.x, y: torch.y - 8, color: WORLD_THEME.fire, radius: 42, strength: 0.85 },
+        { x: this.level.spawn.x, y: this.level.spawn.y - 22, color: WORLD_THEME.sand, radius: 66, strength: 0.72 },
+        { x: torch.x, y: torch.y - 8, color: WORLD_THEME.fire, radius: 54, strength: 0.9 },
       );
     }
 
@@ -1543,26 +1606,55 @@ export class GameScene extends Phaser.Scene {
     const exit = this.level.exit;
     const g = this.setpieceGraphics;
     const t = this.sim.state.timeMs;
-    // Slow shimmer so the goal reads as alive.
-    const pulse = 0.75 + Math.sin(t / 420) * 0.2;
-    g.fillStyle(WORLD_THEME.ink, 0.96);
-    g.fillRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
-    g.lineStyle(3, WORLD_THEME.mint, pulse);
-    g.strokeRoundedRect(exit.x - 8, exit.y - 8, exit.width + 16, exit.height + 16, 8);
-    g.lineStyle(1, WORLD_THEME.steelLight, 0.45);
-    g.strokeRoundedRect(exit.x - 5, exit.y - 5, exit.width + 10, exit.height + 10, 6);
-    // Inner light rays.
-    g.lineStyle(1.5, WORLD_THEME.mint, 0.25 + pulse * 0.2);
+    const powered = !this.planning;
+    const rescueCharge = Math.min(1, this.sim.state.saved / Math.max(1, this.level.targetSaved));
+    const pulse = powered ? 0.72 + Math.sin(t / 420) * 0.16 : 0.3;
     const cx = exit.x + exit.width / 2;
-    const cy = exit.y + 10;
-    for (let i = 0; i < 5; i += 1) {
-      const a = -Math.PI / 2 + (i - 2) * 0.28 + Math.sin(t / 600 + i) * 0.05;
-      g.lineBetween(cx, cy, cx + Math.cos(a) * 22, cy + Math.sin(a) * 18);
+    const cy = exit.y + exit.height / 2;
+    const outerLeft = exit.x - 20;
+    const outerRight = exit.x + exit.width + 20;
+    const outerTop = exit.y - 26;
+    const outerBottom = exit.y + exit.height + 5;
+
+    // A large powered transit gate around a visibly open simulation exit zone.
+    g.fillStyle(WORLD_THEME.steelDark, 1);
+    g.fillRect(outerLeft - 4, exit.y - 12, 12, exit.height + 20);
+    g.fillRect(outerRight - 8, exit.y - 12, 12, exit.height + 20);
+    g.fillRect(outerLeft - 8, outerBottom - 5, outerRight - outerLeft + 16, 8);
+    g.fillStyle(WORLD_THEME.steel, 1);
+    g.fillRect(outerLeft - 1, exit.y - 9, 5, exit.height + 14);
+    g.fillRect(outerRight - 4, exit.y - 9, 5, exit.height + 14);
+    g.fillStyle(WORLD_THEME.steelLight, 0.9);
+    for (const rivetX of [outerLeft + 2, outerRight - 2]) {
+      g.fillCircle(rivetX, exit.y - 5, 1.5);
+      g.fillCircle(rivetX, exit.y + exit.height, 1.5);
     }
-    g.fillStyle(WORLD_THEME.mint, 0.12 + pulse * 0.14);
-    g.fillRect(exit.x, exit.y, exit.width, exit.height);
-    g.fillStyle(0xeff7ff, 0.92);
-    g.fillTriangle(exit.x + 11, exit.y + 34, exit.x + 30, exit.y + 22, exit.x + 11, exit.y + 10);
+
+    g.lineStyle(4, WORLD_THEME.steel, 1);
+    g.lineBetween(outerLeft + 5, exit.y - 10, cx, outerTop);
+    g.lineBetween(cx, outerTop, outerRight - 5, exit.y - 10);
+    g.lineStyle(2, powered ? WORLD_THEME.mint : WORLD_THEME.steelLight, pulse);
+    g.lineBetween(outerLeft + 10, exit.y - 5, cx, outerTop + 9);
+    g.lineBetween(cx, outerTop + 9, outerRight - 10, exit.y - 5);
+
+    // The exact save volume remains open; only its edges and floor draw light.
+    g.lineStyle(2, WORLD_THEME.mint, pulse);
+    g.strokeRect(exit.x, exit.y, exit.width, exit.height);
+    g.fillStyle(WORLD_THEME.mint, powered ? 0.22 + rescueCharge * 0.18 : 0.12);
+    g.fillRect(exit.x + 2, exit.y + exit.height - 4, exit.width - 4, 3);
+    const beaconY = outerTop + 9;
+    const core = 4 + rescueCharge * 2 + (powered ? Math.sin(t / 300) * 0.6 : 0);
+    g.fillStyle(powered ? 0xeaffff : WORLD_THEME.steelLight, powered ? 0.88 : 0.38);
+    g.fillTriangle(cx, beaconY - core, cx + core, beaconY, cx, beaconY + core);
+    g.fillTriangle(cx, beaconY - core, cx - core, beaconY, cx, beaconY + core);
+    // Inward approach chevrons communicate enterability without fake collision.
+    g.lineStyle(2, WORLD_THEME.mint, 0.55 + pulse * 0.3);
+    for (let offset = 0; offset < 3; offset += 1) {
+      const x = exit.x - 14 + offset * 7;
+      const y = cy + 12;
+      g.lineBetween(x, y - 4, x + 5, y);
+      g.lineBetween(x + 5, y, x, y + 4);
+    }
   }
 
   private drawHatch(): void {
@@ -1573,44 +1665,66 @@ export class GameScene extends Phaser.Scene {
     // 0 → shut, 1 → fully open.
     const open = state.hatchTotalMs > 0 ? 1 - state.hatchOpenMs / state.hatchTotalMs : 1;
 
+    const gantryLeft = this.level.spawn.x - 48;
+    const gantryRight = this.level.spawn.x + 48;
+    const gantryTop = hatchY - 27;
+
+    // Suspended cargo gantry: a world landmark around the unchanged spawn.
+    g.fillStyle(WORLD_THEME.steelDark, 1);
+    g.fillRect(gantryLeft, gantryTop, gantryRight - gantryLeft, 10);
+    g.fillRect(gantryLeft + 3, gantryTop + 8, 7, 55);
+    g.fillRect(gantryRight - 10, gantryTop + 8, 7, 55);
+    g.fillStyle(WORLD_THEME.steel, 1);
+    g.fillRect(gantryLeft + 3, gantryTop + 2, gantryRight - gantryLeft - 6, 3);
+    g.lineStyle(2, WORLD_THEME.steelLight, 0.42);
+    g.lineBetween(gantryLeft + 10, gantryTop + 10, gantryLeft + 33, gantryTop + 34);
+    g.lineBetween(gantryRight - 10, gantryTop + 10, gantryRight - 33, gantryTop + 34);
+    g.lineBetween(this.level.spawn.x, gantryTop + 8, this.level.spawn.x, hatchY - 3);
+    g.fillStyle(0xffb43a, 0.95);
+    g.fillRect(this.level.spawn.x - 5, gantryTop + 3, 10, 5);
+    g.fillStyle(open < 1 ? 0xff5b3a : WORLD_THEME.mint, 0.95);
+    g.fillRect(gantryRight - 17, gantryTop + 3, 4, 4);
+
     // Soft warm glow under the hatch while closed / opening.
     if (open < 1) {
-      g.fillStyle(0xffd96b, 0.08 + open * 0.1);
-      g.fillCircle(this.level.spawn.x, hatchY + 24, 30);
+      g.fillStyle(0xffd96b, 0.09 + open * 0.1);
+      g.fillCircle(this.level.spawn.x, hatchY + 24, 38);
     }
 
     g.fillStyle(WORLD_THEME.steelDark, 1);
-    g.fillRoundedRect(hatchX - 3, hatchY - 3, 72, 44, 6);
+    g.fillRoundedRect(hatchX - 4, hatchY - 4, 74, 46, 5);
     g.fillStyle(WORLD_THEME.ink, 0.98);
     g.fillRoundedRect(hatchX, hatchY, 66, 38, 4);
     g.lineStyle(3, WORLD_THEME.sandLight, 1);
     g.strokeRoundedRect(hatchX, hatchY, 66, 38, 4);
-    g.lineStyle(3, WORLD_THEME.sand, 0.72);
-    for (let x = hatchX + 10; x < hatchX + 62; x += 11) {
-      g.lineBetween(x, hatchY + 5, x - 15, hatchY + 33);
+    // Two striped shutters retract fully to reveal the dark aperture.
+    const shutterWidth = 33 * (1 - open);
+    if (shutterWidth > 0.5) {
+      g.fillStyle(WORLD_THEME.steelDark, 1);
+      g.fillRect(hatchX + 2, hatchY + 2, Math.max(0, shutterWidth - 2), 34);
+      g.fillRect(hatchX + 66 - shutterWidth, hatchY + 2, Math.max(0, shutterWidth - 2), 34);
+      g.lineStyle(3, WORLD_THEME.sand, 0.85);
+      for (let x = hatchX + 8; x < hatchX + 62; x += 11) {
+        if (x < hatchX + shutterWidth || x > hatchX + 66 - shutterWidth) {
+          g.lineBetween(x, hatchY + 5, x - 10, hatchY + 31);
+        }
+      }
     }
-    g.fillStyle(0xff3d21, 0.95);
-    g.fillRect(this.level.spawn.x - 3, hatchY - 7, 6, 4);
+    g.fillStyle(0xffd96b, 0.92);
+    g.fillRect(hatchX + 6, hatchY + 5, 5, 4);
+    g.fillRect(hatchX + 55, hatchY + 5, 5, 4);
 
-    // Trapdoor doors slide apart from the centre as the hatch opens.
-    const opening = 24;
-    const doorWidth = (opening / 2) * (1 - open);
-    if (doorWidth > 0.5) {
-      g.fillStyle(0xffd96b, 0.95);
-      g.fillRect(this.level.spawn.x - opening / 2, hatchY + 34, doorWidth, 5);
-      g.fillRect(this.level.spawn.x + opening / 2 - doorWidth, hatchY + 34, doorWidth, 5);
-    }
     if (open >= 1) {
-      // Pulsing drop arrow once open.
+      // Pulsing drop arrow inside the revealed opening, behind the crew.
       const bob = Math.sin(state.timeMs / 280) * 2;
       g.fillStyle(0xffd96b, 0.95);
       g.fillTriangle(
-        this.level.spawn.x - 8,
-        hatchY + 39 + bob,
-        this.level.spawn.x + 8,
-        hatchY + 39 + bob,
+        this.level.spawn.x - 7,
+        hatchY + 12 + bob,
+        this.level.spawn.x + 7,
+        hatchY + 12 + bob,
         this.level.spawn.x,
-        hatchY + 51 + bob,
+        hatchY + 25 + bob,
       );
     }
   }
@@ -1705,6 +1819,7 @@ export class GameScene extends Phaser.Scene {
 
   private drawLemmings(): void {
     this.actorGraphics.clear();
+    this.crewSpriteRenderer?.beginFrame();
     const frame = this.animFrame();
     const visibleLabels = new Set<number>();
     const cueTargetId = IS_PLAYER_EXPERIENCE && this.levelIndex === 0 && this.sim.state.skills.basher > 0
@@ -1715,7 +1830,17 @@ export class GameScene extends Phaser.Scene {
     for (const lemming of this.sim.state.lemmings) {
       if (lemming.state === 'exited') continue;
       const point = this.lemmingDisplayPoints.get(lemming.id) ?? lemming;
-      drawLemming(this.actorGraphics, lemming, frame, lemming.id === this.hoveredId, point);
+      const selected = lemming.id === this.hoveredId;
+      const cachedSprite = this.crewSpriteRenderer?.draw(lemming, frame, point) ?? false;
+      if (!cachedSprite) {
+        drawLemming(this.actorGraphics, lemming, frame, selected, point);
+      } else if (selected) {
+        const pulse = 14 + Math.sin(frame * 0.6) * 1.5;
+        this.actorGraphics.lineStyle(2, 0xffffff, 0.9);
+        this.actorGraphics.strokeCircle(point.x, point.y + 6, pulse);
+        this.actorGraphics.lineStyle(1, 0x6ae1ff, 0.45);
+        this.actorGraphics.strokeCircle(point.x, point.y + 6, pulse + 3);
+      }
       if (lemming.id === cueTargetId) {
         const pulse = 13 + Math.sin(this.animClockMs / 150) * 2;
         this.actorGraphics.lineStyle(2, 0xffd96b, 0.9);

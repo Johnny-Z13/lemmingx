@@ -3,6 +3,8 @@ dist
 .DS_Store
 *.log
 art/concepts/
+/output/
+/.playwright-cli/
 
 # Local environment secrets
 /.env.local

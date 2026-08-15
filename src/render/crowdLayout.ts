@@ -5,8 +5,10 @@ export interface LemmingDisplayPoint {
   readonly y: number;
 }
 
-/** Main sprite is roughly 14px wide, so this leaves about 50% overlap. */
+/** Existing procedural family keeps its compact fan outside the M1 slice. */
 export const CROWD_SPACING = 7.5;
+/** Level-1 salvage sprite exposes at least ~40% of each wider silhouette. */
+export const SALVAGER_CROWD_SPACING = 13;
 const CROWD_JOIN_X = 7;
 const CROWD_JOIN_Y = 4;
 const JITTER_X = 0.2;
@@ -21,6 +23,7 @@ const JITTER_Y = 0.7;
 export function layoutLemmingCrowds(
   lemmings: readonly Lemming[],
   timeMs: number,
+  spacing = CROWD_SPACING,
 ): Map<number, LemmingDisplayPoint> {
   const points = new Map<number, LemmingDisplayPoint>();
   const live = lemmings.filter((lemming) => lemming.state !== 'dead' && lemming.state !== 'exited');
@@ -52,17 +55,20 @@ export function layoutLemmingCrowds(
       continue;
     }
 
+    // Display slots must not change when a job/fuse changes: state may affect
+    // draw depth, never the crew member's render position.
     crowd.sort((a, b) => a.x - b.x || a.id - b.id);
     const centerX = crowd.reduce((sum, lemming) => sum + lemming.x, 0) / crowd.length;
     const rawJitterX = crowd.map((lemming) => Math.sin(timeMs * 0.006 + lemming.id * 2.17) * JITTER_X);
+    const rawJitterY = crowd.map((lemming) => Math.sin(timeMs * 0.008 + lemming.id * 1.73) * JITTER_Y);
     const meanJitterX = rawJitterX.reduce((sum, value) => sum + value, 0) / crowd.length;
-    const middle = (crowd.length - 1) / 2;
+    const meanJitterY = rawJitterY.reduce((sum, value) => sum + value, 0) / crowd.length;
 
     crowd.forEach((lemming, index) => {
       const jitterX = rawJitterX[index] - meanJitterX;
-      const jitterY = Math.sin(timeMs * 0.008 + lemming.id * 1.73) * JITTER_Y;
+      const jitterY = rawJitterY[index] - meanJitterY;
       points.set(lemming.id, {
-        x: centerX + (index - middle) * CROWD_SPACING + jitterX,
+        x: centerX + (index - (crowd.length - 1) / 2) * spacing + jitterX,
         y: lemming.y + jitterY,
       });
     });

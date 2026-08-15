@@ -6,6 +6,7 @@ import type { AudioSettings } from '../audio/settings';
 import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIdentity';
 import { createElement as createLucideIcon, DoorOpen, Hand, Maximize2, Minus, Warehouse, type IconNode } from 'lucide';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
+import { canUseSalvagerHudIcon } from '../render/CrewSpriteRenderer';
 
 /** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
 export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'fire' | 'erase' | 'bomb';
@@ -108,6 +109,12 @@ export interface HudView {
 const MINIMAP_WIDTH = 180;
 /** Terrain layer redraw interval — dots/camera redraw every frame regardless. */
 const MINIMAP_TERRAIN_MS = 100;
+// Resolve before assigning to a CSS custom property: relative url() values
+// otherwise inherit the built stylesheet's /assets/ directory as their base.
+const CREW_SALVAGER_HUD_URL = new URL(
+  `${import.meta.env.BASE_URL}assets/crew-salvager.png`,
+  document.baseURI,
+).href;
 
 const SKILLS = ALL_SKILLS.map((skill) => ({
   skill,
@@ -122,13 +129,22 @@ const WORLD_TOOLS: Record<WorldEntityKind, { label: string; icon: IconNode; colo
   exit: { label: 'Exit', icon: DoorOpen, color: '#78ffd6' },
 };
 
-function crewIconMarkup(palette: CrewPalette | null): string {
-  const className = palette ? 'hud__crew-icon' : 'hud__crew-icon is-random';
-  const style = palette
+function crewIconMarkup(palette: CrewPalette | null, skill?: Skill, salvageSlice = false): string {
+  const useSalvager = skill ? canUseSalvagerHudIcon(skill, salvageSlice) : false;
+  const className = palette
+    ? `hud__crew-icon${useSalvager ? ' is-salvager-slice' : ''}`
+    : 'hud__crew-icon is-random';
+  let style = palette
     ? ` style="--crew-hair:${colorToCss(palette.hair)};--crew-body:${colorToCss(palette.body)};` +
       `--crew-shade:${colorToCss(palette.bodyShade)};--crew-trim:${colorToCss(palette.trim)}"`
     : '';
-  return `<span class="${className}"${style} aria-hidden="true">` +
+  if (useSalvager) {
+    style = style
+      ? style.slice(0, -1) + `;--crew-atlas:url('${CREW_SALVAGER_HUD_URL}')"`
+      : ` style="--crew-atlas:url('${CREW_SALVAGER_HUD_URL}')"`;
+  }
+  const skillData = skill ? ` data-skill="${skill}"` : '';
+  return `<span class="${className}"${style}${skillData} aria-hidden="true">` +
     '<span class="hud__crew-hair"></span><span class="hud__crew-head"></span>' +
     '<span class="hud__crew-body"></span><span class="hud__crew-feet"></span></span>';
 }
@@ -220,6 +236,7 @@ export class Hud {
       playerBuild?: boolean;
       availableSkills?: readonly Skill[];
       availableTerrainTools?: readonly TerrainBrush[];
+      useSalvagerSlice?: boolean;
     },
   ) {
     this.events = events;
@@ -309,7 +326,7 @@ export class Hud {
       button.dataset.dragSource = String(this.spawnMode === 'tray-drop');
       button.innerHTML =
         `<span class="hud__hotkey">${item.hotkey}</span>` +
-        crewIconMarkup(item.palette) +
+        crewIconMarkup(item.palette, item.skill, opts?.useSalvagerSlice) +
         `<span class="hud__tool-name">${item.label}</span>` +
         `<span class="hud__stock">0</span>`;
       button.addEventListener('click', (e) => {

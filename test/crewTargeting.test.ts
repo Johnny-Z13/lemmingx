@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { selectCrewTarget } from '../src/input/crewTargeting';
+import { layoutLemmingCrowds, SALVAGER_CROWD_SPACING } from '../src/render/crowdLayout';
 import type { Lemming } from '../src/sim/types';
 
 function crew(id: number, x: number, y: number, state: Lemming['state'] = 'walker'): Lemming {
@@ -42,5 +43,23 @@ describe('selectCrewTarget', () => {
       [2, { x: 100, y: 103 }],
     ]);
     expect(selectCrewTarget(lemmings, display, 100, 106, 24)?.id).toBe(2);
+  });
+
+  it('selects each grounded actor from an off-centre visible-body tap in a ten-crew fan', () => {
+    const lemmings = Array.from({ length: 10 }, (_, index) => crew(index + 1, 100, 100));
+    const display = layoutLemmingCrowds(lemmings, 0, SALVAGER_CROWD_SPACING);
+
+    for (const lemming of lemmings) {
+      const point = display.get(lemming.id);
+      expect(point).toBeDefined();
+      expect(selectCrewTarget(
+        lemmings,
+        display,
+        point!.x + 4,
+        point!.y - 7,
+        24,
+        (_crew, displayPoint) => displayPoint.y - 3,
+      )?.id).toBe(lemming.id);
+    }
   });
 });

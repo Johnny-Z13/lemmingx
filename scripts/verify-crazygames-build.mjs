@@ -62,11 +62,20 @@ for (const cssPath of files.filter((path) => path.endsWith('.css'))) {
 }
 
 const provenance = JSON.parse(await readFile(provenancePath, 'utf8'));
+const inventoriedRuntimePaths = new Set(provenance.assets.flatMap((asset) =>
+  String(asset.runtimePath).split(';').map((value) => value.trim()),
+));
+const publicAssetPaths = (await filesUnder(join(root, 'public/assets')))
+  .map((path) => relative(root, path));
+for (const path of publicAssetPaths) {
+  if (!inventoriedRuntimePaths.has(path)) errors.push(`public runtime asset missing from provenance inventory: ${path}`);
+}
 for (const asset of provenance.assets) {
   const paths = String(asset.runtimePath).split(';').map((value) => value.trim());
-  const hashes = typeof asset.originalHashSha256 === 'object'
-    ? asset.originalHashSha256 ?? {}
-    : paths.length === 1 ? { [paths[0]]: asset.originalHashSha256 } : {};
+  const declaredRuntimeHash = asset.runtimeHashSha256 ?? asset.originalHashSha256;
+  const hashes = typeof declaredRuntimeHash === 'object'
+    ? declaredRuntimeHash ?? {}
+    : paths.length === 1 ? { [paths[0]]: declaredRuntimeHash } : {};
   for (const path of paths) {
     if (!/^(?:src|public)\/[\w./-]+$/.test(path)) continue;
     const expected = hashes[path];
@@ -95,6 +104,7 @@ const worktreeStatus = execFileSync(
 const metadata = {
   schemaVersion: 1,
   proofOnly: true,
+  evidenceScope: worktreeStatus.length > 0 ? 'pre-merge working-tree build' : 'committed candidate build',
   releaseCleared: unresolved.length === 0,
   branch: git(['branch', '--show-current']),
   commit: git(['rev-parse', 'HEAD']),

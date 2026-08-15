@@ -2,11 +2,12 @@
   "inventoryVersion": 1,
   "game": "LemmingX",
   "scope": "Early local CrazyGames candidate",
-  "reviewDate": "2026-08-12",
-  "reviewer": "Codex automated inventory pass",
+  "reviewDate": "2026-08-15",
+  "reviewer": "Codex automated inventory and generation record",
   "releaseClaim": "blocked",
   "releaseBlockers": [
     "The shipped industrial backdrop has no verified originating output, prompt, model, seed, terms record, or transformation chain.",
+    "The generated title and salvage-crew slice are prototype-only pending human originality, commercial-rights, and brand-confusion review.",
     "Repository-authored procedural visual and audio families have not received a human originality and commercial-rights review."
   ],
   "approvalStates": [
@@ -16,6 +17,98 @@
     "excluded"
   ],
   "assets": [
+    {
+      "id": "title-splash",
+      "runtimePath": "public/assets/title-splash.png",
+      "assetType": "raster-image/png",
+      "dimensions": "1672x941",
+      "source": "Clean-room pixel-art concept generated for this repository",
+      "creator": "OpenAI built-in image generation with Z13Labs direction",
+      "sourceUrl": null,
+      "sourceReferences": [
+        "/Users/johnnyvenables/.codex/generated_images/01a00243-f2c1-7471-88c9-baa7248cc183/exec-0e6b02ad-0774-4e7d-ac97-3b3b1feee52a.png"
+      ],
+      "licenceOrTermsStatus": "Generated-output terms and commercial originality require human review",
+      "originalHashSha256": "5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3",
+      "runtimeHashSha256": "5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3",
+      "generation": {
+        "prompt": "Clean-room 16-bit industrial sandworld scene with original tiny workers, sand, dirt, cyan water, floating timber, a small fire, a luminous gate, and title-safe upper-centre negative space; no text, logos, watermarks, copyrighted characters, or copied designs.",
+        "promptRecordStatus": "Turn-recorded summary; exact verbatim prompt was not retained",
+        "model": "OpenAI built-in image generation; exact model identifier not exposed",
+        "seed": null,
+        "settings": null
+      },
+      "transformations": ["Copied into the runtime without pixel modification; source and runtime hashes match"],
+      "approvalState": "prototype-only",
+      "reviewer": "Codex automated generation record",
+      "reviewDate": "2026-08-15",
+      "notes": "Mood/reference art only. Do not trace or slice into runtime sprites. Public Lemmings X naming still needs human brand review."
+    },
+    {
+      "id": "crew-salvager",
+      "runtimePath": "public/assets/crew-salvager.png",
+      "assetType": "raster-spritesheet/png",
+      "dimensions": "512x64 (8 cells at 64x64)",
+      "source": "Original side-view industrial salvage-worker animation strip generated for this repository",
+      "creator": "OpenAI built-in image generation with Z13Labs direction",
+      "sourceUrl": null,
+      "sourceReferences": [
+        "docs/assets/sources/crew-salvager-source.png",
+        "/Users/johnnyvenables/.codex/generated_images/01a00243-f2c1-7471-88c9-baa7248cc183/exec-a5960ceb-0adb-4ee9-b379-5c9da1c981a7.png"
+      ],
+      "licenceOrTermsStatus": "Generated-output terms and commercial originality require human review",
+      "originalHashSha256": "b661690ae601e4504f7bb31e3b2cf425ec7833034b1e5aff35ca15835cd414a6",
+      "runtimeHashSha256": "d4de4b6f1b581d073bf6b2ffe9b7b56e1a64c7634c5e01ad02ff441e95f5f078",
+      "generation": {
+        "prompt": "Exactly eight equally spaced side-view pixel-art frames of one original underground industrial salvage worker: four walk frames and four pneumatic ram/drill action frames; amber hardhat and lamp, dark visor with two cyan square eyes, navy suit, orange shoulder armour, brown pack, gloves and steel-toe boots; transparent background requested; no scenery, UI, text, logos, exposed face, swept hair, smock anatomy, countdown, panic pose, watermark, or copyrighted design.",
+        "model": "OpenAI built-in image generation; exact model identifier not exposed",
+        "seed": null,
+        "settings": { "reference": "title splash used for mood/palette only" }
+      },
+      "transformations": [
+        "Edge-connected neutral checkerboard removal",
+        "Eight equal source slots cropped to content",
+        "Shared-scale bottom-centre normalization into 64x64 cells",
+        "32-colour quantization and alpha threshold 24",
+        "64px sheet geometry validation with zero warnings"
+      ],
+      "transformationCommands": [
+        "python3 scripts/prepare-generated-sprite-strip.py --input docs/assets/sources/crew-salvager-source.png --output /tmp/crew-salvager-normalized.png --frames 8 --cell 64 --padding 3",
+        "python3 character-animation-creator@local-2026-08-15/scripts/pixel_snap.py --input /tmp/crew-salvager-normalized.png --output public/assets/crew-salvager.png --cell 64 --palette 32 --alpha-threshold 24 --pixelate-scale 1 --scale-mode nearest",
+        "python3 character-animation-creator@local-2026-08-15/scripts/validate_64_sheet.py --input public/assets/crew-salvager.png --rows 1 --columns 8 --cell 64 --json-out /tmp/crew-salvager-validation.json"
+      ],
+      "transformationSource": "scripts/prepare-generated-sprite-strip.py; game-character-64 pixel_snap.py and validate_64_sheet.py",
+      "toolVersions": {
+        "Python": "3.x",
+        "Pillow": "11.3.0",
+        "character-animation-creator": "local skill snapshot 2026-08-15; pixel_snap.py sha256 39f322650d4987e33a93b0dadb39830ea7afc12a63e4b56bb738ec634bdc5512; validate_64_sheet.py sha256 701c2f698ae380a6e0c863761d7cfe58e40b261cd6c0386d4736471c8a076aed"
+      },
+      "approvalState": "prototype-only",
+      "reviewer": "Codex automated generation record",
+      "reviewDate": "2026-08-15",
+      "notes": "Runtime vertical slice only; full role/state family and human clean-room review remain gated."
+    },
+    {
+      "id": "presentation-slice-renderers",
+      "runtimePath": "src/render/CrewSpriteRenderer.ts; src/render/CampaignSetpieces.ts; src/ui/TitleScreen.ts",
+      "assetType": "procedural-visual-source",
+      "source": "Repository-authored clean-room presentation modules",
+      "creator": "Z13Labs/LemmingX contributors",
+      "sourceUrl": null,
+      "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
+      "originalHashSha256": {
+        "src/render/CrewSpriteRenderer.ts": "cfcecbcf1e9a447781da8010ccc1769b1e967f0b255c0681770d4d813373eef4",
+        "src/render/CampaignSetpieces.ts": "6d45ce68e1fd9184b1426d51ee1dde00976e0a2c7c83ece26b1110e5f746ed7c",
+        "src/ui/TitleScreen.ts": "473536dc19a165624d0e49cd3a30110a282dc36ba03fb76ec772ddaa1e3d036b"
+      },
+      "runtimeHashSha256": null,
+      "generation": null,
+      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated inventory pass",
+      "reviewDate": "2026-08-15",
+      "notes": "The modules are render/UI-only; raster-source clearance is tracked by the title-splash and crew-salvager records."
+    },
     {
       "id": "industrial-cavern-backdrop",
       "runtimePath": "public/assets/industrial-cavern-backdrop.png",
@@ -70,13 +163,13 @@
       "creator": "Z13Labs/LemmingX contributors",
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
-      "originalHashSha256": "a880e481686f6f2065eeb06c9d209d747e5da00d48dfbbc55a3c017f565474b0",
+      "originalHashSha256": "805e48c9cc46a20d6134a4734d4dffe1a795c26cd3208b54fdbe86bf326dd003",
       "runtimeHashSha256": null,
       "generation": null,
       "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
-      "reviewDate": "2026-08-12"
+      "reviewDate": "2026-08-15"
     },
     {
       "id": "procedural-world-backdrop",
