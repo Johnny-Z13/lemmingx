@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { createLevelAt, LEVEL_COUNT, PROTOTYPE_LEVEL_INDICES, PROTOTYPE_START_INDEX, SAND_LAB_INDEX } from '../levels';
 import { GameSimulation } from '../sim/GameSimulation';
 import { FixedStepClock } from '../sim/FixedStepClock';
+import { MATERIAL } from '../sim/Terrain';
 import type { Lemming, LevelDefinition, Skill, WorldEntityKind } from '../sim/types';
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
@@ -17,14 +18,17 @@ import {
   CREW_SALVAGER_TEXTURE_PATH,
   CrewSpriteRenderer,
   canDrawSalvager,
+  salvagerTargetMetric,
 } from '../render/CrewSpriteRenderer';
 import { layoutLemmingCrowds, SALVAGER_CROWD_SPACING, type LemmingDisplayPoint } from '../render/crowdLayout';
 import { EXPLOSION_TUNING } from '../sim/terrainTuning';
 import { Particles } from '../render/Particles';
-import { drawTerrain as drawTerrainLayer } from '../render/TerrainRenderer';
+import { ChunkedTerrainRenderer } from '../render/TerrainRenderer';
 import { drawCampaignSetpieces } from '../render/CampaignSetpieces';
 import { INDUSTRIAL_BACKDROP_KEY, WorldBackdrop } from '../render/WorldBackdrop';
 import { drawIndustrialTorch, drawWorldLights, type WorldLightSource } from '../render/WorldLights';
+import { drawEmitterSetpieces, drawExitSetpiece, drawHatchSetpiece, drawHazardSetpieces, drawTrapSetpieces } from '../render/WorldSetpieces';
+import { RenderMotionPreference } from '../render/motionPreference';
 import { WORLD_THEME } from '../render/visualTheme';
 import { Sfx } from '../audio/Sfx';
 import { Music } from '../audio/Music';
@@ -39,11 +43,11 @@ import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
 import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
-import { canScriptPlayerCameraFocus, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraMinimapFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, type PlayerCameraSafeInsets } from '../render/playerCamera';
+import { canEdgeHoverScroll, canRestoreHeroCamera, canScriptPlayerCameraFocus, playerCameraAttentionFrame, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraLockedHudSafeFrame, playerCameraMinimapFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, playerCameraOcclusionRects, playerCameraPaddedBounds, type PlayerCameraSafeInsets } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
-import { heroMoveChargesForLevel, type HeroMovePhase } from '../input/heroMove';
+import { heroMoveChargesForLevel, heroMoveControlState, type HeroMovePhase } from '../input/heroMove';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -60,7 +64,7 @@ export class GameScene extends Phaser.Scene {
   private level!: LevelDefinition;
   private sim!: GameSimulation;
   private hud!: Hud;
-  private terrainGraphics!: Phaser.GameObjects.Graphics;
+  private terrainRenderer?: ChunkedTerrainRenderer;
   private lightGraphics!: Phaser.GameObjects.Graphics;
   private setpieceGraphics!: Phaser.GameObjects.Graphics;
   private actorGraphics!: Phaser.GameObjects.Graphics;
@@ -91,6 +95,7 @@ export class GameScene extends Phaser.Scene {
   private readonly particles = new Particles();
   private readonly sfx = new Sfx();
   private readonly music = new Music();
+  private readonly motionPreference = new RenderMotionPreference();
   private audioSettings = loadAudioSettings();
   private uiSettings = IS_PLAYER_EXPERIENCE ? { debugLabels: false } : loadUiSettings();
   private readonly lemmingLabels = new Map<number, Phaser.GameObjects.Text>();
@@ -168,6 +173,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.motionPreference.start();
     this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
     if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) {
       this.touchOrientationGate = new TouchOrientationGate(
@@ -345,7 +351,6 @@ export class GameScene extends Phaser.Scene {
           || this.selectOpen
           || this.continueOverlay?.isVisible()
           || this.isPlayerCameraLocked()
-          || this.cameras.main.panEffect.isRunning
           || !this.sim
         ) return;
         const anchor = { x: pointer.x, y: pointer.y };
@@ -455,9 +460,11 @@ export class GameScene extends Phaser.Scene {
       || !IS_MOBILE_DEVICE
       || !pointer.wasTouch
       || this.isPlayerCameraLocked()
-      || this.cameras.main.panEffect.isRunning
     ) return false;
     if (!this.touchCameraGesture.begin(pointer.id, { x: pointer.x, y: pointer.y })) return false;
+    this.cameras.main.panEffect.reset();
+    this.cameras.main.zoomEffect.reset();
+    this.heroReturnCamera = null;
     this.painting = false;
     this.pendingTouchBrush = null;
     this.canvasGesture = null;
@@ -487,7 +494,7 @@ export class GameScene extends Phaser.Scene {
   private panCamera(previous: { x: number; y: number }, current: { x: number; y: number }): void {
     const camera = this.cameras.main;
     if (IS_PLAYER_EXPERIENCE) {
-      if (this.isPlayerCameraLocked() || camera.panEffect.isRunning) return;
+      if (this.isPlayerCameraLocked()) return;
       this.applyPlayerCameraGesture(previous, current, camera.zoom);
       return;
     }
@@ -500,12 +507,15 @@ export class GameScene extends Phaser.Scene {
     currentAnchor: { x: number; y: number },
     requestedZoom: number,
   ): void {
-    if (!this.level || this.isPlayerCameraLocked() || this.cameras.main.panEffect.isRunning) return;
+    if (!this.level || this.isPlayerCameraLocked()) return;
     const camera = this.cameras.main;
-    const current = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
+    camera.panEffect.reset();
+    camera.zoomEffect.reset();
+    this.heroReturnCamera = null;
+    const current = { zoom: camera.zoom, scrollX: camera.worldView.x, scrollY: camera.worldView.y };
     const insets = this.playerCameraInsets();
     const worldHeight = playerCameraOccludedWorldHeight(this.level.height, insets.bottom, camera.zoom);
-    camera.setBounds(0, this.playerCameraBoundsY(), this.level.width, worldHeight);
+    this.setPlayerCameraBounds(worldHeight);
     const frame = playerCameraGestureFrame(
       current,
       previousAnchor,
@@ -515,8 +525,7 @@ export class GameScene extends Phaser.Scene {
       { width: this.level.width, height: worldHeight },
       playerCameraCrewFocus(this.sim.state.lemmings, current, { x: camera.width, y: camera.height }),
     );
-    camera.setZoom(frame.zoom);
-    camera.setScroll(frame.scrollX, frame.scrollY);
+    this.setPlayerCameraFrame(frame);
     this.manualCameraUntilMs = this.animClockMs + CAMERA_USER_GRACE_MS;
   }
 
@@ -524,12 +533,8 @@ export class GameScene extends Phaser.Scene {
     if (!IS_PLAYER_EXPERIENCE || this.isPlayerCameraLocked()) return;
     const camera = this.cameras.main;
     const insets = this.playerCameraInsets();
-    camera.setBounds(
-      0,
-      this.playerCameraBoundsY(),
-      this.level.width,
-      playerCameraOccludedWorldHeight(this.level.height, insets.bottom, camera.zoom),
-    );
+    const worldHeight = playerCameraOccludedWorldHeight(this.level.height, insets.bottom, camera.zoom);
+    this.setPlayerCameraBounds(worldHeight);
     const frame = playerCameraMinimapFrame(
       this.level,
       { width: camera.width, height: camera.height },
@@ -538,12 +543,25 @@ export class GameScene extends Phaser.Scene {
       fractionX,
       fractionY,
     );
-    camera.setScroll(frame.scrollX, frame.scrollY);
+    this.setPlayerCameraFrame(frame);
   }
 
   private resetCameraGestures(): void {
     this.touchCameraGesture.reset();
     this.pendingTouchBrush = null;
+    this.minimapCameraActive = false;
+    // Lifecycle suspension may interrupt a focused/resolving Hero beat. Keep
+    // its return frame; only deliberate user camera input invalidates it.
+  }
+
+  /** Pure camera helpers use visible-world top-left; Phaser stores zoom-offset raw scroll. */
+  private setPlayerCameraFrame(frame: { zoom: number; scrollX: number; scrollY: number }): void {
+    const camera = this.cameras.main;
+    camera.setZoom(frame.zoom);
+    camera.centerOn(
+      frame.scrollX + camera.width / frame.zoom / 2,
+      frame.scrollY + camera.height / frame.zoom / 2,
+    );
   }
 
   private placeCrew(worldX: number, worldY: number, skill: Skill): void {
@@ -628,14 +646,14 @@ export class GameScene extends Phaser.Scene {
       this.fireWinCelebrate();
     }
     this.animClockMs += delta;
-    this.worldBackdrop?.update(this.animClockMs);
+    this.worldBackdrop?.update(this.visualTime());
     this.particles.update(this.paused ? 0 : delta * this.speed);
     this.updateAmbient(delta);
     this.updateCamera(delta);
     this.lemmingDisplayPoints = layoutLemmingCrowds(
       this.sim.state.lemmings,
-      this.animClockMs,
-      this.levelIndex === 0 ? SALVAGER_CROWD_SPACING : undefined,
+      this.visualTime(),
+      SALVAGER_CROWD_SPACING,
     );
     this.updateHover();
     this.drawWorld();
@@ -645,36 +663,40 @@ export class GameScene extends Phaser.Scene {
   /** Camera pan: arrow keys + screen-edge scroll (drag pan lives in create()). */
   private updateCamera(deltaMs: number): void {
     const cam = this.cameras.main;
-    if (this.isPlayerCameraLocked() || cam.panEffect.isRunning) return;
+    if (this.isPlayerCameraLocked()) return;
     const insets = IS_PLAYER_EXPERIENCE ? this.playerCameraInsets() : null;
     if (insets) {
-      cam.setBounds(
-        0,
-        this.playerCameraBoundsY(),
-        this.level.width,
-        playerCameraOccludedWorldHeight(this.level.height, insets.bottom, cam.zoom),
-      );
+      this.setPlayerCameraBounds(playerCameraOccludedWorldHeight(this.level.height, insets.bottom, cam.zoom));
     }
     const pan = 420 * (deltaMs / 1000);
 
+    let panX = 0;
+    let panY = 0;
     if (this.cursors) {
-      if (this.cursors.left.isDown) cam.scrollX -= pan;
-      if (this.cursors.right.isDown) cam.scrollX += pan;
-      if (this.cursors.up.isDown) cam.scrollY -= pan;
-      if (this.cursors.down.isDown) cam.scrollY += pan;
+      if (this.cursors.left.isDown) panX -= pan;
+      if (this.cursors.right.isDown) panX += pan;
+      if (this.cursors.up.isDown) panY -= pan;
+      if (this.cursors.down.isDown) panY += pan;
     }
 
-    if (this.pointerSeen) {
+    if (canEdgeHoverScroll(this.pointerSeen, this.input.activePointer.wasTouch)) {
       const pointer = this.input.activePointer;
       const edge = 24;
       if (pointer.x >= 0 && pointer.y >= 0 && pointer.x <= this.scale.width && pointer.y <= this.scale.height) {
-        if (pointer.x < edge) cam.scrollX -= pan;
-        else if (pointer.x > this.scale.width - edge) cam.scrollX += pan;
-        if (pointer.y < edge) cam.scrollY -= pan;
-        else if (pointer.y > this.scale.height - edge) cam.scrollY += pan;
+        if (pointer.x < edge) panX -= pan;
+        else if (pointer.x > this.scale.width - edge) panX += pan;
+        if (pointer.y < edge) panY -= pan;
+        else if (pointer.y > this.scale.height - edge) panY += pan;
       }
     }
-
+    if (panX !== 0 || panY !== 0) {
+      cam.panEffect.reset();
+      cam.zoomEffect.reset();
+      this.heroReturnCamera = null;
+      cam.scrollX += panX;
+      cam.scrollY += panY;
+      this.manualCameraUntilMs = this.animClockMs + CAMERA_USER_GRACE_MS;
+    }
   }
 
   private playerCameraInsets(): PlayerCameraSafeInsets {
@@ -682,23 +704,38 @@ export class GameScene extends Phaser.Scene {
     return playerCameraOcclusionInsets(
       this.game.canvas.getBoundingClientRect(),
       { x: cam.width, y: cam.height },
-      this.hud.gameplayOcclusions(),
+      this.hud.gameplayEdgeOcclusions(),
     );
   }
 
-  private playerCameraBoundsY(): number {
+  private setPlayerCameraBounds(worldHeight: number): void {
     const cam = this.cameras.main;
-    return Math.max(0, (cam.height - cam.displayHeight) / 2);
+    const bounds = playerCameraPaddedBounds(
+      { width: this.level.width, height: worldHeight },
+      { width: cam.width, height: cam.height },
+      { width: cam.displayWidth, height: cam.displayHeight },
+    );
+    cam.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
   }
 
   private frameScrollingRoomAboveHud(): void {
-    if (!IS_PLAYER_EXPERIENCE || this.isPlayerCameraLocked()) return;
+    if (!IS_PLAYER_EXPERIENCE) return;
     const cam = this.cameras.main;
     const insets = this.playerCameraInsets();
     const worldHeight = playerCameraOccludedWorldHeight(this.level.height, insets.bottom, cam.zoom);
-    cam.setBounds(0, this.playerCameraBoundsY(), this.level.width, worldHeight);
+    this.setPlayerCameraBounds(worldHeight);
+    if (this.isPlayerCameraLocked()) {
+      this.setPlayerCameraFrame(playerCameraLockedHudSafeFrame(
+        this.level.height,
+        cam.height,
+        insets.bottom,
+      ));
+      return;
+    }
     if (this.level.width > cam.width && this.level.height <= cam.height) {
-      cam.scrollY = playerCameraBottomSafeScroll(this.level.height, cam.height, insets.bottom, cam.zoom);
+      const scrollY = playerCameraBottomSafeScroll(this.level.height, cam.height, insets.bottom, cam.zoom);
+      const initial = playerCameraFrame(this.level, { width: cam.width, height: cam.height });
+      this.setPlayerCameraFrame({ zoom: cam.zoom, scrollX: initial.scrollX, scrollY });
     }
   }
 
@@ -731,16 +768,18 @@ export class GameScene extends Phaser.Scene {
           this.addShake(2.5);
           if (!this.firstExitFocusShown) {
             this.firstExitFocusShown = true;
-            this.focusPlayerCamera(this.level.exit.x + this.level.exit.width / 2);
+            this.focusPlayerCameraEvent(e.x, e.y);
           }
           break;
         case 'splat':
           this.particles.bloodSplat(e.x, e.y + 8);
-          this.cameras.main.flash(90, 145, 0, 20);
+          if (!this.reducedMotion) this.cameras.main.flash(90, 145, 0, 20);
           this.addShake(9);
+          this.focusPlayerCameraEvent(e.x, e.y);
           break;
         case 'drown':
           this.particles.burst(e.x, e.y, 10, { color: [0x4ab6ff, 0xffffff], speed: 0.1, lifeMs: 550, size: 2, upward: true });
+          this.focusPlayerCameraEvent(e.x, e.y);
           break;
         case 'splash':
           this.particles.burst(e.x, e.y - 2, 9, { color: [0x8ad4ff, 0x3a9fd8, 0xffffff], speed: 0.12, spread: Math.PI * 0.9, angle: -Math.PI / 2, lifeMs: 420, size: 2 });
@@ -748,6 +787,7 @@ export class GameScene extends Phaser.Scene {
         case 'burn':
           this.particles.burst(e.x, e.y, 18, { color: [0xff3d21, 0xff7a2d, 0xffd96b, 0x5e6575], speed: 0.16, lifeMs: 820, size: 2.8, upward: true });
           this.addShake(4);
+          this.focusPlayerCameraEvent(e.x, e.y);
           break;
         case 'clank':
           this.particles.burst(e.x, e.y, 8, { color: [0xffffff, 0xffd96b, 0x9aa6c2], speed: 0.16, lifeMs: 340, size: 1.6 });
@@ -761,6 +801,7 @@ export class GameScene extends Phaser.Scene {
             size: 2.2,
           });
           this.addShake(6);
+          this.focusPlayerCameraEvent(e.x, e.y);
           break;
         case 'explode':
           this.particles.burst(e.x, e.y, 28, { color: [0xff7a3a, 0xffd96b, 0x5e6575, 0xff5b7f], speed: 0.26, lifeMs: 900, size: 3.2 });
@@ -780,6 +821,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private addShake(amount: number): void {
+    if (this.reducedMotion) return;
     // Phaser camera shake: duration ms, intensity as fraction of viewport.
     const intensity = Math.min(0.018, amount * 0.0018);
     this.cameras.main.shake(160 + amount * 18, intensity);
@@ -787,7 +829,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Soft ambient sparkles at the exit so the goal always reads alive. */
   private updateAmbient(deltaMs: number): void {
-    if (this.paused || this.sim.state.outcome !== 'running') return;
+    if (this.reducedMotion || this.paused || this.sim.state.outcome !== 'running') return;
     this.ambientAccMs += deltaMs * this.speed;
     if (this.ambientAccMs < 220) return;
     this.ambientAccMs = 0;
@@ -819,6 +861,7 @@ export class GameScene extends Phaser.Scene {
     const heroTarget = this.heroMoveTargetId === null
       ? null
       : this.sim.state.lemmings.find(({ id }) => id === this.heroMoveTargetId) ?? null;
+    const heroControl = this.heroMoveControl();
     const cam = this.cameras.main;
     const scrolls = this.level.width > this.scale.width || this.level.height > this.scale.height;
     const levelPrefix = this.isLab()
@@ -846,6 +889,8 @@ export class GameScene extends Phaser.Scene {
       heroMove: {
         phase: this.heroMovePhase,
         charges: this.heroMoveCharges,
+        visible: heroControl.visible,
+        canArm: heroControl.canArm,
         skillLabel: SKILL_DEFS[this.sim.state.selectedSkill].label,
         crewLabel: heroTarget ? crewLabel(heroTarget) : null,
       },
@@ -920,6 +965,14 @@ export class GameScene extends Phaser.Scene {
     return Math.floor((this.animClockMs / 1000) * ANIM_FPS);
   }
 
+  private visualTime(): number {
+    return this.reducedMotion ? 0 : this.animClockMs;
+  }
+
+  private get reducedMotion(): boolean {
+    return this.motionPreference.reduced;
+  }
+
   /** Track which lemming the cursor is over, for the selection ring. */
   private updateHover(): void {
     const pointer = this.input.activePointer;
@@ -937,6 +990,8 @@ export class GameScene extends Phaser.Scene {
 
     this.crewSpriteRenderer?.clear();
     this.crewSpriteRenderer = undefined;
+    this.terrainRenderer?.clear();
+    this.terrainRenderer = undefined;
     this.children.removeAll(true);
     this.lemmingLabels.clear();
     this.entityLabels.clear();
@@ -951,20 +1006,19 @@ export class GameScene extends Phaser.Scene {
         { locked: this.isPlayerCameraLocked() },
       );
       camera.setZoom(frame.zoom);
-      camera.setScroll(frame.scrollX, frame.scrollY);
+      this.setPlayerCameraBounds(this.level.height);
+      this.setPlayerCameraFrame(frame);
     } else {
       camera.setZoom(1);
       camera.centerOn(this.level.spawn.x, this.level.spawn.y);
     }
 
     this.worldBackdrop = new WorldBackdrop(this, this.level.width, this.level.height);
-    this.terrainGraphics = this.add.graphics().setDepth(0);
+    this.terrainRenderer = new ChunkedTerrainRenderer(this, 0);
     this.lightGraphics = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
     this.setpieceGraphics = this.add.graphics().setDepth(10);
     this.actorGraphics = this.add.graphics().setDepth(21);
-    // M1 is intentionally contained to the authored Level-1 Walker/Basher
-    // slice. Other levels keep their complete role/state renderer until M2.
-    if (this.levelIndex === 0) this.crewSpriteRenderer = new CrewSpriteRenderer(this);
+    this.crewSpriteRenderer = new CrewSpriteRenderer(this);
     this.fxGraphics = this.add.graphics().setDepth(30);
 
     this.particles.clear();
@@ -1041,6 +1095,8 @@ export class GameScene extends Phaser.Scene {
       onMinimapControlStart: () => {
         this.minimapCameraActive = true;
         this.cameras.main.panEffect.reset();
+        this.cameras.main.zoomEffect.reset();
+        this.heroReturnCamera = null;
       },
       onMinimapJump: (fx, fy) => {
         this.cameras.main.panEffect.reset();
@@ -1066,7 +1122,6 @@ export class GameScene extends Phaser.Scene {
       playerBuild: IS_PLAYER_EXPERIENCE,
       availableSkills: this.playerVisibleSkills(),
       availableTerrainTools: this.playerVisibleTerrainTools(),
-      useSalvagerSlice: this.levelIndex === 0,
     });
     this.hud.update(this.sim.state, this.hudView());
     this.frameScrollingRoomAboveHud();
@@ -1126,7 +1181,7 @@ export class GameScene extends Phaser.Scene {
     return IS_PLAYER_EXPERIENCE && this.levelIndex < 2;
   }
 
-  /** Briefly present a key hatch/exit landmark, then return control to input. */
+  /** Briefly present a horizontal landmark without undoing the HUD-safe route height. */
   private focusPlayerCamera(focusX: number): void {
     if (!IS_PLAYER_EXPERIENCE || this.levelIndex < 2 || this.levelIndex >= LEVEL_COUNT) return;
     if (!canScriptPlayerCameraFocus(this.minimapCameraActive, this.animClockMs, this.manualCameraUntilMs)) return;
@@ -1137,6 +1192,39 @@ export class GameScene extends Phaser.Scene {
       camera.zoom,
       focusX,
     );
+    const visibleWidth = camera.width / frame.zoom;
+    camera.pan(
+      frame.scrollX + visibleWidth / 2,
+      camera.midPoint.y,
+      CAMERA_EVENT_FOCUS_MS,
+      'Sine.easeInOut',
+      true,
+    );
+  }
+
+  /** Event pans make the smallest HUD-safe correction and always yield to the player. */
+  private focusPlayerCameraEvent(x: number, y: number): void {
+    if (!IS_PLAYER_EXPERIENCE || this.levelIndex < 2 || this.levelIndex >= LEVEL_COUNT) return;
+    if (!canScriptPlayerCameraFocus(this.minimapCameraActive, this.animClockMs, this.manualCameraUntilMs)) return;
+    const camera = this.cameras.main;
+    if (camera.panEffect.isRunning) return;
+    const canvasRect = this.game.canvas.getBoundingClientRect();
+    const viewport = { x: camera.width, y: camera.height };
+    const occluders = this.hud.gameplayOcclusions();
+    const insets = playerCameraOcclusionInsets(canvasRect, viewport, this.hud.gameplayEdgeOcclusions());
+    const occlusions = playerCameraOcclusionRects(canvasRect, viewport, occluders);
+    const worldHeight = playerCameraOccludedWorldHeight(this.level.height, insets.bottom, camera.zoom);
+    const current = { zoom: camera.zoom, scrollX: camera.worldView.x, scrollY: camera.worldView.y };
+    const frame = playerCameraAttentionFrame(
+      [{ x, y, state: 'faller', fuseMs: null }],
+      current,
+      { x: camera.width, y: camera.height },
+      { width: this.level.width, height: worldHeight },
+      insets,
+      occlusions,
+    );
+    if (Math.abs(frame.scrollX - current.scrollX) < 0.5 && Math.abs(frame.scrollY - current.scrollY) < 0.5) return;
+    this.setPlayerCameraBounds(worldHeight);
     const visibleWidth = camera.width / frame.zoom;
     const visibleHeight = camera.height / frame.zoom;
     camera.pan(
@@ -1253,6 +1341,9 @@ export class GameScene extends Phaser.Scene {
     this.titleScreen?.destroy();
     this.crewSpriteRenderer?.clear();
     this.crewSpriteRenderer = undefined;
+    this.terrainRenderer?.clear();
+    this.terrainRenderer = undefined;
+    this.motionPreference.stop();
     this.resumeOverlay.destroy();
     this.continueOverlay?.destroy();
   }
@@ -1284,16 +1375,29 @@ export class GameScene extends Phaser.Scene {
   private armHeroMove(): void {
     if (
       this.heroMovePhase !== 'idle' || this.heroMoveCharges <= 0 || this.planning || this.paused ||
-      this.sim.state.outcome !== 'running' || this.brush || this.crewPlacement || this.worldTool
+      this.sim.state.outcome !== 'running' || !this.heroMoveControl().canArm
     ) return;
     this.heroMovePhase = 'armed';
     this.canvasGesture = null;
   }
 
+  private heroMoveControl() {
+    const selectedSkill = this.sim.state.selectedSkill;
+    const hasAssignableSkill = this.hasOpenToolbox() || this.sim.state.skills[selectedSkill] > 0;
+    return heroMoveControlState(
+      this.heroMoveCharges,
+      hasAssignableSkill,
+      Boolean(this.brush || this.crewPlacement || this.worldTool || this.minimapCameraActive),
+    );
+  }
+
   private focusHeroMove(target: Lemming): void {
-    if (this.heroMovePhase !== 'armed' || target.state === 'dead' || target.state === 'exited') return;
+    if (
+      this.heroMovePhase !== 'armed' || this.minimapCameraActive ||
+      target.state === 'dead' || target.state === 'exited'
+    ) return;
     const camera = this.cameras.main;
-    this.heroReturnCamera = { zoom: camera.zoom, scrollX: camera.scrollX, scrollY: camera.scrollY };
+    this.heroReturnCamera = { zoom: camera.zoom, scrollX: camera.worldView.x, scrollY: camera.worldView.y };
     this.heroMoveTargetId = target.id;
     this.heroMovePhase = 'focused';
     this.paused = true;
@@ -1332,7 +1436,10 @@ export class GameScene extends Phaser.Scene {
     this.heroMoveBeatRemainingMs = 0;
     this.paused = false;
     this.simClock.reset();
-    if (frame) {
+    if (canRestoreHeroCamera(
+      frame !== null,
+      this.minimapCameraActive,
+    ) && frame) {
       const camera = this.cameras.main;
       const visibleWidth = camera.width / frame.zoom;
       const visibleHeight = camera.height / frame.zoom;
@@ -1349,7 +1456,11 @@ export class GameScene extends Phaser.Scene {
       worldX,
       worldY,
       radius,
-      (lemming, point) => this.levelIndex === 0 && canDrawSalvager(lemming) ? point.y - 3 : point.y + 4,
+      (lemming, point) => canDrawSalvager(lemming) ? point.y - 3 : point.y + 4,
+      (lemming, point, targetX, targetY, centerY) =>
+        canDrawSalvager(lemming)
+          ? salvagerTargetMetric(lemming, point, targetX, targetY, centerY)
+          : { distanceSq: (point.x - targetX) ** 2 + (centerY - targetY) ** 2, visualPriority: 0 },
     );
   }
 
@@ -1388,19 +1499,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawWorld(): void {
-    // Terrain cells only when the bitmap changed — traps/hatch/exit animate
-    // every frame on their own layer so we don't re-sweep thousands of cells.
-    if (this.level.terrain.isDirty()) {
-      this.fireLights = drawTerrainLayer(this.terrainGraphics, this.level.terrain, this.sim.state.timeMs).fireLights;
-      this.level.terrain.consumeDirty();
+    // Persistent chunks redraw only where material cells or animated surfaces
+    // changed; setpieces and actors remain on their independent frame layers.
+    if (this.terrainRenderer) {
+      this.fireLights = this.terrainRenderer.render(this.level.terrain, this.visualTime()).fireLights;
     }
     this.setpieceGraphics.clear();
     this.drawOnboardingMarkers();
-    drawCampaignSetpieces(this.setpieceGraphics, this.levelIndex, this.sim.state.timeMs);
+    drawCampaignSetpieces(this.setpieceGraphics, this.levelIndex, this.visualTime());
     if (this.level.playMode?.spawn !== 'tray-drop') {
       this.drawHatch();
       const torch = this.torchPosition();
-      drawIndustrialTorch(this.setpieceGraphics, torch.x, torch.y, this.sim.state.timeMs);
+      drawIndustrialTorch(this.setpieceGraphics, torch.x, torch.y, this.visualTime());
     }
     this.drawExit();
     this.drawHazards();
@@ -1490,7 +1600,7 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    drawWorldLights(this.lightGraphics, sources, this.sim.state.timeMs);
+    drawWorldLights(this.lightGraphics, sources, this.visualTime());
   }
 
   /** Tinted ring at the pointer while a terrain brush is armed. */
@@ -1534,6 +1644,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Subtle speed lines while fast-forwarding. */
   private drawFastForwardTint(): void {
+    if (this.reducedMotion) return;
     const cam = this.cameras.main;
     const g = this.fxGraphics;
     g.lineStyle(1, 0xffffff, 0.06 * this.speed);
@@ -1544,237 +1655,41 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawTraps(): void {
-    const g = this.setpieceGraphics;
-    const t = this.sim.state.timeMs;
-    for (const trap of this.sim.state.traps) {
-      const { x, y, width, height, kind, cycleMs } = { cycleMs: 1400, ...trap.def };
-      // 0 → just sprung, 1 → re-armed; idle traps sit at 1.
-      const cycle = trap.phase === 'killing' ? 1 - trap.timerMs / cycleMs : 1;
-      if (kind === 'crusher') {
-        // Frame posts + a spiked block that slams down early in the cycle.
-        g.fillStyle(0x2c333f, 1);
-        g.fillRect(x - 3, y - 6, 3, height + 6);
-        g.fillRect(x + width, y - 6, 3, height + 6);
-        const drop = trap.phase === 'killing' ? (cycle < 0.25 ? cycle / 0.25 : 1 - (cycle - 0.25) / 0.75) : Math.sin(t / 500) * 0.04;
-        const blockY = y - 6 + drop * (height - 8);
-        g.fillStyle(0x8a93a6, 1);
-        g.fillRect(x - 1, blockY, width + 2, 10);
-        g.fillStyle(0x59617a, 1);
-        for (let sx = x; sx < x + width; sx += 5) {
-          g.fillTriangle(sx, blockY + 10, sx + 4, blockY + 10, sx + 2, blockY + 14);
-        }
-      } else if (kind === 'zapper') {
-        // Two tesla posts; an arc flickers across while killing.
-        g.fillStyle(0x2c333f, 1);
-        g.fillRect(x - 2, y, 4, height);
-        g.fillRect(x + width - 2, y, 4, height);
-        g.fillStyle(0x8be9ff, 0.9);
-        g.fillCircle(x, y + 2, 2.5);
-        g.fillCircle(x + width, y + 2, 2.5);
-        if (trap.phase === 'killing' || Math.floor(t / 700) % 4 === 0) {
-          const alpha = trap.phase === 'killing' ? 0.95 : 0.25;
-          g.lineStyle(1.5, 0x8be9ff, alpha);
-          let px = x;
-          let py = y + 3;
-          const segs = 5;
-          for (let s = 1; s <= segs; s += 1) {
-            const nx = x + (width / segs) * s;
-            const ny = y + 3 + (s === segs ? 0 : Math.sin(t / 30 + s * 7) * 4);
-            g.lineBetween(px, py, nx, ny);
-            px = nx;
-            py = ny;
-          }
-        }
-      } else {
-        // Chomper: a jaw of teeth rising from the floor, snapping while killing.
-        const open = trap.phase === 'killing' ? Math.abs(Math.sin(cycle * Math.PI * 6)) : 0.25 + Math.sin(t / 600) * 0.08;
-        const gape = open * (height * 0.6);
-        g.fillStyle(0x3a2c3f, 1);
-        g.fillRect(x, y + height - 6, width, 6);
-        g.fillStyle(0xd8e0ef, 1);
-        for (let tx = x; tx < x + width - 2; tx += 6) {
-          // Bottom teeth up, top teeth down with the jaw gap between.
-          g.fillTriangle(tx, y + height - 5, tx + 5, y + height - 5, tx + 2.5, y + height - 12 - 2);
-          const topY = y + height - 16 - gape;
-          g.fillTriangle(tx, topY, tx + 5, topY, tx + 2.5, topY + 7);
-        }
-      }
-    }
+    drawTrapSetpieces(this.setpieceGraphics, this.sim.state.traps, this.visualTime());
   }
 
   private drawExit(): void {
-    const exit = this.level.exit;
-    const g = this.setpieceGraphics;
-    const t = this.sim.state.timeMs;
-    const powered = !this.planning;
-    const rescueCharge = Math.min(1, this.sim.state.saved / Math.max(1, this.level.targetSaved));
-    const pulse = powered ? 0.72 + Math.sin(t / 420) * 0.16 : 0.3;
-    const cx = exit.x + exit.width / 2;
-    const cy = exit.y + exit.height / 2;
-    const outerLeft = exit.x - 20;
-    const outerRight = exit.x + exit.width + 20;
-    const outerTop = exit.y - 26;
-    const outerBottom = exit.y + exit.height + 5;
-
-    // A large powered transit gate around a visibly open simulation exit zone.
-    g.fillStyle(WORLD_THEME.steelDark, 1);
-    g.fillRect(outerLeft - 4, exit.y - 12, 12, exit.height + 20);
-    g.fillRect(outerRight - 8, exit.y - 12, 12, exit.height + 20);
-    g.fillRect(outerLeft - 8, outerBottom - 5, outerRight - outerLeft + 16, 8);
-    g.fillStyle(WORLD_THEME.steel, 1);
-    g.fillRect(outerLeft - 1, exit.y - 9, 5, exit.height + 14);
-    g.fillRect(outerRight - 4, exit.y - 9, 5, exit.height + 14);
-    g.fillStyle(WORLD_THEME.steelLight, 0.9);
-    for (const rivetX of [outerLeft + 2, outerRight - 2]) {
-      g.fillCircle(rivetX, exit.y - 5, 1.5);
-      g.fillCircle(rivetX, exit.y + exit.height, 1.5);
-    }
-
-    g.lineStyle(4, WORLD_THEME.steel, 1);
-    g.lineBetween(outerLeft + 5, exit.y - 10, cx, outerTop);
-    g.lineBetween(cx, outerTop, outerRight - 5, exit.y - 10);
-    g.lineStyle(2, powered ? WORLD_THEME.mint : WORLD_THEME.steelLight, pulse);
-    g.lineBetween(outerLeft + 10, exit.y - 5, cx, outerTop + 9);
-    g.lineBetween(cx, outerTop + 9, outerRight - 10, exit.y - 5);
-
-    // The exact save volume remains open; only its edges and floor draw light.
-    g.lineStyle(2, WORLD_THEME.mint, pulse);
-    g.strokeRect(exit.x, exit.y, exit.width, exit.height);
-    g.fillStyle(WORLD_THEME.mint, powered ? 0.22 + rescueCharge * 0.18 : 0.12);
-    g.fillRect(exit.x + 2, exit.y + exit.height - 4, exit.width - 4, 3);
-    const beaconY = outerTop + 9;
-    const core = 4 + rescueCharge * 2 + (powered ? Math.sin(t / 300) * 0.6 : 0);
-    g.fillStyle(powered ? 0xeaffff : WORLD_THEME.steelLight, powered ? 0.88 : 0.38);
-    g.fillTriangle(cx, beaconY - core, cx + core, beaconY, cx, beaconY + core);
-    g.fillTriangle(cx, beaconY - core, cx - core, beaconY, cx, beaconY + core);
-    // Inward approach chevrons communicate enterability without fake collision.
-    g.lineStyle(2, WORLD_THEME.mint, 0.55 + pulse * 0.3);
-    for (let offset = 0; offset < 3; offset += 1) {
-      const x = exit.x - 14 + offset * 7;
-      const y = cy + 12;
-      g.lineBetween(x, y - 4, x + 5, y);
-      g.lineBetween(x + 5, y, x, y + 4);
-    }
+    drawExitSetpiece(this.setpieceGraphics, {
+      exit: this.level.exit,
+      powered: !this.planning,
+      saved: this.sim.state.saved,
+      targetSaved: this.level.targetSaved,
+      timeMs: this.visualTime(),
+    });
   }
 
   private drawHatch(): void {
-    const hatchX = this.level.spawn.x - 33;
-    const hatchY = this.level.spawn.y - 42;
-    const state = this.sim.state;
-    const g = this.setpieceGraphics;
-    // 0 → shut, 1 → fully open.
-    const open = state.hatchTotalMs > 0 ? 1 - state.hatchOpenMs / state.hatchTotalMs : 1;
-
-    const gantryLeft = this.level.spawn.x - 48;
-    const gantryRight = this.level.spawn.x + 48;
-    const gantryTop = hatchY - 27;
-
-    // Suspended cargo gantry: a world landmark around the unchanged spawn.
-    g.fillStyle(WORLD_THEME.steelDark, 1);
-    g.fillRect(gantryLeft, gantryTop, gantryRight - gantryLeft, 10);
-    g.fillRect(gantryLeft + 3, gantryTop + 8, 7, 55);
-    g.fillRect(gantryRight - 10, gantryTop + 8, 7, 55);
-    g.fillStyle(WORLD_THEME.steel, 1);
-    g.fillRect(gantryLeft + 3, gantryTop + 2, gantryRight - gantryLeft - 6, 3);
-    g.lineStyle(2, WORLD_THEME.steelLight, 0.42);
-    g.lineBetween(gantryLeft + 10, gantryTop + 10, gantryLeft + 33, gantryTop + 34);
-    g.lineBetween(gantryRight - 10, gantryTop + 10, gantryRight - 33, gantryTop + 34);
-    g.lineBetween(this.level.spawn.x, gantryTop + 8, this.level.spawn.x, hatchY - 3);
-    g.fillStyle(0xffb43a, 0.95);
-    g.fillRect(this.level.spawn.x - 5, gantryTop + 3, 10, 5);
-    g.fillStyle(open < 1 ? 0xff5b3a : WORLD_THEME.mint, 0.95);
-    g.fillRect(gantryRight - 17, gantryTop + 3, 4, 4);
-
-    // Soft warm glow under the hatch while closed / opening.
-    if (open < 1) {
-      g.fillStyle(0xffd96b, 0.09 + open * 0.1);
-      g.fillCircle(this.level.spawn.x, hatchY + 24, 38);
-    }
-
-    g.fillStyle(WORLD_THEME.steelDark, 1);
-    g.fillRoundedRect(hatchX - 4, hatchY - 4, 74, 46, 5);
-    g.fillStyle(WORLD_THEME.ink, 0.98);
-    g.fillRoundedRect(hatchX, hatchY, 66, 38, 4);
-    g.lineStyle(3, WORLD_THEME.sandLight, 1);
-    g.strokeRoundedRect(hatchX, hatchY, 66, 38, 4);
-    // Two striped shutters retract fully to reveal the dark aperture.
-    const shutterWidth = 33 * (1 - open);
-    if (shutterWidth > 0.5) {
-      g.fillStyle(WORLD_THEME.steelDark, 1);
-      g.fillRect(hatchX + 2, hatchY + 2, Math.max(0, shutterWidth - 2), 34);
-      g.fillRect(hatchX + 66 - shutterWidth, hatchY + 2, Math.max(0, shutterWidth - 2), 34);
-      g.lineStyle(3, WORLD_THEME.sand, 0.85);
-      for (let x = hatchX + 8; x < hatchX + 62; x += 11) {
-        if (x < hatchX + shutterWidth || x > hatchX + 66 - shutterWidth) {
-          g.lineBetween(x, hatchY + 5, x - 10, hatchY + 31);
-        }
-      }
-    }
-    g.fillStyle(0xffd96b, 0.92);
-    g.fillRect(hatchX + 6, hatchY + 5, 5, 4);
-    g.fillRect(hatchX + 55, hatchY + 5, 5, 4);
-
-    if (open >= 1) {
-      // Pulsing drop arrow inside the revealed opening, behind the crew.
-      const bob = Math.sin(state.timeMs / 280) * 2;
-      g.fillStyle(0xffd96b, 0.95);
-      g.fillTriangle(
-        this.level.spawn.x - 7,
-        hatchY + 12 + bob,
-        this.level.spawn.x + 7,
-        hatchY + 12 + bob,
-        this.level.spawn.x,
-        hatchY + 25 + bob,
-      );
-    }
+    drawHatchSetpiece(this.setpieceGraphics, {
+      spawn: this.level.spawn,
+      planning: this.planning,
+      hatchOpenMs: this.sim.state.hatchOpenMs,
+      hatchTotalMs: this.sim.state.hatchTotalMs,
+      timeMs: this.visualTime(),
+    });
   }
 
   private drawHazards(): void {
-    const hazards = this.level.hazards ?? [];
-    const g = this.setpieceGraphics;
-    for (const hazard of hazards) {
-      const isLava = hazard.kind === 'lava';
-      const surface = isLava ? 0xff5b3a : 0x4ab6ff;
-      const deep = isLava ? 0x6e1410 : 0x123a63;
-      // Dark basin.
-      g.fillStyle(0x0a0d12, 0.85);
-      g.fillRect(hazard.x, hazard.y, hazard.width, hazard.height);
-      // Molten/liquid body.
-      g.fillStyle(deep, 0.9);
-      g.fillRect(hazard.x, hazard.y + 6, hazard.width, hazard.height - 6);
-      // Animated-looking surface ripples (offset by a slow time wave).
-      const t = this.sim.state.timeMs / 240;
-      g.fillStyle(surface, isLava ? 0.95 : 0.7);
-      const step = 12;
-      for (let x = hazard.x; x < hazard.x + hazard.width; x += step) {
-        const wave = Math.sin((x + t) * 0.18) * 2;
-        g.fillRect(x, hazard.y + 4 + wave, step - 2, 4);
-      }
-      // Occasional spark / bubble highlights.
-      if (Math.floor(this.sim.state.timeMs / 180) % 3 === 0) {
-        g.fillStyle(0xffffff, isLava ? 0.35 : 0.25);
-        const hx = hazard.x + ((Math.floor(this.sim.state.timeMs / 90) * 17) % Math.max(1, hazard.width - 4));
-        g.fillRect(hx, hazard.y + 6, 2, 2);
-      }
-    }
+    drawHazardSetpieces(this.setpieceGraphics, this.level.hazards ?? [], this.visualTime());
   }
 
   private drawEmitters(): void {
-    const g = this.setpieceGraphics;
-    for (const emitter of this.sim.state.emitters) {
-      const { x, y, material } = emitter.def;
-      const color = material === 'sand' ? 0xd4a84a : 0x3a9fd8;
-      // Nozzle housing with a material-tinted lip.
-      g.fillStyle(0x2c333f, 1);
-      g.fillRect(x - 7, y - 12, 14, 8);
-      g.fillStyle(color, 0.9);
-      g.fillRect(x - 4, y - 5, 8, 3);
-      // Falling drip while the emitter still has budget.
-      if (emitter.budgetLeft > 0 && this.sim.state.outcome === 'running') {
-        g.fillStyle(color, 0.8);
-        g.fillRect(x - 1.5, y - 2 + ((this.sim.state.timeMs / 30) % 10), 3, 4);
-      }
-    }
+    drawEmitterSetpieces(
+      this.setpieceGraphics,
+      this.sim.state.emitters,
+      this.visualTime(),
+      !this.planning && !this.paused && this.sim.state.outcome === 'running',
+      (emitter) => this.level.terrain.materialAt(emitter.def.x, emitter.def.y) === MATERIAL.empty,
+    );
   }
 
   private drawEntityLabels(): void {
@@ -1822,6 +1737,7 @@ export class GameScene extends Phaser.Scene {
     this.crewSpriteRenderer?.beginFrame();
     const frame = this.animFrame();
     const visibleLabels = new Set<number>();
+    const cachedCrew: Array<{ lemming: Lemming; point: LemmingDisplayPoint; selected: boolean }> = [];
     const cueTargetId = IS_PLAYER_EXPERIENCE && this.levelIndex === 0 && this.sim.state.skills.basher > 0
       ? this.sim.state.lemmings
           .filter((lemming) => lemming.state === 'walker')
@@ -1834,17 +1750,8 @@ export class GameScene extends Phaser.Scene {
       const cachedSprite = this.crewSpriteRenderer?.draw(lemming, frame, point) ?? false;
       if (!cachedSprite) {
         drawLemming(this.actorGraphics, lemming, frame, selected, point);
-      } else if (selected) {
-        const pulse = 14 + Math.sin(frame * 0.6) * 1.5;
-        this.actorGraphics.lineStyle(2, 0xffffff, 0.9);
-        this.actorGraphics.strokeCircle(point.x, point.y + 6, pulse);
-        this.actorGraphics.lineStyle(1, 0x6ae1ff, 0.45);
-        this.actorGraphics.strokeCircle(point.x, point.y + 6, pulse + 3);
-      }
-      if (lemming.id === cueTargetId) {
-        const pulse = 13 + Math.sin(this.animClockMs / 150) * 2;
-        this.actorGraphics.lineStyle(2, 0xffd96b, 0.9);
-        this.actorGraphics.strokeCircle(point.x, point.y + 3, pulse);
+      } else {
+        cachedCrew.push({ lemming, point, selected });
       }
 
       if (!this.uiSettings.debugLabels) continue;
@@ -1873,6 +1780,32 @@ export class GameScene extends Phaser.Scene {
       label.setColor(colorToCss(color));
       this.actorGraphics.lineStyle(1, color, 0.35);
       this.actorGraphics.lineBetween(point.x, point.y - 10, point.x, labelY + 1);
+    }
+
+    // All uniforms are painted before any tool/trait geometry. This makes the
+    // gear layer visible and gives hit-testing one deterministic front order.
+    for (const { lemming, point } of cachedCrew) {
+      this.crewSpriteRenderer?.drawBaseOverlays(this.actorGraphics, lemming, point);
+    }
+    for (const { lemming, point } of cachedCrew) {
+      this.crewSpriteRenderer?.drawGearOverlays(this.actorGraphics, lemming, frame, point);
+    }
+    for (const { point, selected } of cachedCrew) {
+      if (!selected) continue;
+      const pulse = 14 + Math.sin(frame * 0.6) * 1.5;
+      this.actorGraphics.lineStyle(2, 0xffffff, 0.9);
+      this.actorGraphics.strokeCircle(point.x, point.y + 6, pulse);
+      this.actorGraphics.lineStyle(1, 0x6ae1ff, 0.45);
+      this.actorGraphics.strokeCircle(point.x, point.y + 6, pulse + 3);
+    }
+    if (cueTargetId !== null) {
+      const cueTarget = this.sim.state.lemmings.find(({ id }) => id === cueTargetId);
+      if (cueTarget) {
+        const point = this.lemmingDisplayPoints.get(cueTarget.id) ?? cueTarget;
+        const pulse = 13 + Math.sin(this.animClockMs / 150) * 2;
+        this.actorGraphics.lineStyle(2, 0xffd96b, 0.9);
+        this.actorGraphics.strokeCircle(point.x, point.y + 3, pulse);
+      }
     }
 
     for (const [id, label] of this.lemmingLabels) {

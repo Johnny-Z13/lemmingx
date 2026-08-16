@@ -8,6 +8,8 @@ import {
 } from './runtimeMode';
 import { DEVICE_PROFILE, IS_MOBILE_DEVICE } from './deviceProfile';
 import { installMobileFullscreen } from './lifecycle/MobileFullscreen';
+import { PortraitModalGate } from './lifecycle/PortraitModalGate';
+import { TOUCH_PORTRAIT_QUERY } from './lifecycle/TouchOrientationGate';
 import './styles.css';
 
 document.title = IS_PLAYER_EXPERIENCE ? 'LemmingX' : `LemmingX · ${__BUILD_TAG__}`;
@@ -18,10 +20,17 @@ document.body.classList.toggle('is-desktop-device', DEVICE_PROFILE === 'desktop'
 if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) {
   const rotateNotice = document.createElement('div');
   rotateNotice.className = 'rotate-notice';
-  rotateNotice.setAttribute('role', 'status');
+  rotateNotice.tabIndex = -1;
+  rotateNotice.setAttribute('aria-hidden', 'true');
+  rotateNotice.setAttribute('aria-labelledby', 'lemmingx-rotate-heading');
+  rotateNotice.setAttribute('aria-describedby', 'lemmingx-rotate-detail');
   rotateNotice.setAttribute('aria-live', 'polite');
-  rotateNotice.innerHTML = '<strong>Rotate to play</strong><span>LemmingX is designed for landscape.</span>';
+  rotateNotice.innerHTML = '<strong id="lemmingx-rotate-heading">Rotate to play</strong><span id="lemmingx-rotate-detail">LemmingX is designed for landscape.</span>';
   document.body.append(rotateNotice);
+  const portraitModalGate = new PortraitModalGate(rotateNotice, window.matchMedia(TOUCH_PORTRAIT_QUERY));
+  portraitModalGate.start();
+  window.addEventListener('pagehide', () => portraitModalGate.stop());
+  window.addEventListener('pageshow', () => portraitModalGate.start());
   installMobileFullscreen();
 }
 

@@ -6,7 +6,7 @@ import type { AudioSettings } from '../audio/settings';
 import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIdentity';
 import { createElement as createLucideIcon, DoorOpen, Hand, Maximize2, Minus, Warehouse, type IconNode } from 'lucide';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
-import { canUseSalvagerHudIcon } from '../render/CrewSpriteRenderer';
+import { CREW_SALVAGER_TEXTURE_PATH, salvagerHudFrame } from '../render/CrewSpriteRenderer';
 
 /** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
 export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'fire' | 'erase' | 'bomb';
@@ -99,6 +99,8 @@ export interface HudView {
   heroMove: {
     phase: 'idle' | 'armed' | 'focused' | 'resolving';
     charges: number;
+    visible: boolean;
+    canArm: boolean;
     skillLabel: string;
     crewLabel: string | null;
   };
@@ -112,7 +114,7 @@ const MINIMAP_TERRAIN_MS = 100;
 // Resolve before assigning to a CSS custom property: relative url() values
 // otherwise inherit the built stylesheet's /assets/ directory as their base.
 const CREW_SALVAGER_HUD_URL = new URL(
-  `${import.meta.env.BASE_URL}assets/crew-salvager.png`,
+  `${import.meta.env.BASE_URL}${CREW_SALVAGER_TEXTURE_PATH}`,
   document.baseURI,
 ).href;
 
@@ -129,19 +131,24 @@ const WORLD_TOOLS: Record<WorldEntityKind, { label: string; icon: IconNode; colo
   exit: { label: 'Exit', icon: DoorOpen, color: '#78ffd6' },
 };
 
-function crewIconMarkup(palette: CrewPalette | null, skill?: Skill, salvageSlice = false): string {
-  const useSalvager = skill ? canUseSalvagerHudIcon(skill, salvageSlice) : false;
+function crewIconMarkup(palette: CrewPalette | null, skill?: Skill): string {
+  const useSalvager = skill !== undefined;
   const className = palette
-    ? `hud__crew-icon${useSalvager ? ' is-salvager-slice' : ''}`
+    ? `hud__crew-icon${useSalvager ? ' is-salvager-family' : ''}`
     : 'hud__crew-icon is-random';
   let style = palette
     ? ` style="--crew-hair:${colorToCss(palette.hair)};--crew-body:${colorToCss(palette.body)};` +
       `--crew-shade:${colorToCss(palette.bodyShade)};--crew-trim:${colorToCss(palette.trim)}"`
     : '';
   if (useSalvager) {
+    const atlasFrame = salvagerHudFrame(skill);
+    const column = atlasFrame % 8;
+    const row = Math.floor(atlasFrame / 8);
     style = style
-      ? style.slice(0, -1) + `;--crew-atlas:url('${CREW_SALVAGER_HUD_URL}')"`
-      : ` style="--crew-atlas:url('${CREW_SALVAGER_HUD_URL}')"`;
+      ? style.slice(0, -1) + `;--crew-atlas:url('${CREW_SALVAGER_HUD_URL}');` +
+        `--crew-atlas-x:${-column * 28}px;--crew-atlas-y:${-row * 28}px"`
+      : ` style="--crew-atlas:url('${CREW_SALVAGER_HUD_URL}');` +
+        `--crew-atlas-x:${-column * 28}px;--crew-atlas-y:${-row * 28}px"`;
   }
   const skillData = skill ? ` data-skill="${skill}"` : '';
   return `<span class="${className}"${style}${skillData} aria-hidden="true">` +
@@ -210,6 +217,7 @@ export class Hud {
   private debugLabels: boolean;
   private readonly overlay: HTMLDivElement;
   private readonly minimap: HTMLCanvasElement;
+  private minimapPointerId: number | null = null;
   /** Offscreen terrain layer so the cell sweep runs at ~10 Hz, not 60. */
   private readonly minimapTerrain = document.createElement('canvas');
   private minimapTerrainAt = 0;
@@ -236,7 +244,6 @@ export class Hud {
       playerBuild?: boolean;
       availableSkills?: readonly Skill[];
       availableTerrainTools?: readonly TerrainBrush[];
-      useSalvagerSlice?: boolean;
     },
   ) {
     this.events = events;
@@ -326,7 +333,7 @@ export class Hud {
       button.dataset.dragSource = String(this.spawnMode === 'tray-drop');
       button.innerHTML =
         `<span class="hud__hotkey">${item.hotkey}</span>` +
-        crewIconMarkup(item.palette, item.skill, opts?.useSalvagerSlice) +
+        crewIconMarkup(item.palette, item.skill) +
         `<span class="hud__tool-name">${item.label}</span>` +
         `<span class="hud__stock">0</span>`;
       button.addEventListener('click', (e) => {
@@ -499,21 +506,25 @@ export class Hud {
     this.minimap.className = 'hud__minimap';
     this.minimap.hidden = true;
     this.minimap.addEventListener('pointerdown', (e) => {
+      if (this.minimapPointerId !== null) return;
       e.preventDefault();
+      this.minimapPointerId = e.pointerId;
       this.minimap.setPointerCapture(e.pointerId);
       this.events.onMinimapControlStart?.();
       this.minimapJump(e);
     });
     this.minimap.addEventListener('pointermove', (e) => {
-      if (this.minimap.hasPointerCapture(e.pointerId)) this.minimapJump(e);
+      if (this.minimapPointerId === e.pointerId && this.minimap.hasPointerCapture(e.pointerId)) this.minimapJump(e);
     });
     const endMinimapControl = (e: PointerEvent) => {
-      if (!this.minimap.hasPointerCapture(e.pointerId)) return;
-      this.minimap.releasePointerCapture(e.pointerId);
+      if (this.minimapPointerId !== e.pointerId) return;
+      this.minimapPointerId = null;
+      if (this.minimap.hasPointerCapture(e.pointerId)) this.minimap.releasePointerCapture(e.pointerId);
       this.events.onMinimapControlEnd?.();
     };
     this.minimap.addEventListener('pointerup', endMinimapControl);
     this.minimap.addEventListener('pointercancel', endMinimapControl);
+    this.minimap.addEventListener('lostpointercapture', endMinimapControl);
     this.root.append(this.minimap);
 
     // --- Win/lose overlay (hidden until outcome resolves) ---
@@ -560,9 +571,24 @@ export class Hud {
     return cluster;
   }
 
-  /** Persistent edge chrome the camera must keep live crew clear of. */
-  gameplayOcclusions(): DOMRect[] {
+  /** Full-width edge chrome reserved from ordinary route framing. */
+  gameplayEdgeOcclusions(): DOMRect[] {
     return [this.statusBar, this.dock]
+      .filter((element) => !element.hidden && element.getClientRects().length > 0)
+      .map((element) => element.getBoundingClientRect());
+  }
+
+  /** Every visible canvas overlay that event attention must avoid by shape. */
+  gameplayOcclusions(): DOMRect[] {
+    return [
+      this.statusBar,
+      this.mission,
+      this.actionCue,
+      this.heroPanel,
+      this.dock,
+      this.queueBar,
+      this.minimap,
+    ]
       .filter((element) => !element.hidden && element.getClientRects().length > 0)
       .map((element) => element.getBoundingClientRect());
   }
@@ -837,8 +863,8 @@ export class Hud {
 
     const running = state.outcome === 'running';
     const hero = view.heroMove;
-    this.heroButton.hidden = this.freePlay || hero.charges === 0 && hero.phase === 'idle';
-    this.heroButton.disabled = !running || view.planning || view.paused || hero.charges <= 0 || hero.phase !== 'idle';
+    this.heroButton.hidden = this.freePlay || !hero.visible && hero.phase === 'idle';
+    this.heroButton.disabled = !running || view.planning || view.paused || !hero.canArm || hero.phase !== 'idle';
     this.heroButton.textContent = `★ ${hero.charges}`;
     this.heroButton.classList.toggle('is-active', hero.phase !== 'idle');
     this.heroPanel.hidden = hero.phase === 'idle';

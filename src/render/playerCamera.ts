@@ -25,6 +25,18 @@ export function canScriptPlayerCameraFocus(
   return !minimapActive && nowMs >= blockedUntilMs;
 }
 
+/**
+ * A Hero beat's saved frame is its ownership token: every user camera path
+ * invalidates it after focus. Grace from before the explicit Hero action must
+ * not strand the camera at the cinematic zoom.
+ */
+export function canRestoreHeroCamera(
+  hasReturnFrame: boolean,
+  minimapActive: boolean,
+): boolean {
+  return hasReturnFrame && !minimapActive;
+}
+
 export interface PlayerCameraFrameOptions {
   /** Fit the authored 960x540 room exactly and disable camera travel. */
   locked?: boolean;
@@ -40,6 +52,11 @@ interface CameraWorldBounds {
   height: number;
 }
 
+export interface PlayerCameraBounds extends CameraWorldBounds {
+  x: number;
+  y: number;
+}
+
 export interface PlayerCameraSafeInsets {
   top: number;
   right: number;
@@ -52,6 +69,50 @@ interface ClientRectLike {
   right: number;
   bottom: number;
   left: number;
+}
+
+export type PlayerCameraOcclusionRect = ClientRectLike;
+
+/** Clip DOM chrome to the canvas and convert it into Phaser viewport pixels. */
+export function playerCameraOcclusionRects(
+  canvas: ClientRectLike,
+  viewport: Point,
+  occluders: readonly ClientRectLike[],
+): PlayerCameraOcclusionRect[] {
+  const canvasWidth = Math.max(1, canvas.right - canvas.left);
+  const canvasHeight = Math.max(1, canvas.bottom - canvas.top);
+  return occluders.flatMap((rect) => {
+    const left = Math.max(canvas.left, rect.left);
+    const right = Math.min(canvas.right, rect.right);
+    const top = Math.max(canvas.top, rect.top);
+    const bottom = Math.min(canvas.bottom, rect.bottom);
+    if (right <= left || bottom <= top) return [];
+    return [{
+      left: (left - canvas.left) * viewport.x / canvasWidth,
+      right: (right - canvas.left) * viewport.x / canvasWidth,
+      top: (top - canvas.top) * viewport.y / canvasHeight,
+      bottom: (bottom - canvas.top) * viewport.y / canvasHeight,
+    }];
+  });
+}
+
+/**
+ * Phaser clamps raw scroll around the unzoomed viewport centre. Pad its bounds
+ * by the zoom crop so the visible world rectangle can still reach every edge.
+ */
+export function playerCameraPaddedBounds(
+  world: CameraWorldBounds,
+  viewport: CameraWorldBounds,
+  visible: CameraWorldBounds,
+): PlayerCameraBounds {
+  const x = Math.min(0, visible.width - viewport.width);
+  const y = Math.min(0, visible.height - viewport.height);
+  return {
+    x,
+    y,
+    width: world.width - x,
+    height: world.height - y,
+  };
 }
 
 /** Convert persistent DOM chrome at the canvas edges into Phaser camera pixels. */
@@ -97,6 +158,24 @@ export function playerCameraBottomSafeScroll(
 ): number {
   const safeHeight = Math.max(1, viewportHeight - Math.max(0, bottomInset));
   return Math.max(0, worldHeight - safeHeight / Math.max(zoom, 0.001));
+}
+
+/** Keep a one-screen room locked at 1x/X=0 while lifting its route above the fixed dock. */
+export function playerCameraLockedHudSafeFrame(
+  worldHeight: number,
+  viewportHeight: number,
+  bottomInset: number,
+): PlayerCameraFrame {
+  return {
+    zoom: PLAYER_LOCKED_CAMERA_ZOOM,
+    scrollX: 0,
+    scrollY: playerCameraBottomSafeScroll(
+      worldHeight,
+      viewportHeight,
+      bottomInset,
+      PLAYER_LOCKED_CAMERA_ZOOM,
+    ),
+  };
 }
 
 /** Absolute minimap framing that keeps the chosen X and respects HUD space. */
@@ -189,6 +268,7 @@ export function playerCameraAttentionFrame(
   viewport: Point,
   world: CameraWorldBounds,
   insets: PlayerCameraSafeInsets,
+  occlusions: readonly PlayerCameraOcclusionRect[] = [],
 ): PlayerCameraFrame {
   const living = lemmings.filter(({ state }) => state !== 'dead' && state !== 'exited');
   if (living.length === 0) return current;
@@ -203,25 +283,57 @@ export function playerCameraAttentionFrame(
     x: (x - current.scrollX) * current.zoom,
     y: (y - current.scrollY) * current.zoom,
   }));
-  const minX = Math.min(...screen.map(({ x }) => x));
-  const maxX = Math.max(...screen.map(({ x }) => x));
-  const minY = Math.min(...screen.map(({ y }) => y));
-  const maxY = Math.max(...screen.map(({ y }) => y));
+  let minX = Math.min(...screen.map(({ x }) => x));
+  let maxX = Math.max(...screen.map(({ x }) => x));
+  let minY = Math.min(...screen.map(({ y }) => y));
+  let maxY = Math.max(...screen.map(({ y }) => y));
   const correction = (min: number, max: number, safeMin: number, safeMax: number) => {
     if (max - min > safeMax - safeMin) return (min + max - safeMin - safeMax) / 2;
     if (min < safeMin) return min - safeMin;
     if (max > safeMax) return max - safeMax;
     return 0;
   };
+  let correctionX = correction(minX, maxX, safeLeft, safeRight);
+  let correctionY = correction(minY, maxY, safeTop, safeBottom);
+  minX -= correctionX;
+  maxX -= correctionX;
+  minY -= correctionY;
+  maxY -= correctionY;
+  for (const rect of occlusions) {
+    const padded = { left: minX - pad, right: maxX + pad, top: minY - pad, bottom: maxY + pad };
+    if (padded.right <= rect.left || padded.left >= rect.right || padded.bottom <= rect.top || padded.top >= rect.bottom) continue;
+    const candidates = [
+      { dx: rect.left - padded.right, dy: 0 },
+      { dx: rect.right - padded.left, dy: 0 },
+      { dx: 0, dy: rect.top - padded.bottom },
+      { dx: 0, dy: rect.bottom - padded.top },
+    ].filter(({ dx, dy }) => (
+      padded.left + dx >= safeLeft - pad && padded.right + dx <= safeRight + pad
+      && padded.top + dy >= safeTop - pad && padded.bottom + dy <= safeBottom + pad
+    ));
+    const move = candidates.sort((a, b) => Math.hypot(a.dx, a.dy) - Math.hypot(b.dx, b.dy))[0];
+    if (!move) continue;
+    minX += move.dx;
+    maxX += move.dx;
+    minY += move.dy;
+    maxY += move.dy;
+    correctionX -= move.dx;
+    correctionY -= move.dy;
+  }
   const visibleWidth = viewport.x / current.zoom;
   const visibleHeight = viewport.y / current.zoom;
-  const targetCenterX = current.scrollX + visibleWidth / 2 + correction(minX, maxX, safeLeft, safeRight) / current.zoom;
-  const targetCenterY = current.scrollY + visibleHeight / 2 + correction(minY, maxY, safeTop, safeBottom) / current.zoom;
+  const targetCenterX = current.scrollX + visibleWidth / 2 + correctionX / current.zoom;
+  const targetCenterY = current.scrollY + visibleHeight / 2 + correctionY / current.zoom;
   return {
     ...current,
     scrollX: clampScroll(targetCenterX, world.width, visibleWidth),
     scrollY: clampPlayerVerticalScroll(targetCenterY, world.height, visibleHeight, viewport.y),
   };
+}
+
+/** Touch release positions are not hover and must never drive edge scrolling. */
+export function canEdgeHoverScroll(pointerSeen: boolean, pointerWasTouch: boolean): boolean {
+  return pointerSeen && !pointerWasTouch;
 }
 
 function clampZoom(zoom: number): number {

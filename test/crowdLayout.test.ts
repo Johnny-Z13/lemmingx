@@ -29,10 +29,10 @@ describe('crowd display layout', () => {
     const points = layoutLemmingCrowds(lemmings, 0, SALVAGER_CROWD_SPACING);
     const xs = lemmings.map((lemming) => points.get(lemming.id)?.x ?? 0).sort((a, b) => a - b);
 
-    expect(xs[1] - xs[0]).toBeGreaterThanOrEqual(12.5);
-    expect(xs[2] - xs[1]).toBeGreaterThanOrEqual(12.5);
+    expect(xs[1] - xs[0]).toBeGreaterThanOrEqual(15.5);
+    expect(xs[2] - xs[1]).toBeGreaterThanOrEqual(15.5);
     expect((xs[0] + xs[1] + xs[2]) / 3).toBeCloseTo(100);
-    expect(SALVAGER_CROWD_SPACING).toBe(13);
+    expect(SALVAGER_CROWD_SPACING).toBe(16);
     expect(lemmings.map((lemming) => lemming.x)).toEqual([100, 100, 100]);
   });
 
@@ -63,8 +63,8 @@ describe('crowd display layout', () => {
     const xs = lemmings.map(({ id }) => points.get(id)?.x ?? 0);
     const ys = lemmings.map(({ id }) => points.get(id)?.y ?? 0);
 
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(116);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(119);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(143);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(145);
     expect(Math.max(...ys) - Math.min(...ys)).toBeLessThanOrEqual(1.5);
     expect(xs.reduce((sum, value) => sum + value, 0) / xs.length).toBeCloseTo(100);
     expect(ys.reduce((sum, value) => sum + value, 0) / ys.length).toBeCloseTo(100);
@@ -86,12 +86,12 @@ describe('crowd display layout', () => {
     const points = layoutLemmingCrowds(walking, 400, SALVAGER_CROWD_SPACING);
     const xs = walking.map(({ id }) => points.get(id)?.x ?? 0).sort((a, b) => a - b);
 
-    expect(xs[1] - xs[0]).toBeGreaterThan(12.5);
-    expect(xs[2] - xs[1]).toBeGreaterThan(12.5);
+    expect(xs[1] - xs[0]).toBeGreaterThan(15.5);
+    expect(xs[2] - xs[1]).toBeGreaterThan(15.5);
     expect(xs.reduce((sum, x) => sum + x, 0) / xs.length).toBeCloseTo(106);
   });
 
-  it('retains the compact procedural fan outside the Level-1 slice', () => {
+  it('retains the compact procedural fan when a caller explicitly requests it', () => {
     const lemmings = [makeLemming(1, 100), makeLemming(2, 100), makeLemming(3, 100)];
     const points = layoutLemmingCrowds(lemmings, 0);
     const xs = lemmings.map(({ id }) => points.get(id)?.x ?? 0).sort((a, b) => a - b);

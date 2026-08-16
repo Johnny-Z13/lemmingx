@@ -293,6 +293,10 @@ body {
   display: none;
 }
 
+.is-portrait-modal > :not(.rotate-notice) {
+  visibility: hidden;
+}
+
 .dev-sandbox-toggle {
   position: fixed;
   top: max(8px, env(safe-area-inset-top));
@@ -431,6 +435,7 @@ input:focus-visible {
 /* ---- Pre-release mission briefing ---- */
 .hud__mission {
   position: absolute;
+  z-index: 2;
   top: 64px;
   left: 14px;
   display: grid;
@@ -738,10 +743,10 @@ input:focus-visible {
 }
 
 .hud__crew-icon {
-  --crew-hair: #5ef2a1;
-  --crew-body: #3f62d9;
-  --crew-shade: #2846a5;
-  --crew-trim: #a7ffd0;
+  --crew-hair: #ffc24a;
+  --crew-body: #243a56;
+  --crew-shade: #14243a;
+  --crew-trim: #7ff2ff;
   position: relative;
   display: block;
   width: 24px;
@@ -845,7 +850,7 @@ input:focus-visible {
   box-shadow: 8px 0 0 #3b4654;
 }
 
-.hud__crew-icon[data-skill='basher']:not(.is-salvager-slice)::after {
+.hud__crew-icon[data-skill='basher']:not(.is-salvager-family)::after {
   position: absolute;
   z-index: 2;
   top: 14px;
@@ -857,20 +862,61 @@ input:focus-visible {
   content: '';
 }
 
-.hud__crew-icon.is-salvager-slice {
+.hud__crew-icon.is-salvager-family {
   width: 28px;
-  height: 22px;
+  height: 28px;
   flex-basis: 28px;
   background-image: var(--crew-atlas);
   background-repeat: no-repeat;
-  background-position: -128px -9px;
-  background-size: 256px 32px;
+  background-position: var(--crew-atlas-x) var(--crew-atlas-y);
+  background-size: 224px 196px;
+  box-shadow:
+    inset 0 0 0 2px var(--crew-hair),
+    inset 0 -5px 0 var(--crew-body);
   image-rendering: pixelated;
 }
 
-.hud__crew-icon.is-salvager-slice > span,
-.hud__crew-icon.is-salvager-slice::after {
+.hud__crew-icon.is-salvager-family > span {
   display: none;
+}
+
+.hud__crew-icon.is-salvager-family::before {
+  position: absolute;
+  z-index: 1;
+  right: 6px;
+  bottom: 2px;
+  left: 6px;
+  height: 3px;
+  background: var(--crew-trim);
+  box-shadow: 0 -2px 0 var(--crew-shade);
+  content: '';
+}
+
+.hud__crew-icon.is-salvager-family[data-skill='bomber']::after {
+  z-index: 2;
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #fff3a3;
+  border-radius: 50%;
+  background: #e34b35;
+  box-shadow: 2px -2px 0 -1px #ff7a3a;
+  content: '';
+}
+
+.hud__crew-icon.is-salvager-family[data-skill='floater']::after {
+  z-index: 2;
+  position: absolute;
+  top: 0;
+  left: 5px;
+  width: 18px;
+  height: 7px;
+  border: 2px solid #ff7aa8;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  content: '';
 }
 
 .hud__tool.is-active {
@@ -995,7 +1041,8 @@ input:focus-visible {
 }
 .hud__hero-panel span { font-size: 0.76rem; }
 .hud__hero-panel button {
-  min-height: 42px;
+  min-width: 48px;
+  min-height: 48px;
   padding: 0 12px;
 }
 .hud__hero-panel .hud__hero-clock {
@@ -1202,12 +1249,16 @@ input:focus-visible {
   position: absolute;
   top: 64px;
   right: 14px;
+  width: 182px;
+  max-width: calc(100vw - 28px);
+  min-height: 48px;
   border: 1px solid var(--stroke);
   border-radius: 5px;
   background: rgba(5, 8, 12, 0.92);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
   pointer-events: auto;
   cursor: crosshair;
+  touch-action: none;
 }
 
 /* ---- Win / lose overlay ---- */
@@ -1415,7 +1466,7 @@ input:focus-visible {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   .hud__status {
     gap: 10px;
     padding: 6px 12px;
@@ -1519,7 +1570,7 @@ input:focus-visible {
   }
 
   .hud--player:has(.hud__minimap:not([hidden])) .hud__mission {
-    width: min(450px, calc(100vw - 24px));
+    width: min(400px, calc(100vw - 24px));
   }
 }
 
@@ -1533,9 +1584,10 @@ input:focus-visible {
 .is-mobile-device .hud--player .hud__tool-rail {
   display: flex;
   min-width: 0;
-  gap: 4px;
+  gap: 2px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
   touch-action: pan-x;
   -webkit-overflow-scrolling: touch;
@@ -1545,10 +1597,13 @@ input:focus-visible {
   display: none;
 }
 
-.is-mobile-device .hud--player .hud__tools,
 .is-mobile-device .hud--player .hud__controls,
 .is-mobile-device .hud--player .hud__audio {
   gap: 4px;
+}
+
+.is-mobile-device .hud--player .hud__tool-rail .hud__tools {
+  gap: 2px;
 }
 
 .is-mobile-device .hud--player .hud__tools,
@@ -1567,4 +1622,104 @@ input:focus-visible {
   min-width: 48px;
   min-height: 48px;
   padding: 2px 4px;
+}
+
+.is-mobile-device .hud--player .hud__tool-rail .hud__tool {
+  scroll-snap-align: end;
+}
+
+/* A narrow desktop remains a Desktop input profile, but its player ribbon
+   still needs the same bounded, scrollable geometry as a phone. Device
+   capability continues to own touch gestures and the portrait rotation gate. */
+@media (max-width: 960px) {
+  .hud--player .hud__dock {
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+  }
+
+  .hud--player .hud__panel-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+    gap: 0;
+  }
+
+  .hud--player .hud__tool-rail {
+    display: flex;
+    min-width: 0;
+    gap: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hud--player .hud__tool-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hud--player .hud__tool-rail .hud__tools {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 0;
+  }
+
+  .hud--player .hud__controls,
+  .hud--player .hud__audio {
+    gap: 2px;
+  }
+
+  .hud--player .hud__tool-name {
+    display: none;
+  }
+
+  .hud--player .hud__tool,
+  .hud--player .hud__tools--terrain .hud__tool,
+  .hud--player .hud__bar .hud__btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 2px 4px;
+  }
+
+  .hud--player .hud__tool-rail .hud__tool {
+    scroll-snap-align: end;
+  }
+}
+
+@media (max-width: 520px) and (orientation: portrait) {
+  .is-desktop-device .hud--player .hud__minimap {
+    top: calc(56.25vw + 8px);
+  }
+
+  .hud--player .hud__controls {
+    justify-content: center;
+  }
+
+  .hud--player .hud__mission {
+    top: 50px;
+    left: 50%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    width: calc(100vw - 24px);
+    padding: 7px 8px 7px 12px;
+    transform: translateX(-50%);
+  }
+
+  .hud--player .hud__mission-kicker,
+  .hud--player .hud__mission-hint,
+  .hud--player .hud__mission-prompt {
+    display: none;
+  }
+
+  .hud--player .hud__mission-objective {
+    font-size: 0.78rem;
+    line-height: 1.22;
+  }
+
+  .hud--player .hud__mission-start {
+    justify-self: end;
+    margin: 0;
+  }
 }

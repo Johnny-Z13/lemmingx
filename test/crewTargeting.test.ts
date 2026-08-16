@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { selectCrewTarget } from '../src/input/crewTargeting';
+import { salvagerTargetMetric } from '../src/render/CrewSpriteRenderer';
 import { layoutLemmingCrowds, SALVAGER_CROWD_SPACING } from '../src/render/crowdLayout';
 import type { Lemming } from '../src/sim/types';
 
@@ -60,6 +61,91 @@ describe('selectCrewTarget', () => {
         24,
         (_crew, displayPoint) => displayPoint.y - 3,
       )?.id).toBe(lemming.id);
+    }
+  });
+
+  it('keeps mixed-role Level-9-style crowds selectable from exposed body pixels', () => {
+    const states: Lemming['state'][] = ['walker', 'blocker', 'builder', 'basher', 'miner', 'digger', 'climber', 'walker', 'walker', 'walker'];
+    const lemmings = states.map((state, index) => crew(index + 1, 100 + (index % 3) * 5, 100, state));
+    lemmings[6].isClimber = true;
+    lemmings[7].isFloater = true;
+    lemmings[8].isSwimmer = true;
+    lemmings[9].fuseMs = 2500;
+    const display = layoutLemmingCrowds(lemmings, 0, SALVAGER_CROWD_SPACING);
+
+    for (const lemming of lemmings) {
+      const point = display.get(lemming.id)!;
+      expect(selectCrewTarget(
+        lemmings,
+        display,
+        point.x + 6,
+        point.y - 8,
+        24,
+        (_crew, displayPoint) => displayPoint.y - 3,
+      )?.id).toBe(lemming.id);
+    }
+  });
+
+  it('assigns visible tool tips, hooks, and packs to their owner in either direction and draw order', () => {
+    const cases = [
+      { role: 'basher', offset: (direction: number) => ({ x: direction * 22, y: -8 }) },
+      { role: 'builder', offset: (direction: number) => ({ x: direction * 20, y: -1 }) },
+      { role: 'climber', offset: (direction: number) => ({ x: direction * 15, y: -20 }) },
+      { role: 'floater', offset: (direction: number) => ({ x: -direction * 12, y: -9 }) },
+    ] as const;
+
+    for (const reverse of [false, true]) {
+      for (const direction of [-1, 1] as const) {
+        for (const testCase of cases) {
+          const lemmings = Array.from({ length: 10 }, (_, index) => crew(index + 1, 100, 100));
+          const owner = lemmings[4];
+          owner.direction = direction;
+          if (testCase.role === 'basher' || testCase.role === 'builder') owner.state = testCase.role;
+          if (testCase.role === 'climber') owner.isClimber = true;
+          if (testCase.role === 'floater') owner.isFloater = true;
+          const renderOrder = reverse ? [...lemmings].reverse() : lemmings;
+          const display = layoutLemmingCrowds(renderOrder, 0, SALVAGER_CROWD_SPACING);
+          const point = display.get(owner.id)!;
+          const offset = testCase.offset(direction);
+
+          expect(selectCrewTarget(
+            renderOrder,
+            display,
+            point.x + offset.x,
+            point.y + offset.y,
+            24,
+            (_crew, displayPoint) => displayPoint.y - 3,
+            salvagerTargetMetric,
+          )?.id, `${testCase.role} dir=${direction} reverse=${reverse}`).toBe(owner.id);
+        }
+      }
+    }
+  });
+
+  it('selects the frontmost owner when adjacent tool silhouettes overlap', () => {
+    for (const state of ['builder', 'basher'] as const) {
+      const left = crew(1, 100, 100, state);
+      const right = crew(2, 100, 100, state);
+      left.direction = 1;
+      right.direction = -1;
+      const lemmings = [left, right];
+      const display = layoutLemmingCrowds(lemmings, 0, SALVAGER_CROWD_SPACING);
+      const leftPoint = display.get(left.id)!;
+      const overlapX = state === 'builder' ? leftPoint.x + 10 : leftPoint.x + 9;
+      const overlapY = state === 'builder' ? leftPoint.y - 1 : leftPoint.y - 8;
+
+      for (const renderOrder of [lemmings, [...lemmings].reverse()]) {
+        const expectedFront = renderOrder[renderOrder.length - 1];
+        expect(selectCrewTarget(
+          renderOrder,
+          display,
+          overlapX,
+          overlapY,
+          24,
+          (_crew, point) => point.y - 3,
+          salvagerTargetMetric,
+        )?.id, `${state} front=${expectedFront.id}`).toBe(expectedFront.id);
+      }
     }
   });
 });

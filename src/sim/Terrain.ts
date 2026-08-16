@@ -31,6 +31,23 @@ export type CarveDirection = -1 | 0 | 1;
 
 export type CarveLeaveAs = 'empty' | 'sand';
 
+/**
+ * Mutation tracking is deliberately coarser than the simulation grid. The
+ * renderer consumes these chunks without making terrain physics depend on a
+ * presentation object or advancing either seeded RNG stream.
+ */
+export const TERRAIN_DIRTY_CHUNK_CELLS = 32;
+
+export interface TerrainDirtyChunk {
+  key: number;
+  chunkX: number;
+  chunkY: number;
+  startCellX: number;
+  startCellY: number;
+  endCellX: number;
+  endCellY: number;
+}
+
 function isCarvable(material: number, direction: CarveDirection): boolean {
   if (material === MATERIAL.dirt || material === MATERIAL.sand || material === MATERIAL.wood) return true;
   if (material === MATERIAL.oneWayLeft) return direction <= 0;
@@ -53,6 +70,9 @@ export class Terrain {
   readonly cols: number;
   readonly rows: number;
   private readonly cells: Uint8Array;
+  private readonly dirtyChunkCols: number;
+  private readonly dirtyChunkRows: number;
+  private readonly dirtyChunks: Uint8Array;
   /** Set whenever cells change; the renderer clears it after a redraw. */
   private dirty = true;
 
@@ -63,6 +83,10 @@ export class Terrain {
     this.cols = Math.ceil(width / cellSize);
     this.rows = Math.ceil(height / cellSize);
     this.cells = new Uint8Array(this.cols * this.rows);
+    this.dirtyChunkCols = Math.ceil(this.cols / TERRAIN_DIRTY_CHUNK_CELLS);
+    this.dirtyChunkRows = Math.ceil(this.rows / TERRAIN_DIRTY_CHUNK_CELLS);
+    this.dirtyChunks = new Uint8Array(this.dirtyChunkCols * this.dirtyChunkRows);
+    this.dirtyChunks.fill(1);
   }
 
   clone(): Terrain {
@@ -79,16 +103,71 @@ export class Terrain {
   consumeDirty(): boolean {
     const was = this.dirty;
     this.dirty = false;
+    this.dirtyChunks.fill(0);
     return was;
   }
 
-  /** CA stepper calls this after swaps. */
-  touchDirty(): void {
-    this.dirty = true;
+  /** Consume the bounded regions changed since the previous render. */
+  consumeDirtyChunks(): TerrainDirtyChunk[] {
+    if (!this.dirty) return [];
+    const chunks: TerrainDirtyChunk[] = [];
+    for (let chunkY = 0; chunkY < this.dirtyChunkRows; chunkY += 1) {
+      for (let chunkX = 0; chunkX < this.dirtyChunkCols; chunkX += 1) {
+        const key = chunkY * this.dirtyChunkCols + chunkX;
+        if (this.dirtyChunks[key] === 0) continue;
+        chunks.push({
+          key,
+          chunkX,
+          chunkY,
+          startCellX: chunkX * TERRAIN_DIRTY_CHUNK_CELLS,
+          startCellY: chunkY * TERRAIN_DIRTY_CHUNK_CELLS,
+          endCellX: Math.min(this.cols, (chunkX + 1) * TERRAIN_DIRTY_CHUNK_CELLS),
+          endCellY: Math.min(this.rows, (chunkY + 1) * TERRAIN_DIRTY_CHUNK_CELLS),
+        });
+      }
+    }
+    this.dirty = false;
+    this.dirtyChunks.fill(0);
+    return chunks;
   }
 
-  private markDirty(): void {
+  /** Explicit full invalidation for authoring, diagnostics, or cache rebuilds. */
+  touchDirty(): void {
     this.dirty = true;
+    this.dirtyChunks.fill(1);
+  }
+
+  /** Refresh an animated living-material cell without changing its value. */
+  touchDirtyCell(cellX: number, cellY: number): void {
+    if (!this.isCellInside(cellX, cellY)) return;
+    this.markDirtyCellRect(cellX, cellY, cellX, cellY);
+  }
+
+  private markDirtyCellRect(minX: number, minY: number, maxX: number, maxY: number): void {
+    const expandedMinX = Math.max(0, minX - 1);
+    const expandedMinY = Math.max(0, minY - 1);
+    const expandedMaxX = Math.min(this.cols - 1, maxX + 1);
+    const expandedMaxY = Math.min(this.rows - 1, maxY + 1);
+    if (expandedMinX > expandedMaxX || expandedMinY > expandedMaxY) return;
+
+    this.dirty = true;
+    const minChunkX = Math.floor(expandedMinX / TERRAIN_DIRTY_CHUNK_CELLS);
+    const maxChunkX = Math.floor(expandedMaxX / TERRAIN_DIRTY_CHUNK_CELLS);
+    const minChunkY = Math.floor(expandedMinY / TERRAIN_DIRTY_CHUNK_CELLS);
+    const maxChunkY = Math.floor(expandedMaxY / TERRAIN_DIRTY_CHUNK_CELLS);
+    for (let chunkY = minChunkY; chunkY <= maxChunkY; chunkY += 1) {
+      for (let chunkX = minChunkX; chunkX <= maxChunkX; chunkX += 1) {
+        this.dirtyChunks[chunkY * this.dirtyChunkCols + chunkX] = 1;
+      }
+    }
+  }
+
+  private markDirtyWorldRect(x: number, y: number, width: number, height: number): void {
+    const minX = Math.max(0, Math.floor(x / this.cellSize));
+    const maxX = Math.min(this.cols - 1, Math.ceil((x + width) / this.cellSize) - 1);
+    const minY = Math.max(0, Math.floor(y / this.cellSize));
+    const maxY = Math.min(this.rows - 1, Math.ceil((y + height) / this.cellSize) - 1);
+    this.markDirtyCellRect(minX, minY, maxX, maxY);
   }
 
   getCell(cellX: number, cellY: number): Material {
@@ -99,7 +178,7 @@ export class Terrain {
   setCell(cellX: number, cellY: number, material: Material): void {
     if (!this.isCellInside(cellX, cellY)) return;
     this.cells[this.index(cellX, cellY)] = material;
-    this.markDirty();
+    this.markDirtyCellRect(cellX, cellY, cellX, cellY);
   }
 
   swapCells(ax: number, ay: number, bx: number, by: number): void {
@@ -109,14 +188,14 @@ export class Terrain {
     const tmp = this.cells[ia];
     this.cells[ia] = this.cells[ib];
     this.cells[ib] = tmp;
-    this.markDirty();
+    this.markDirtyCellRect(Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by));
   }
 
   fillRect(x: number, y: number, width: number, height: number, material: Material = MATERIAL.dirt): void {
     this.visitRect(x, y, width, height, (cellX, cellY) => {
       this.cells[this.index(cellX, cellY)] = material;
     });
-    this.markDirty();
+    this.markDirtyWorldRect(x, y, width, height);
   }
 
   /** Unconditional erase — level authoring only. */
@@ -124,7 +203,7 @@ export class Terrain {
     this.visitRect(x, y, width, height, (cellX, cellY) => {
       this.cells[this.index(cellX, cellY)] = 0;
     });
-    this.markDirty();
+    this.markDirtyWorldRect(x, y, width, height);
   }
 
   /**
@@ -188,7 +267,7 @@ export class Terrain {
     if (isCarvable(material, direction)) {
       this.cells[index] = leaveAs === 'sand' ? MATERIAL.sand : MATERIAL.empty;
       result.carved += 1;
-      this.markDirty();
+      this.markDirtyCellRect(cellX, cellY, cellX, cellY);
     } else {
       result.blocked = true;
     }
@@ -205,7 +284,7 @@ export class Terrain {
     this.visitCircle(x, y, radius, (cellX, cellY) => {
       this.cells[this.index(cellX, cellY)] = 0;
     });
-    this.markDirty();
+    this.markDirtyWorldRect(x - radius, y - radius, radius * 2, radius * 2);
   }
 
   private visitCircle(x: number, y: number, radius: number, visitor: (cellX: number, cellY: number) => void): void {

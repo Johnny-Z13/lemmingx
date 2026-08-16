@@ -1,16 +1,22 @@
 import { DEVICE_PROFILE } from '../deviceProfile';
+import { BodyModalLock, registerBodyModalChild } from '../lifecycle/BodyModalLock';
+import { PORTRAIT_MODAL_CHANGE_EVENT } from '../lifecycle/PortraitModalGate';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 
 /** One-action boot splash; gameplay objects are created only after Start. */
 export class TitleScreen {
   private readonly root: HTMLDivElement;
   private readonly startButton: HTMLButtonElement;
-  private readonly priorInert = new Map<HTMLElement, boolean>();
-  private readonly priorAriaHidden = new Map<HTMLElement, string | null>();
+  private readonly modalLock: BodyModalLock;
   private readonly handleKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+    if (this.root.inert || this.root.getAttribute('aria-hidden') === 'true' || this.portraitModalActive()) return;
     event.preventDefault();
     this.start();
+  };
+  private readonly handlePortraitModalChange = (event: Event) => {
+    const active = (event as CustomEvent<{ active: boolean }>).detail.active;
+    if (!active && this.root.isConnected && !this.root.inert) this.startButton.focus({ preventScroll: true });
   };
 
   constructor(private readonly onStart: () => void) {
@@ -50,15 +56,11 @@ export class TitleScreen {
 
     this.root.append(art, content, debug);
     document.body.append(this.root);
-    for (const sibling of Array.from(document.body.children)) {
-      if (!(sibling instanceof HTMLElement) || sibling === this.root || sibling.classList.contains('rotate-notice')) continue;
-      this.priorInert.set(sibling, sibling.inert);
-      this.priorAriaHidden.set(sibling, sibling.getAttribute('aria-hidden'));
-      sibling.inert = true;
-      sibling.setAttribute('aria-hidden', 'true');
-    }
+    registerBodyModalChild(this.root);
+    this.modalLock = new BodyModalLock(this.root, (element) => element.classList.contains('rotate-notice'));
     window.addEventListener('keydown', this.handleKeyDown);
-    this.startButton.focus({ preventScroll: true });
+    window.addEventListener(PORTRAIT_MODAL_CHANGE_EVENT, this.handlePortraitModalChange);
+    if (!this.portraitModalActive() && !this.root.inert) this.startButton.focus({ preventScroll: true });
   }
 
   private start(): void {
@@ -69,23 +71,19 @@ export class TitleScreen {
 
   hide(): void {
     window.removeEventListener('keydown', this.handleKeyDown);
-    this.restoreBackground();
+    window.removeEventListener(PORTRAIT_MODAL_CHANGE_EVENT, this.handlePortraitModalChange);
+    this.modalLock.release();
     this.root.remove();
   }
 
   destroy(): void {
     window.removeEventListener('keydown', this.handleKeyDown);
-    this.restoreBackground();
+    window.removeEventListener(PORTRAIT_MODAL_CHANGE_EVENT, this.handlePortraitModalChange);
+    this.modalLock.release();
     this.root.remove();
   }
 
-  private restoreBackground(): void {
-    for (const [element, inert] of this.priorInert) element.inert = inert;
-    for (const [element, ariaHidden] of this.priorAriaHidden) {
-      if (ariaHidden === null) element.removeAttribute('aria-hidden');
-      else element.setAttribute('aria-hidden', ariaHidden);
-    }
-    this.priorInert.clear();
-    this.priorAriaHidden.clear();
+  private portraitModalActive(): boolean {
+    return document.querySelector('.rotate-notice[data-active="true"]') !== null;
   }
 }

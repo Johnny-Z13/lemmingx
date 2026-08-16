@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import type { Lemming } from '../sim/types';
 import type { LemmingDisplayPoint } from './crowdLayout';
+import { FUSE_WARNING_SEGMENTS, fuseUrgencySegments } from './fuseWarning';
 import { crewPalette } from './lemmingIdentity';
 
 /**
@@ -155,15 +156,14 @@ export function drawLemming(
       drawWalkLegs(g, ox, oy, 0, false);
   }
 
-  // --- Armed-bomber fuse: blink + classic 5→1 countdown above the head ---
+  // --- Armed-bomber fuse: abstract segmented warning, never numeric ---
   if (lemming.fuseMs !== null && lemming.fuseMs > 0) {
     const blink = Math.floor(frame / 2) % 2 === 0;
     if (blink) {
       g.fillStyle(0xffffff, 0.5);
       g.fillRect(ox + 1 * PX, oy + 1 * PX, 4 * PX, 7 * PX);
     }
-    const digit = Math.max(1, Math.ceil(lemming.fuseMs / 1000));
-    drawDigit(g, position.x, position.y - 12 - squash * 2, digit);
+    drawFuseWarning(g, position.x, position.y - 17 - squash * 2, lemming.fuseMs);
   }
 }
 
@@ -297,29 +297,15 @@ function drawSplat(g: Phaser.GameObjects.Graphics, ox: number, oy: number, frame
   g.fillRect(ox + 1 * PX, oy + 6 * PX, 4 * PX, 1 * PX);
 }
 
-/**
- * Tiny 3×5 pixel digit drawn centered on (cx, cy). Used for the bomber fuse
- * countdown (classic "5…4…3…2…1"). Segments are bitmasks for rows 0..4.
- */
-const DIGIT_ROWS: Record<number, readonly number[]> = {
-  1: [0b010, 0b110, 0b010, 0b010, 0b111],
-  2: [0b111, 0b001, 0b111, 0b100, 0b111],
-  3: [0b111, 0b001, 0b111, 0b001, 0b111],
-  4: [0b101, 0b101, 0b111, 0b001, 0b001],
-  5: [0b111, 0b100, 0b111, 0b001, 0b111],
-};
-
-function drawDigit(g: Phaser.GameObjects.Graphics, cx: number, cy: number, digit: number): void {
-  const rows = DIGIT_ROWS[digit] ?? DIGIT_ROWS[5];
-  const ox = cx - 1.5 * PX;
-  const oy = cy - 2.5 * PX;
-  g.fillStyle(0xfff6d8, 1);
-  for (let row = 0; row < 5; row += 1) {
-    const bits = rows[row];
-    for (let col = 0; col < 3; col += 1) {
-      if (bits & (0b100 >> col)) {
-        g.fillRect(ox + col * PX, oy + row * PX, PX, PX);
-      }
-    }
+function drawFuseWarning(g: Phaser.GameObjects.Graphics, cx: number, cy: number, fuseMs: number): void {
+  const lit = fuseUrgencySegments(fuseMs);
+  const ox = cx - 5 * PX;
+  const oy = cy - PX;
+  g.fillStyle(0x071019, 0.9);
+  g.fillRect(ox - PX, oy - PX, 12 * PX, 4 * PX);
+  for (let index = 0; index < FUSE_WARNING_SEGMENTS; index += 1) {
+    const active = index < lit;
+    g.fillStyle(active ? (lit <= 2 ? 0xff4f35 : 0xffc24a) : 0x37404a, active ? 1 : 0.65);
+    g.fillRect(ox + index * 2 * PX, oy, PX, PX);
   }
 }

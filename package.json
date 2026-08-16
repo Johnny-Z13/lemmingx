@@ -9,6 +9,7 @@
     "build:crazygames": "tsc && vite build --mode crazygames",
     "verify:crazygames": "node scripts/verify-crazygames-build.mjs",
     "proof:deterministic": "vite-node scripts/capture-deterministic-proof.ts",
+    "validate:crew-atlas": "node scripts/validate-crew-salvager-actions.mjs",
     "test": "vitest run",
     "test:run": "vitest run"
   },

@@ -810,4 +810,27 @@ describe('GameSimulation', () => {
     expect(terrain.consumeDirty()).toBe(true);
     expect(terrain.isDirty()).toBe(false);
   });
+
+  it('reports bounded dirty chunks and invalidates cross-chunk material edges', () => {
+    const terrain = new Terrain(512, 256, 4);
+    expect(terrain.consumeDirtyChunks()).toHaveLength(8);
+    expect(terrain.isDirty()).toBe(false);
+
+    terrain.setCell(10, 10, MATERIAL.sand);
+    expect(terrain.consumeDirtyChunks().map(({ key }) => key)).toEqual([0]);
+
+    // Expanding the mutation by one visual-neighbor cell refreshes both sides
+    // of a chunk seam, so exposed faces cannot remain stale after a carve.
+    terrain.setCell(31, 31, MATERIAL.water);
+    expect(terrain.consumeDirtyChunks().map(({ key }) => key)).toEqual([0, 1, 4, 5]);
+    expect(terrain.isDirty()).toBe(false);
+  });
+
+  it('keeps the legacy dirty consumer compatible with chunk tracking', () => {
+    const terrain = new Terrain(512, 256, 4);
+    expect(terrain.consumeDirty()).toBe(true);
+    terrain.setCell(70, 10, MATERIAL.wood);
+    expect(terrain.consumeDirty()).toBe(true);
+    expect(terrain.consumeDirtyChunks()).toEqual([]);
+  });
 });

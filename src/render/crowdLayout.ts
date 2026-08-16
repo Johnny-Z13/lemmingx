@@ -5,10 +5,10 @@ export interface LemmingDisplayPoint {
   readonly y: number;
 }
 
-/** Existing procedural family keeps its compact fan outside the M1 slice. */
+/** Legacy procedural spacing remains available to isolated renderer tests. */
 export const CROWD_SPACING = 7.5;
-/** Level-1 salvage sprite exposes at least ~40% of each wider silhouette. */
-export const SALVAGER_CROWD_SPACING = 13;
+/** The full salvage family exposes substantial body/gear area in dense crowds. */
+export const SALVAGER_CROWD_SPACING = 16;
 const CROWD_JOIN_X = 7;
 const CROWD_JOIN_Y = 4;
 const JITTER_X = 0.2;

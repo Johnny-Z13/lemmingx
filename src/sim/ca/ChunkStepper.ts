@@ -169,12 +169,12 @@ export class ChunkStepper {
     for (const [cellX, cellY] of fires) {
       if (this.terrain.getCell(cellX, cellY) !== MATERIAL.fire) continue;
       this.stepFire(cellX, cellY);
+      this.terrain.touchDirtyCell(cellX, cellY);
       moved += 1; // keeps stationary flames active until they burn out
       this.wake(nextActive, cellX, cellY);
     }
 
     this.active.set(nextActive);
-    if (moved > 0) this.terrain.touchDirty();
     return moved;
   }
 

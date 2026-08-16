@@ -28,7 +28,7 @@ export interface CrewPalette {
 
 /** High-contrast role uniforms; colour is display-only and never enters sim state. */
 const ROLE_PALETTES: Record<CrewRole, CrewPalette> = {
-  Walker:  { hair: 0x5ef2a1, body: 0x3f62d9, bodyShade: 0x2846a5, trim: 0xa7ffd0 },
+  Walker:  { hair: 0xffc24a, body: 0x243a56, bodyShade: 0x14243a, trim: 0x7ff2ff },
   Climber: { hair: 0xffd24d, body: 0x9a5a10, bodyShade: 0x643706, trim: 0xfff0a3 },
   Floater: { hair: 0xff7aa8, body: 0x9b4dca, bodyShade: 0x67318f, trim: 0xffb3ce },
   Bomber:  { hair: 0xff7a3a, body: 0xe34b35, bodyShade: 0x9c2c27, trim: 0xfff3a3 },

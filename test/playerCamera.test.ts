@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canEdgeHoverScroll,
+  canRestoreHeroCamera,
   canScriptPlayerCameraFocus,
   PLAYER_CAMERA_MAX_ZOOM,
   PLAYER_CAMERA_MIN_ZOOM,
@@ -11,9 +13,12 @@ import {
   playerCameraFrame,
   playerCameraGestureFrame,
   playerCameraLandmarkFrame,
+  playerCameraLockedHudSafeFrame,
   playerCameraMinimapFrame,
   playerCameraOccludedWorldHeight,
   playerCameraOcclusionInsets,
+  playerCameraOcclusionRects,
+  playerCameraPaddedBounds,
 } from '../src/render/playerCamera';
 
 describe('playerCameraFrame', () => {
@@ -21,6 +26,18 @@ describe('playerCameraFrame', () => {
     expect(canScriptPlayerCameraFocus(true, 10_000, 0)).toBe(false);
     expect(canScriptPlayerCameraFocus(false, 11_599, 11_600)).toBe(false);
     expect(canScriptPlayerCameraFocus(false, 11_600, 11_600)).toBe(true);
+  });
+
+  it('uses the saved Hero frame as the post-focus camera ownership token', () => {
+    expect(canRestoreHeroCamera(true, true)).toBe(false);
+    expect(canRestoreHeroCamera(true, false)).toBe(true);
+    expect(canRestoreHeroCamera(false, false)).toBe(false);
+  });
+
+  it('never turns a released edge touch into hover scrolling', () => {
+    expect(canEdgeHoverScroll(true, true)).toBe(false);
+    expect(canEdgeHoverScroll(true, false)).toBe(true);
+    expect(canEdgeHoverScroll(false, false)).toBe(false);
   });
 
   it('lifts the compact-level ground line while magnifying the crew', () => {
@@ -54,6 +71,16 @@ describe('playerCameraFrame', () => {
     );
 
     expect(frame).toEqual({ zoom: PLAYER_LOCKED_CAMERA_ZOOM, scrollX: 0, scrollY: 0 });
+  });
+
+  it('keeps locked-room timber and hydraulic feedback above the measured dock', () => {
+    const frame = playerCameraLockedHudSafeFrame(540, 540, 110);
+    const timberScreenY = (468 - frame.scrollY) * frame.zoom;
+    const catchBottomScreenY = (486 - frame.scrollY) * frame.zoom;
+
+    expect(frame).toEqual({ zoom: PLAYER_LOCKED_CAMERA_ZOOM, scrollX: 0, scrollY: 110 });
+    expect(timberScreenY).toBe(358);
+    expect(catchBottomScreenY).toBeLessThanOrEqual(540 - 54);
   });
 
   it('frames hatch and exit landmarks without changing authored vertical composition', () => {
@@ -195,6 +222,27 @@ describe('playerCameraFrame', () => {
     expect((1100 - frame.scrollX) * frame.zoom).toBe(926);
   });
 
+  it('moves an upper-right event clear of a corner minimap rectangle', () => {
+    const occlusions = playerCameraOcclusionRects(
+      { left: 0, top: 0, right: 960, bottom: 540 },
+      { x: 960, y: 540 },
+      [{ left: 780, top: 80, right: 950, bottom: 145 }],
+    );
+    const frame = playerCameraAttentionFrame(
+      [{ x: 850, y: 310, state: 'faller', fuseMs: null }],
+      { zoom: 1, scrollX: 0, scrollY: 200 },
+      { x: 960, y: 540 },
+      { width: 1600, height: 900 },
+      { top: 48, right: 12, bottom: 76, left: 12 },
+      occlusions,
+    );
+    const screen = { x: 850 - frame.scrollX, y: 310 - frame.scrollY };
+
+    const clearsHorizontally = screen.x <= 780 - 22 || screen.x >= 950 + 22;
+    const clearsVertically = screen.y <= 80 - 22 || screen.y >= 145 + 22;
+    expect(clearsHorizontally || clearsVertically).toBe(true);
+  });
+
   it('measures a letterboxed mobile dock in camera pixels instead of guessing CSS pixels', () => {
     const insets = playerCameraOcclusionInsets(
       { left: 100, top: 70, right: 1180, bottom: 610 },
@@ -239,5 +287,18 @@ describe('playerCameraFrame', () => {
 
     expect(top.scrollY).toBe(0);
     expect(bottom.scrollY).toBeCloseTo(playerCameraOccludedWorldHeight(1080, 105, 1.2) - 540 / 1.2);
+  });
+
+  it('pads Phaser bounds by the zoom crop so every visible-world edge is reachable', () => {
+    expect(playerCameraPaddedBounds(
+      { width: 2880, height: 613.8461538461538 },
+      { width: 960, height: 540 },
+      { width: 800, height: 450 },
+    )).toEqual({
+      x: -160,
+      y: -90,
+      width: 3040,
+      height: 703.8461538461538,
+    });
   });
 });
