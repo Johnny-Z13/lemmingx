@@ -16,7 +16,7 @@ function paeth(a, b, c) {
   return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 }
 
-function decodeRgbaPng(file) {
+export function decodeRgbaPng(file) {
   const png = fs.readFileSync(file);
   const signature = '89504e470d0a1a0a';
   if (png.subarray(0, 8).toString('hex') !== signature) throw new Error('not a PNG');
@@ -128,7 +128,7 @@ export function validateAtlas(file) {
 
 const invoked = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
 if (invoked) {
-  const file = path.resolve(process.argv.find((arg) => arg.endsWith('.png')) ?? 'public/assets/crew-salvager-actions.png');
+  const file = path.resolve(process.argv.find((arg) => arg.endsWith('.png')) ?? 'public/assets/crew-keyart-actions.png');
   const result = validateAtlas(file);
   console.log(process.argv.includes('--json') ? JSON.stringify(result) : `validated ${file}: ${result.frames.length} frames, 13 strips <=32 colours`);
 }

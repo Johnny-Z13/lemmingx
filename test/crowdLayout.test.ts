@@ -29,10 +29,10 @@ describe('crowd display layout', () => {
     const points = layoutLemmingCrowds(lemmings, 0, SALVAGER_CROWD_SPACING);
     const xs = lemmings.map((lemming) => points.get(lemming.id)?.x ?? 0).sort((a, b) => a - b);
 
-    expect(xs[1] - xs[0]).toBeGreaterThanOrEqual(15.5);
-    expect(xs[2] - xs[1]).toBeGreaterThanOrEqual(15.5);
+    expect(xs[1] - xs[0]).toBeGreaterThanOrEqual(19.5);
+    expect(xs[2] - xs[1]).toBeGreaterThanOrEqual(19.5);
     expect((xs[0] + xs[1] + xs[2]) / 3).toBeCloseTo(100);
-    expect(SALVAGER_CROWD_SPACING).toBe(16);
+    expect(SALVAGER_CROWD_SPACING).toBe(20);
     expect(lemmings.map((lemming) => lemming.x)).toEqual([100, 100, 100]);
   });
 
@@ -63,8 +63,8 @@ describe('crowd display layout', () => {
     const xs = lemmings.map(({ id }) => points.get(id)?.x ?? 0);
     const ys = lemmings.map(({ id }) => points.get(id)?.y ?? 0);
 
-    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(143);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(145);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThanOrEqual(179);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(181);
     expect(Math.max(...ys) - Math.min(...ys)).toBeLessThanOrEqual(1.5);
     expect(xs.reduce((sum, value) => sum + value, 0) / xs.length).toBeCloseTo(100);
     expect(ys.reduce((sum, value) => sum + value, 0) / ys.length).toBeCloseTo(100);
@@ -86,8 +86,8 @@ describe('crowd display layout', () => {
     const points = layoutLemmingCrowds(walking, 400, SALVAGER_CROWD_SPACING);
     const xs = walking.map(({ id }) => points.get(id)?.x ?? 0).sort((a, b) => a - b);
 
-    expect(xs[1] - xs[0]).toBeGreaterThan(15.5);
-    expect(xs[2] - xs[1]).toBeGreaterThan(15.5);
+    expect(xs[1] - xs[0]).toBeGreaterThan(19.5);
+    expect(xs[2] - xs[1]).toBeGreaterThan(19.5);
     expect(xs.reduce((sum, x) => sum + x, 0) / xs.length).toBeCloseTo(106);
   });
 
@@ -99,5 +99,15 @@ describe('crowd display layout', () => {
     expect(CROWD_SPACING).toBe(7.5);
     expect(xs[2] - xs[0]).toBeGreaterThanOrEqual(14.5);
     expect(xs[2] - xs[0]).toBeLessThanOrEqual(15.5);
+  });
+
+  it('shifts a dense generated crowd inside world bounds without changing spacing', () => {
+    const lemmings = Array.from({ length: 10 }, (_, index) => makeLemming(index + 1, 70));
+    const points = layoutLemmingCrowds(lemmings, 0, SALVAGER_CROWD_SPACING, { minX: 22, maxX: 938 });
+    const xs = lemmings.map(({ id }) => points.get(id)?.x ?? 0).sort((a, b) => a - b);
+
+    expect(xs[0]).toBeCloseTo(22);
+    expect(xs[9] - xs[0]).toBeGreaterThanOrEqual(179);
+    expect(lemmings.every(({ x }) => x === 70)).toBe(true);
   });
 });

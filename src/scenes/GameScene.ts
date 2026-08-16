@@ -654,6 +654,7 @@ export class GameScene extends Phaser.Scene {
       this.sim.state.lemmings,
       this.visualTime(),
       SALVAGER_CROWD_SPACING,
+      { minX: 22, maxX: this.level.width - 22 },
     );
     this.updateHover();
     this.drawWorld();
@@ -932,7 +933,7 @@ export class GameScene extends Phaser.Scene {
   private planningPrompt(): string | null {
     if (IS_PLAYER_EXPERIENCE && this.planning && this.levelIndex === 0) {
       return IS_MOBILE_DEVICE
-        ? 'Tap Play fullscreen when you are ready. The hatch and timer stay frozen until then.'
+        ? 'Tap Play when you are ready. The hatch and timer stay frozen until then.'
         : 'Press Start when you are ready. The hatch and timer stay frozen until then.';
     }
     return this.prototypePrompt();
@@ -1549,13 +1550,12 @@ export class GameScene extends Phaser.Scene {
   private drawLighting(): void {
     const exit = this.level.exit;
     const sources: WorldLightSource[] = [
-      ...this.fireLights,
       {
         x: exit.x + exit.width / 2,
         y: exit.y + exit.height / 2,
         color: WORLD_THEME.mint,
         radius: 82,
-        strength: 1,
+        strength: this.planning ? 0.48 : 1,
       },
     ];
 
@@ -1590,7 +1590,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     for (const emitter of this.sim.state.emitters) {
-      if (emitter.budgetLeft <= 0) continue;
+      const advancing = !this.planning && !this.paused && this.sim.state.outcome === 'running';
+      const clear = this.level.terrain.materialAt(emitter.def.x, emitter.def.y) === MATERIAL.empty;
+      if (!advancing || !emitter.active || emitter.budgetLeft <= 0 || !clear) continue;
       sources.push({
         x: emitter.def.x,
         y: emitter.def.y - 6,
@@ -1599,6 +1601,8 @@ export class GameScene extends Phaser.Scene {
         strength: 0.32,
       });
     }
+
+    sources.push(...this.fireLights);
 
     drawWorldLights(this.lightGraphics, sources, this.visualTime());
   }
@@ -1782,8 +1786,8 @@ export class GameScene extends Phaser.Scene {
       this.actorGraphics.lineBetween(point.x, point.y - 10, point.x, labelY + 1);
     }
 
-    // All uniforms are painted before any tool/trait geometry. This makes the
-    // gear layer visible and gives hit-testing one deterministic front order.
+    // Keep canopy lines below live water/fuse effects; generated body and tool
+    // silhouettes already share one cached sprite and deterministic depth.
     for (const { lemming, point } of cachedCrew) {
       this.crewSpriteRenderer?.drawBaseOverlays(this.actorGraphics, lemming, point);
     }

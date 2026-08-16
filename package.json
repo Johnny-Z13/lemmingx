@@ -10,6 +10,7 @@
     "verify:crazygames": "node scripts/verify-crazygames-build.mjs",
     "proof:deterministic": "vite-node scripts/capture-deterministic-proof.ts",
     "validate:crew-atlas": "node scripts/validate-crew-salvager-actions.mjs",
+    "validate:terrain-icons": "node scripts/validate-terrain-tool-icons.mjs",
     "test": "vitest run",
     "test:run": "vitest run"
   },

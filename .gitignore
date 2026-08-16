@@ -5,6 +5,8 @@ dist
 art/concepts/
 /output/
 /.playwright-cli/
+/.artifacts/environment-baseline-dist/
+/.artifacts/environment-candidate-dist/
 
 # Local environment secrets
 /.env.local

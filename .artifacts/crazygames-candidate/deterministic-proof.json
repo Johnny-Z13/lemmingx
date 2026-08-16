@@ -7,15 +7,15 @@
     "lost": 0,
     "milestones": {
       "orderAcceptedMs": 1120,
-      "assignmentMs": 4368,
+      "assignmentMs": 9072,
       "breachMs": 80,
       "sandVisibleMs": 112,
-      "waterReleasedMs": 16,
-      "woodLiftMs": 112,
-      "walkableBridgeMs": 848,
-      "firstCrossingMs": 8816,
-      "firstSaveMs": 14912,
-      "completionMs": 24688
+      "waterReleasedMs": 160,
+      "woodLiftMs": 0,
+      "walkableBridgeMs": 544,
+      "firstCrossingMs": 9424,
+      "firstSaveMs": 21904,
+      "completionMs": 31680
     },
     "chainWithinTenSeconds": true
   },
@@ -41,8 +41,8 @@
       "actionCount": 1,
       "released": false,
       "outcome": "won",
-      "saved": 7,
-      "lost": 3
+      "saved": 8,
+      "lost": 2
     },
     {
       "route": "sand",

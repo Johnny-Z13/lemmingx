@@ -24,10 +24,10 @@ export class WorldBackdrop {
       .setDepth(-35)
       .setScrollFactor(0.06, 0.02)
       .setDisplaySize(parallaxWidth, parallaxHeight)
-      .setAlpha(0.84);
+      .setAlpha(0.92);
 
     const haze = scene.add.graphics().setDepth(-30).setScrollFactor(0);
-    haze.fillGradientStyle(0x0d1117, 0x0d1117, 0x152237, 0x152237, 0.05, 0.05, 0.7, 0.7);
+    haze.fillGradientStyle(WORLD_THEME.sky, WORLD_THEME.sky, WORLD_THEME.skyBlue, WORLD_THEME.skyBlue, 0.02, 0.02, 0.36, 0.36);
     haze.fillRect(0, 0, this.viewportWidth, this.viewportHeight);
 
     this.rain = scene.add.graphics().setDepth(-25).setScrollFactor(0);

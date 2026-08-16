@@ -2,12 +2,12 @@
   "inventoryVersion": 1,
   "game": "LemmingX",
   "scope": "Early local CrazyGames candidate",
-  "reviewDate": "2026-08-15",
+  "reviewDate": "2026-08-16",
   "reviewer": "Codex automated inventory and generation record",
   "releaseClaim": "blocked",
   "releaseBlockers": [
-    "The shipped industrial backdrop has no verified originating output, prompt, model, seed, terms record, or transformation chain.",
-    "The generated title and salvage-crew slice are prototype-only pending human originality, commercial-rights, and brand-confusion review.",
+    "The generated industrial backdrop has an exact raw output, prompt record, runtime transform, and reference-boundary declaration, but still requires human originality and commercial-rights review.",
+    "The generated title, character family, and terrain-tool icons are prototype-only pending human originality, commercial-rights, and brand-confusion review.",
     "Repository-authored procedural visual and audio families have not received a human originality and commercial-rights review."
   ],
   "approvalStates": [
@@ -46,7 +46,7 @@
     },
     {
       "id": "crew-salvager",
-      "runtimePath": "public/assets/crew-salvager.png",
+      "runtimePath": "docs/assets/sources/crew-salvager-source.png",
       "assetType": "raster-spritesheet/png",
       "dimensions": "512x64 (8 cells at 64x64)",
       "source": "Original side-view industrial salvage-worker animation strip generated for this repository",
@@ -83,14 +83,14 @@
         "Pillow": "11.3.0",
         "character-animation-creator": "local skill snapshot 2026-08-15; pixel_snap.py sha256 39f322650d4987e33a93b0dadb39830ea7afc12a63e4b56bb738ec634bdc5512; validate_64_sheet.py sha256 701c2f698ae380a6e0c863761d7cfe58e40b261cd6c0386d4736471c8a076aed"
       },
-      "approvalState": "prototype-only",
+      "approvalState": "excluded",
       "reviewer": "Codex automated generation record",
       "reviewDate": "2026-08-15",
-      "notes": "Runtime vertical slice only; full role/state family and human clean-room review remain gated."
+      "notes": "Superseded historical source only; removed from the runtime by the key-art crew V3 replacement."
     },
     {
       "id": "crew-salvager-actions",
-      "runtimePath": "public/assets/crew-salvager-actions.png",
+      "runtimePath": "docs/assets/sources/crew-salvager-m2/prompts.md",
       "assetType": "raster-spritesheet/png",
       "dimensions": "512x448 (8x7 cells at 64x64; 52 used, 4 reserved)",
       "source": "Original industrial salvage-worker action family generated for this repository",
@@ -178,31 +178,201 @@
         "validate-crew-salvager-actions.mjs": "sha256 04851851805987de7f18d0e146aef853134523d5fd5f08e2f1ef2cc70e9d1b43",
         "character-animation-creator": "local skill snapshot 2026-08-15; pixel_snap.py sha256 39f322650d4987e33a93b0dadb39830ea7afc12a63e4b56bb738ec634bdc5512; validate_64_sheet.py sha256 701c2f698ae380a6e0c863761d7cfe58e40b261cd6c0386d4736471c8a076aed"
       },
+      "approvalState": "excluded",
+      "reviewer": "Codex automated generation and provenance record",
+      "reviewDate": "2026-08-16",
+      "notes": "Superseded historical generation record; the M2 atlas was removed from the runtime by the key-art crew V3 replacement."
+    },
+    {
+      "id": "crew-keyart-actions",
+      "runtimePath": "public/assets/crew-keyart-actions.png",
+      "assetType": "raster-spritesheet/png",
+      "dimensions": "512x448 (8x7 cells at 64x64; 52 used, 4 reserved)",
+      "source": "Original rounded key-art-style worker action family generated for this repository",
+      "creator": "OpenAI built-in image generation with user and Z13Labs direction",
+      "sourceUrl": null,
+      "sourceReferences": [
+        "public/assets/title-splash.png (visual-language reference only)",
+        "docs/assets/sources/crew-keyart-v3/prompts.md",
+        "docs/assets/sources/crew-keyart-v3/walk-source.png",
+        "docs/assets/sources/crew-keyart-v3/bash-source.png",
+        "docs/assets/sources/crew-keyart-v3/fall-source.png",
+        "docs/assets/sources/crew-keyart-v3/float-source.png",
+        "docs/assets/sources/crew-keyart-v3/shrug-source.png",
+        "docs/assets/sources/crew-keyart-v3/climb-source.png",
+        "docs/assets/sources/crew-keyart-v3/block-source.png",
+        "docs/assets/sources/crew-keyart-v3/build-source.png",
+        "docs/assets/sources/crew-keyart-v3/mine-source.png",
+        "docs/assets/sources/crew-keyart-v3/dig-source.png",
+        "docs/assets/sources/crew-keyart-v3/tread-source.png",
+        "docs/assets/sources/crew-keyart-v3/swim-source.png",
+        "docs/assets/sources/crew-keyart-v3/death-source.png"
+      ],
+      "licenceOrTermsStatus": "Generated-output terms and commercial originality require human review",
+      "originalHashSha256": {
+        "bash-source.png": "25ebe10819f72ab818e9c79b490d453de9d84228a3a0d5269ce69da2935e6ab4",
+        "block-source.png": "7129243569c7a6518a6e68eef60ae6c7622a91f64c62fca6b98004207d8bb04b",
+        "build-source.png": "bcfbd5b365c63b845b8ed6d889ef3818ccd15e52855775685ecbf6e9465636f7",
+        "climb-source.png": "d81b106dc8c485c12419d448fa63b3e2a49013ef9c9e806eb91240abf44df23d",
+        "death-source.png": "6d8fb69c5f222900edc9956e1467d04751d5966056f639d76607a0c9e75afa70",
+        "dig-source.png": "3468121d797376712c780039d05c4af8f3a94caf37935662e0e3f59ace6e2556",
+        "fall-source.png": "586b16b4fd4cfcfaab1519b4721e6a79398c5fa61ffedd937a2ada7571791092d",
+        "float-source.png": "cf6e0aa0c084bb13a40d697bc389ec6da42d9cb9bc9bfb227937f0324aef5d15",
+        "mine-source.png": "d676c0771cf9eff6a4160b9401198f06abe908e26bd753ddcdcda0d4d563d67a",
+        "shrug-source.png": "4c2d6a3b086c98839cd6e4f9b36aa176a7f2299535967b1f8bcaa2520bf6a927",
+        "swim-source.png": "5ba78866055f6a6af6f1c4af4f48c389724a6e0949d677cdcd847ba41cfff4f5",
+        "tread-source.png": "8069cea4534f3c97b2ac1497146e6d13a88bdf09d4bddc8333111e4521dcb3ad",
+        "walk-source.png": "3b0ffecf4e10b68e91f245c15e1a30dce44a92f6e56828dc23895de109be2d9d"
+      },
+      "identityReferenceHashSha256": "5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3",
+      "promptRecordHashSha256": "549aac403c6303370e4a0de78d38560f0efd5d8531a3fcd3de38327a3d1a45f1",
+      "normalizedHashSha256": {
+        "bash.png": "b25c4961f443c6cf0cfc757f70825e5c90455be492398f934711e92197858bbf",
+        "block.png": "20a3c3e3a6dfa534edbc3275878d21547c201f59ccad9d7df5bd91d45a3baff8",
+        "build.png": "721e06c6b15e038af67ebb229eafce9f0ac20e4b8a90eaedebba5662a4baa663",
+        "climb.png": "b44525fbd73e521f8a5241cbb93566da7f77125355883721e41aa4b93daa2c67",
+        "death.png": "c57bd2007de682814a8eed65c2f5ecc5ecbae0b4a4a0a3539ab1711a3d898055",
+        "dig.png": "099ba5a5c4565c41db710228c78c1d183297a526691bee2cd84505843305de84",
+        "fall.png": "3bbecdf6aef108e3d4bc0b6ae18263fec723f7d4d7aa91ef2ff918b989f11231",
+        "mine.png": "2d99385192ae20a787b9d58592e2bf014f7c25e93b4da496ff832ae32a08487e",
+        "shrug.png": "a5f0b7bfa119c8679825e16d6d4f548b703bdfec0526de0a14f2c968ed63707c",
+        "swim.png": "69f4384a76864742fefc91d51da5eb5f30a45ea95984170325d5365b61f29dec",
+        "tread.png": "78927759277ff0c8c199b2128c75f05d27c97a41419a3033b4dde99b0f382a9a",
+        "walk.png": "b33a1bd6536b754c0ef1eb03c77a37e16ce40f24b5c8cc546640bd3672f7f0b7"
+      },
+      "runtimeHashSha256": "6533b3ff7e0a933aef0a761ed55ccfa574b59b44548e5b86cf534f7a22dc6af7",
+      "generation": {
+        "prompt": "See prompts.md for the clean-room rounded-worker identity contract and the exact accepted action directions and output identifiers for Walk, Bash, Fall, Float, Shrug, Climb, Block, Build, Mine, Dig, Tread, Swim, and Death.",
+        "promptRecordStatus": "Turn-recorded shared-contract summary plus exact accepted action directions and output identifiers retained in-repository",
+        "model": "GPT Image 2.0 requested through OpenAI built-in image generation; exact backend model identifier not exposed",
+        "seed": null,
+        "settings": { "reference": "public/assets/title-splash.png at SHA-256 5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3; visual language only; no pixel tracing or slicing" }
+      },
+      "transformations": [
+        "Edge-connected neutral-background removal",
+        "Four equal source slots cropped to content per action",
+        "Shared-scale bottom-centre normalization into 64x64 cells",
+        "32-colour quantization and alpha threshold 24",
+        "Sub-48px body poses nearest-neighbour enlarged to the readability floor",
+        "Tread/swim lower bodies clipped at atlas row 48 and rendered upward to the live waterline",
+        "Generated parachute source reduced to a separately quantized canopy overlay",
+        "Twelve body/action strips plus four canopy frames packed into one 512x448 atlas",
+        "Runtime role colour applied as a render-only Phaser tint; HUD uses the same frame alpha as a flat CSS mask"
+      ],
+      "transformationCommands": [
+        "for action in walk bash fall shrug climb block build mine dig tread swim death; do python3 scripts/prepare-generated-sprite-strip.py --input docs/assets/sources/crew-keyart-v3/${action}-source.png --output /tmp/crew-keyart-${action}-normalized.png --frames 4 --cell 64 --padding 3; python3 character-animation-creator@local-2026-08-16/scripts/pixel_snap.py --input /tmp/crew-keyart-${action}-normalized.png --output docs/assets/sources/crew-keyart-v3/${action}.png --cell 64 --palette 32 --alpha-threshold 24 --pixelate-scale 1 --scale-mode nearest; done",
+        "python3 scripts/build-crew-salvager-actions.py --source-dir docs/assets/sources/crew-keyart-v3 --output public/assets/crew-keyart-actions.png",
+        "node scripts/validate-crew-salvager-actions.mjs public/assets/crew-keyart-actions.png"
+      ],
+      "transformationSource": "scripts/prepare-generated-sprite-strip.py; scripts/build-crew-salvager-actions.py; scripts/validate-crew-salvager-actions.mjs; game-character-64 pixel_snap.py",
+      "toolVersions": {
+        "Python": "3.9.6",
+        "Pillow": "11.3.0",
+        "prepare-generated-sprite-strip.py": "sha256 762a672a2e74a85be44ef81101ad0e71ca171c2f277578dd33882973ca7f5ed6",
+        "build-crew-salvager-actions.py": "sha256 0fa7e6cecc16cda3d031fe47f4a32bfade6ec55167320d2e0e052971c2bee754",
+        "validate-crew-salvager-actions.mjs": "sha256 30b8331b657c3e6c3f0a51ca00c5c440f429787e65839d904bb8bc9250e4bb05",
+        "character-animation-creator": "local skill snapshot 2026-08-16; pixel_snap.py sha256 39f322650d4987e33a93b0dadb39830ea7afc12a63e4b56bb738ec634bdc5512"
+      },
       "approvalState": "prototype-only",
       "reviewer": "Codex automated generation and provenance record",
       "reviewDate": "2026-08-16",
-      "notes": "Render-only M2 family. 917,504 decoded RGBA bytes; no splash pixels, simulation state, collision geometry, or seeded RNG in the pipeline. Human originality and commercial-rights review remains mandatory."
+      "notes": "Render/UI-only V3 family. 917,504 decoded RGBA bytes; the title splash was a style reference only and was not sliced or traced. Human originality and commercial-rights review remains mandatory."
+    },
+    {
+      "id": "terrain-tool-icons-v1",
+      "runtimePath": "public/assets/terrain-tools/water.png; public/assets/terrain-tools/sand.png; public/assets/terrain-tools/dirt.png; public/assets/terrain-tools/wood.png; public/assets/terrain-tools/fire.png; public/assets/terrain-tools/erase.png; public/assets/terrain-tools/bomb.png",
+      "assetType": "raster-icon-family/png",
+      "dimensions": "seven 64x64 RGBA icons",
+      "source": "Original living-terrain HUD icon family generated for this repository",
+      "creator": "OpenAI built-in image generation with user and Z13Labs direction",
+      "sourceUrl": null,
+      "sourceReferences": [
+        "public/assets/title-splash.png (visual-language reference only)",
+        "docs/assets/sources/terrain-tool-icons-v1/prompts.md",
+        "docs/assets/sources/terrain-tool-icons-v1/water-source.png",
+        "docs/assets/sources/terrain-tool-icons-v1/sand-source.png",
+        "docs/assets/sources/terrain-tool-icons-v1/dirt-source.png",
+        "docs/assets/sources/terrain-tool-icons-v1/wood-source.png",
+        "docs/assets/sources/terrain-tool-icons-v1/fire-source.png",
+        "docs/assets/sources/terrain-tool-icons-v1/erase-source.png",
+        "docs/assets/sources/terrain-tool-icons-v1/bomb-source.png"
+      ],
+      "licenceOrTermsStatus": "Generated-output terms and commercial originality require human review",
+      "originalHashSha256": {
+        "bomb-source.png": "2890414212ac1e67e71262e48917741f56f19b88b11a4fdd97c2d31319e96db1",
+        "dirt-source.png": "3e72eafe4d4726863aaad7e7dd2e6b35763679f7395c802540a948ea8685926c",
+        "erase-source.png": "08eb85a4ad50b271e5406ce89da91e6189701a405e89169a2636c22026e52a8b",
+        "fire-source.png": "72c7a1e4167756fb4fa64b2af17ba791f810a7bd3253b97163cbcc3f69495fd6",
+        "sand-source.png": "41d64ef1abd29f117e15d6aab612d4fb83666bfcefcf8ea7c8d1b4a2a92f1264",
+        "water-source.png": "d154604134b2178c79d34a3383cdd07d9cb36d3308683de4fd02f98f342d6f1b",
+        "wood-source.png": "9021c09309462d8f5a78e8b9582b431f914a0e143e031141439089eaf7248437"
+      },
+      "promptRecordHashSha256": "42cbb80f80e466455b2dd28619b2fbf265bef96278abbda53b17c3f9abaea141",
+      "runtimeHashSha256": {
+        "public/assets/terrain-tools/water.png": "19bbfb9a1a8c54286bb5ae3dcef303cd3ac8e3ff3a3f847904be73fd68a789ff",
+        "public/assets/terrain-tools/sand.png": "e48108df9a0ba72b8c114fb3bd17a9e57ea9481f4a31938b914f669b9ae08628",
+        "public/assets/terrain-tools/dirt.png": "3fb7b71c551e466f6c7973055d6b6577fdfef359e3e07d51cfc6fa406547b1c5",
+        "public/assets/terrain-tools/wood.png": "f600652f015dcd1d658d457dba1537f42ce9a143cec393877de35c1debfd8bab",
+        "public/assets/terrain-tools/fire.png": "a567774dc82e8ea7739261d611660457d51426c05d00e291d8861eabbc0328af",
+        "public/assets/terrain-tools/erase.png": "03f0ff3cbf9cdfb3fc6bafa3337432ac1c916234be5d27e9348833a413254a72",
+        "public/assets/terrain-tools/bomb.png": "db9b8f11abb1b85123bb823d4760f99e7cbd3b1516defbd566b94a37dc30c1db"
+      },
+      "generation": {
+        "prompt": "See prompts.md for the exact shared clean-room icon contract, per-tool subject directions, palette emphasis, and accepted output identifiers for Water, Sand, Dirt, Wood, Fire, Erase, and Bomb.",
+        "promptRecordStatus": "Exact shared prompt, accepted per-tool directions, and built-in output identifiers retained in-repository",
+        "model": "GPT Image 2.0 requested through OpenAI built-in image generation; exact backend model identifier not exposed",
+        "seed": null,
+        "settings": {
+          "reference": "public/assets/title-splash.png at SHA-256 5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3; visual language only; no pixel tracing or slicing"
+        }
+      },
+      "transformations": [
+        "Edge-connected neutral-background removal",
+        "Per-icon content crop and nearest-neighbour normalization into a centred 64x64 cell with 3px padding",
+        "24-colour quantization and binary alpha threshold 24",
+        "Runtime validation for 64x64 RGBA geometry, transparent background, palette budget, and 48px readability extent"
+      ],
+      "transformationCommands": [
+        "python3 scripts/build-terrain-tool-icons.py",
+        "node scripts/validate-terrain-tool-icons.mjs"
+      ],
+      "transformationSource": "scripts/prepare-generated-sprite-strip.py; scripts/build-terrain-tool-icons.py; scripts/validate-terrain-tool-icons.mjs",
+      "toolVersions": {
+        "Python": "3.9.6",
+        "Pillow": "11.3.0",
+        "prepare-generated-sprite-strip.py": "sha256 762a672a2e74a85be44ef81101ad0e71ca171c2f277578dd33882973ca7f5ed6",
+        "build-terrain-tool-icons.py": "sha256 ec7b341ba97c2c134d5b3174f237676c74bd0d2a74856532b711a1445ceae8d1",
+        "validate-terrain-tool-icons.mjs": "sha256 3d66a1835f4f9ef988f32f4a2c7adc2598295627a26676db1115998a9391caa2"
+      },
+      "approvalState": "prototype-only",
+      "reviewer": "Codex automated generation and provenance record",
+      "reviewDate": "2026-08-16",
+      "notes": "HUD-only icon family. Seven runtime icons decode to 114,688 RGBA bytes total. The title splash was used only as a style reference; human originality and commercial-rights review remains mandatory."
     },
     {
       "id": "presentation-slice-renderers",
-      "runtimePath": "src/render/CrewSpriteRenderer.ts; src/render/lemmingIdentity.ts; src/render/CampaignSetpieces.ts; src/render/WorldSetpieces.ts; src/render/motionPreference.ts; src/render/playerCamera.ts; src/lifecycle/BodyModalLock.ts; src/lifecycle/PortraitModalGate.ts; src/ui/TitleScreen.ts; src/ui/ResumeOverlay.ts; src/ui/Hud.ts",
+      "runtimePath": "src/render/CrewSpriteRenderer.ts; src/render/lemmingIdentity.ts; src/render/CampaignSetpieces.ts; src/render/WorldSetpieces.ts; src/render/motionPreference.ts; src/render/playerCamera.ts; src/render/crowdLayout.ts; src/scenes/GameScene.ts; src/lifecycle/BodyModalLock.ts; src/lifecycle/PortraitModalGate.ts; src/ui/TitleScreen.ts; src/ui/ResumeOverlay.ts; src/ui/Hud.ts; src/ui/ToolHoldLabel.ts; src/styles.css",
       "assetType": "procedural-visual-source",
       "source": "Repository-authored clean-room presentation modules",
       "creator": "Z13Labs/LemmingX contributors",
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
       "originalHashSha256": {
-        "src/render/CrewSpriteRenderer.ts": "c6b75e5f6f9262cad3e855d880efb384bc57aa08b7bf6df0a38fc4c2ce7c4915",
+        "src/render/CrewSpriteRenderer.ts": "3eb4ed189e3590a35f841bc7a81e8f9bb35fd804ca39fda797fafa67be4466a8",
         "src/render/lemmingIdentity.ts": "601aa68ca609deb0443ba5ccff0626f320a73e87082403c774023e5e9ea1a18b",
         "src/render/CampaignSetpieces.ts": "6d45ce68e1fd9184b1426d51ee1dde00976e0a2c7c83ece26b1110e5f746ed7c",
         "src/render/WorldSetpieces.ts": "31068acb1f9f255781a2e503b965bd288a3f3152d88ec55d97cd02728ac1ffbf",
         "src/render/motionPreference.ts": "07f9067a2288909de4bad31d0c62601d65b5b32e93c1397fc7442b3114203351",
         "src/render/playerCamera.ts": "457047ff9f0aa7b6baaf1478e7127e7d745001c2bedfd7e48d0e03cb44faa058",
+        "src/render/crowdLayout.ts": "c2eb16123b591e11883201c2bb0850940f6098aadc4cd3ece59f19cccdfd3ca1",
+        "src/scenes/GameScene.ts": "1a2848b1681b32deca8253d5214d5dc162a47f9eb6ef4d9251dab9285e1025a0",
         "src/lifecycle/BodyModalLock.ts": "e80dde4a2415531c1c8bc3bf54691a2802711f0bf473fec01a095c37d3817e0f",
         "src/lifecycle/PortraitModalGate.ts": "362df73f9254298221502ca6a495f7475d72a7121d766075dc51770b93315457",
         "src/ui/TitleScreen.ts": "fd854fef9a82605890bda2da7bb35c96cf1802df9747be09007f6a1842830279",
         "src/ui/ResumeOverlay.ts": "c043168d35664b4b5433621a96ecd4e384bab0ce73c3fa2cf411e45ab073d40d",
-        "src/ui/Hud.ts": "fca8eaf6e32042906c4561cdacf79e1dd3e418fb7988d8c5939a0ae4dac4d83c"
+        "src/ui/Hud.ts": "2604c63b3121da6f3e1320af937d5b878a36a2afd14835f3581038ad9eef68f1",
+        "src/ui/ToolHoldLabel.ts": "7566b2087c5ac69a4b1758c0ba4d7e4bdf0ec9a4b653047c913a0433c1d32820",
+        "src/styles.css": "dcf920ca5fc49f24ec24bbdccad17389e67b4a0f8f747ce09f7684464a02d124"
       },
       "runtimeHashSha256": null,
       "generation": null,
@@ -210,37 +380,43 @@
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-16",
-      "notes": "The modules are render/UI-only; raster-source clearance is tracked by the title-splash and crew-salvager records. M4 warning rigs remain above exact trap trigger footprints, reduced-motion freezes decorative presentation time without changing fixed simulation ticks, and M5 modal/camera ownership remains outside the headless simulation."
+      "notes": "The modules are render/UI-only; raster-source clearance is tracked by the title-splash, crew-keyart-actions and terrain-tool-icons records. M4 warning rigs remain above exact trap trigger footprints, reduced-motion freezes decorative presentation time without changing fixed simulation ticks, and M5 modal/camera ownership plus touch-hold labels remain outside the headless simulation."
     },
     {
       "id": "industrial-cavern-backdrop",
       "runtimePath": "public/assets/industrial-cavern-backdrop.png",
       "assetType": "raster-image/png",
       "dimensions": "1672x941",
-      "source": "AI-assisted generated image or derivative; exact originating output is not established",
-      "creator": "Unknown OpenAI image model with Z13Labs direction",
+      "source": "AI-assisted generated image with the exact raw output and prompt record retained in-repository",
+      "creator": "OpenAI built-in Image Generation tool with Z13Labs/Codex direction",
       "sourceUrl": null,
       "sourceReferences": [
-        "/Users/johnnyvenables/.codex/generated_images/019f5ca8-b79c-7661-a640-af49a4f825ee/exec-0807e2f0-f870-40a3-b366-6c2351bd8ea9.png",
-        "/Users/johnnyvenables/.codex/generated_images/019f5ca8-b79c-7661-a640-af49a4f825ee/exec-93024325-4371-42c8-9a80-3208bcb2677b.png",
-        "/Users/johnnyvenables/.codex/generated_images/019f5ca8-b79c-7661-a640-af49a4f825ee/exec-6919c0fc-9a39-43db-8aed-c9dca213ad9b.png"
+        "docs/assets/sources/industrial-cavern-backdrop-v2/raw-gpt-image.png",
+        "docs/assets/sources/industrial-cavern-backdrop-v2/prompts.md",
+        "public/assets/title-splash.png (visual-language reference only)"
       ],
-      "licenceOrTermsStatus": "unknown; no terms snapshot or commercial-use review recorded",
-      "originalHashSha256": null,
-      "runtimeHashSha256": "0fb0dc2f65996c976b983f7eac3ca84930dda0851676137cd4321da0fcbd42c1",
+      "licenceOrTermsStatus": "OpenAI generated-output terms and commercial-use/originality review remain pending human approval",
+      "originalHashSha256": "72eb31104b508723d8b9ddedbd3b49caec3254d7b519ae8e549519bdb201a664",
+      "runtimeHashSha256": "c166719da23f48d27818ef482e83e8e6a4d57eeec7d3527bd950c13bd4c421f5",
+      "promptRecordHashSha256": "6ac881794d6d60f49f33dc1df31be9942a92ea23f1174a02d0419ac82be764f1",
       "generation": {
-        "prompt": null,
-        "model": null,
+        "prompt": "Verbatim prompt retained in docs/assets/sources/industrial-cavern-backdrop-v2/prompts.md",
+        "model": "Codex built-in Image Generation tool; backend model identifier not exposed",
         "seed": null,
-        "settings": null
+        "settings": {
+          "outputIdentifier": "exec-c3a6e351-6dd1-4c7e-9433-5f45be3f5f69.png",
+          "reference": "public/assets/title-splash.png at SHA-256 5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3; visual language only; no pixel tracing or slicing"
+        }
       },
       "transformations": [
-        "Unknown processing between referenced concept outputs and the committed runtime PNG"
+        "Pillow 11.3.0 deterministic 192-colour median-cut quantization without dithering via scripts/build-industrial-backdrop.py"
       ],
-      "approvalState": "prototype-only",
+      "transformationSource": "scripts/build-industrial-backdrop.py",
+      "transformationSourceSha256": "97eacc7a1c3dbc80e1cd59381b1e847e8b4a75214f0c914a1b033d327e19c032",
+      "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
-      "reviewDate": "2026-08-12",
-      "notes": "The three referenced concept hashes do not match the runtime file. They are visual-direction evidence, not established byte provenance."
+      "reviewDate": "2026-08-16",
+      "notes": "Clean-room background-only direction explicitly excluded characters, portals, hatches, gameplay terrain, walkable silhouettes, logos, and scene-layout copying. The exact raw and runtime hashes are recorded; human originality and commercial-rights review are still required."
     },
     {
       "id": "procedural-crew-renderer",
@@ -269,7 +445,7 @@
       "creator": "Z13Labs/LemmingX contributors",
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
-      "originalHashSha256": "1de9397c65be6ef957f58f2f75baf18c9d2ec071d23c955c5f631ee0f86f43ce",
+      "originalHashSha256": "a9b8848998e4522231471f76e9b486ecc960018c03d6049dfe185b2b5b62fc78",
       "runtimeHashSha256": null,
       "generation": null,
       "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
@@ -285,7 +461,7 @@
       "creator": "Z13Labs/LemmingX contributors",
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
-      "originalHashSha256": "911843d23c8dc459034bc637e45d3d73ae20ebcdaa10109994d8a7fea2428007",
+      "originalHashSha256": "dca59ab3cd1699426059691a95cece393b83aa6cdec77162455b66c085110785",
       "runtimeHashSha256": null,
       "generation": null,
       "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
@@ -301,7 +477,7 @@
       "creator": "Z13Labs/LemmingX contributors",
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
-      "originalHashSha256": "d40bd921ccd8ecd011471a07f05e29bd1ce401262afdfc197c891682bf909d21",
+      "originalHashSha256": "4b1455c7fd1853435784f10e9f51fbcc56e24c21e22304efd111cfb0585fe7d2",
       "runtimeHashSha256": null,
       "generation": null,
       "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
@@ -334,7 +510,7 @@
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
       "originalHashSha256": {
-        "src/render/visualTheme.ts": "e10cac26712969bd22f440949616a61830197577dac6aa827bf387ae4a019ba4",
+        "src/render/visualTheme.ts": "43e58e9dcd645a9b49e44ed01666f4f5cba91a5467edcc42d8bd70340f45ac95",
         "src/render/lemmingIdentity.ts": "601aa68ca609deb0443ba5ccff0626f320a73e87082403c774023e5e9ea1a18b",
         "src/render/entityLabels.ts": "d598aa01f78fde1f0344c35fa7302a55a4829b6d71515e568d7917b84ba1ef1d"
       },

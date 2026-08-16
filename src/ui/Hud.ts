@@ -7,6 +7,7 @@ import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIde
 import { createElement as createLucideIcon, DoorOpen, Hand, Maximize2, Minus, Warehouse, type IconNode } from 'lucide';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
 import { CREW_SALVAGER_TEXTURE_PATH, salvagerHudFrame } from '../render/CrewSpriteRenderer';
+import { ToolHoldLabel } from './ToolHoldLabel';
 
 /** Terrain paint tools — hotkeys mirror the skill row on the bottom letter row. */
 export type TerrainBrush = 'water' | 'sand' | 'dirt' | 'wood' | 'fire' | 'erase' | 'bomb';
@@ -118,6 +119,13 @@ const CREW_SALVAGER_HUD_URL = new URL(
   document.baseURI,
 ).href;
 
+function terrainToolIconUrl(kind: TerrainBrush): string {
+  return new URL(
+    `${import.meta.env.BASE_URL}assets/terrain-tools/${kind}.png`,
+    document.baseURI,
+  ).href;
+}
+
 const SKILLS = ALL_SKILLS.map((skill) => ({
   skill,
   label: SKILL_DEFS[skill].label,
@@ -132,28 +140,16 @@ const WORLD_TOOLS: Record<WorldEntityKind, { label: string; icon: IconNode; colo
 };
 
 function crewIconMarkup(palette: CrewPalette | null, skill?: Skill): string {
-  const useSalvager = skill !== undefined;
-  const className = palette
-    ? `hud__crew-icon${useSalvager ? ' is-salvager-family' : ''}`
-    : 'hud__crew-icon is-random';
-  let style = palette
-    ? ` style="--crew-hair:${colorToCss(palette.hair)};--crew-body:${colorToCss(palette.body)};` +
-      `--crew-shade:${colorToCss(palette.bodyShade)};--crew-trim:${colorToCss(palette.trim)}"`
-    : '';
-  if (useSalvager) {
-    const atlasFrame = salvagerHudFrame(skill);
-    const column = atlasFrame % 8;
-    const row = Math.floor(atlasFrame / 8);
-    style = style
-      ? style.slice(0, -1) + `;--crew-atlas:url('${CREW_SALVAGER_HUD_URL}');` +
-        `--crew-atlas-x:${-column * 28}px;--crew-atlas-y:${-row * 28}px"`
-      : ` style="--crew-atlas:url('${CREW_SALVAGER_HUD_URL}');` +
-        `--crew-atlas-x:${-column * 28}px;--crew-atlas-y:${-row * 28}px"`;
-  }
+  const atlasFrame = skill ? salvagerHudFrame(skill) : 0;
+  const column = atlasFrame % 8;
+  const row = Math.floor(atlasFrame / 8);
+  const className = `hud__crew-icon is-keyart-family${palette ? '' : ' is-random'}`;
+  const color = palette ? colorToCss(palette.hair) :
+    'linear-gradient(90deg,#ffd24d 0 33%,#ff7aa8 33% 66%,#2ee6c8 66%)';
+  const style = ` style="--crew-color:${color};--crew-atlas:url('${CREW_SALVAGER_HUD_URL}');` +
+    `--crew-atlas-x:${-column * 32}px;--crew-atlas-y:${-row * 32}px"`;
   const skillData = skill ? ` data-skill="${skill}"` : '';
-  return `<span class="${className}"${style}${skillData} aria-hidden="true">` +
-    '<span class="hud__crew-hair"></span><span class="hud__crew-head"></span>' +
-    '<span class="hud__crew-body"></span><span class="hud__crew-feet"></span></span>';
+  return `<span class="${className}"${style}${skillData} aria-hidden="true"></span>`;
 }
 
 function formatTime(ms: number): string {
@@ -172,6 +168,7 @@ export class Hud {
   private readonly missionPrompt: HTMLParagraphElement;
   private readonly actionCue: HTMLDivElement;
   private readonly dock: HTMLDivElement;
+  private readonly toolHoldLabel: ToolHoldLabel;
   private readonly dragHandle: HTMLButtonElement;
   private readonly collapseButton: HTMLButtonElement;
   private collapsed = false;
@@ -256,6 +253,7 @@ export class Hud {
     this.audio = audio ?? { musicMuted: true, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
     this.root.className = this.playerBuild ? 'hud hud--player' : 'hud';
+    this.toolHoldLabel = new ToolHoldLabel(this.root);
 
     // --- Top status bar: level name + live counters + timer ---
     this.statusBar = document.createElement('div');
@@ -274,7 +272,7 @@ export class Hud {
     this.missionObjective = this.mission.querySelector('.hud__mission-objective') as HTMLElement;
     this.missionPrompt = this.mission.querySelector('.hud__mission-prompt') as HTMLParagraphElement;
     this.missionHint = this.mission.querySelector('.hud__mission-hint') as HTMLParagraphElement;
-    const startLabel = this.playerBuild && IS_MOBILE_DEVICE ? 'Play fullscreen' : 'Start run';
+    const startLabel = this.playerBuild && IS_MOBILE_DEVICE ? 'Play' : 'Start run';
     const startButton = this.makeButton(startLabel, 'Start run (Space)', () => events.onStart?.());
     startButton.className = 'hud__btn hud__primary hud__mission-start';
     this.mission.append(startButton);
@@ -329,6 +327,7 @@ export class Hud {
       button.type = 'button';
       button.title = `${item.label} (${item.hotkey})`;
       button.setAttribute('aria-label', item.label);
+      this.toolHoldLabel.attach(button, item.label);
       button.dataset.skill = item.skill;
       button.dataset.dragSource = String(this.spawnMode === 'tray-drop');
       button.innerHTML =
@@ -358,6 +357,7 @@ export class Hud {
     this.randomButton.type = 'button';
     this.randomButton.title = 'Queue random crew type';
     this.randomButton.setAttribute('aria-label', 'Queue random crew type');
+    this.toolHoldLabel.attach(this.randomButton, 'Random');
     this.randomButton.innerHTML =
       '<span class="hud__hotkey">?</span>' + crewIconMarkup(null) +
       '<span class="hud__tool-name">Random</span><span class="hud__stock">↧</span>';
@@ -386,6 +386,7 @@ export class Hud {
       button.dataset.dragSource = 'true';
       button.title = `Drag ${def.label} into the world, or click then place`;
       button.setAttribute('aria-label', def.label);
+      this.toolHoldLabel.attach(button, def.label);
       const icon = createLucideIcon(def.icon);
       icon.setAttribute('width', '20');
       icon.setAttribute('height', '20');
@@ -424,13 +425,12 @@ export class Hud {
       button.type = 'button';
       button.title = `${tool.label} (${tool.hotkey.toUpperCase()})`;
       button.setAttribute('aria-label', tool.label);
+      this.toolHoldLabel.attach(button, tool.label);
       button.innerHTML =
         `<span class="hud__hotkey">${tool.hotkey.toUpperCase()}</span>` +
-        `<span class="hud__swatch"></span>` +
+        `<img class="hud__terrain-icon" src="${terrainToolIconUrl(tool.kind)}" alt="" draggable="false">` +
         `<span class="hud__tool-name">${tool.label}</span>` +
         `<span class="hud__stock">0</span>`;
-      (button.querySelector('.hud__swatch') as HTMLSpanElement).style.background =
-        `#${tool.color.toString(16).padStart(6, '0')}`;
       button.addEventListener('click', () => events.onSelectBrush?.(tool.kind));
       this.terrainBar.append(button);
       this.terrainButtons.set(tool.kind, button);
@@ -588,6 +588,7 @@ export class Hud {
       this.dock,
       this.queueBar,
       this.minimap,
+      this.toolHoldLabel.element,
     ]
       .filter((element) => !element.hidden && element.getClientRects().length > 0)
       .map((element) => element.getBoundingClientRect());
@@ -1011,6 +1012,7 @@ export class Hud {
     window.removeEventListener('resize', this.handleViewportResize);
     window.removeEventListener('pointermove', this.handleTrayPointerMove);
     window.removeEventListener('pointerup', this.handleTrayPointerUp);
+    this.toolHoldLabel.destroy();
     this.root.remove();
   }
 }

@@ -64,7 +64,9 @@ function captureLevel1() {
     const woodY = minMaterialY(sim, MATERIAL.wood);
     if (milestones.woodLiftMs === null && woodY < 504) milestones.woodLiftMs = elapsed;
     if (milestones.walkableBridgeMs === null && woodY <= 444) milestones.walkableBridgeMs = elapsed;
-    if (milestones.firstCrossingMs === null && sim.state.lemmings.some(({ x }) => x >= 726)) milestones.firstCrossingMs = elapsed;
+    // Match the solvability guard's first post-bridge crossing marker. The old
+    // 726px threshold measured the exit approach, not the ten-second material chain.
+    if (milestones.firstCrossingMs === null && sim.state.lemmings.some(({ x }) => x >= 540)) milestones.firstCrossingMs = elapsed;
     if (milestones.firstSaveMs === null && sim.state.saved > initialSaved) milestones.firstSaveMs = elapsed;
   }
   if (milestones.assignmentMs !== null && sim.state.outcome === 'won') {

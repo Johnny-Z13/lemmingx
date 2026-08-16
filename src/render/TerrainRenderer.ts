@@ -129,6 +129,7 @@ function drawTerrainChunk(
   chunk: TerrainDirtyChunk,
 ): ChunkDrawResult {
   const fireLights: WorldLightSource[] = [];
+  let firstFireCell: { x: number; y: number; width: number; height: number } | null = null;
   let animated = false;
   const cellSize = terrain.cellSize;
 
@@ -140,9 +141,20 @@ function drawTerrainChunk(
       const y = cellY * cellSize;
       const width = Math.min(cellSize, terrain.width - x);
       const height = Math.min(cellSize, terrain.height - y);
+      if (material === MATERIAL.fire && !firstFireCell) firstFireCell = { x, y, width, height };
       drawTerrainCell(graphics, terrain, timeMs, cellX, cellY, x, y, width, height, material, fireLights);
       if (material === MATERIAL.water || material === MATERIAL.fire) animated = true;
     }
+  }
+
+  if (firstFireCell && fireLights.length === 0) {
+    fireLights.push({
+      x: firstFireCell.x + firstFireCell.width / 2,
+      y: firstFireCell.y + firstFireCell.height / 2,
+      color: WORLD_THEME.fire,
+      radius: 34,
+      strength: 0.7,
+    });
   }
 
   return { animated, fireLights };
@@ -171,11 +183,16 @@ function drawTerrainCell(
   const hash = visualHash(cellX, cellY);
 
   if (material === MATERIAL.steel) {
-    graphics.fillStyle(hash % 7 === 0 ? WORLD_THEME.steelLight : WORLD_THEME.steel, 1);
+    const steelTone = hash % 31 === 0
+      ? WORLD_THEME.steelRust
+      : hash % 7 === 0
+        ? WORLD_THEME.steelMid
+        : WORLD_THEME.steel;
+    graphics.fillStyle(steelTone, 1);
     graphics.fillRect(x, y, width, height);
     graphics.fillStyle(WORLD_THEME.steelDark, 0.98);
-    if (cellX % 4 === 0) graphics.fillRect(x, y, 1, height);
-    if (cellY % 4 === 3) graphics.fillRect(x, y + height - 1, width, 1);
+    if (cellX % 6 === 0) graphics.fillRect(x, y, 1, height);
+    if (cellY % 5 === 4) graphics.fillRect(x, y + height - 1, width, 1);
     if (openLeft) graphics.fillRect(x, y, 1, height);
     if (openRight) graphics.fillRect(x + width - 1, y, 1, height);
     if (exposed) {
@@ -183,7 +200,7 @@ function drawTerrainCell(
       graphics.fillRect(x, y, width, 1);
     }
     if (hash % 11 === 0) {
-      graphics.fillStyle(0xc8d1d9, 0.95);
+      graphics.fillStyle(0xdce9f3, 0.95);
       graphics.fillRect(x + Math.min(1, width - 1), y + Math.min(1, height - 1), 1, 1);
     }
     return;
@@ -199,7 +216,7 @@ function drawTerrainCell(
     graphics.fillRect(x, y, width, height);
     if (exposed) {
       graphics.fillStyle(WORLD_THEME.sandLight, 1);
-      graphics.fillRect(x, y, width, 1);
+      graphics.fillRect(x, y, width, Math.max(1, height / 2));
     } else if (cellY % 5 === 0 && hash % 2 === 0) {
       graphics.fillStyle(WORLD_THEME.sandDark, 0.45);
       graphics.fillRect(x, y + height - 1, width, 1);
@@ -208,7 +225,7 @@ function drawTerrainCell(
   }
 
   if (material === MATERIAL.wood) {
-    graphics.fillStyle(hash % 6 === 0 ? WORLD_THEME.woodLight : WORLD_THEME.wood, 1);
+    graphics.fillStyle(hash % 11 === 0 ? WORLD_THEME.woodGold : hash % 6 === 0 ? WORLD_THEME.woodLight : WORLD_THEME.wood, 1);
     graphics.fillRect(x, y, width, height);
     graphics.fillStyle(WORLD_THEME.woodDark, 0.95);
     if (cellY % 3 === 2) graphics.fillRect(x, y + height - 1, width, 1);
@@ -228,7 +245,7 @@ function drawTerrainCell(
     const flicker = (cellX + cellY + Math.floor(timeMs / 80)) % 3;
     graphics.fillStyle(flicker === 0 ? WORLD_THEME.fireHot : flicker === 1 ? WORLD_THEME.fire : 0xff3d21, 0.98);
     graphics.fillRect(x, y, width, height);
-    graphics.fillStyle(0xfff2b0, 0.82);
+    graphics.fillStyle(WORLD_THEME.fireCore, 0.88);
     const coreWidth = Math.max(1, width - 2);
     graphics.fillRect(x + Math.min(1, width - 1), y, coreWidth, Math.max(1, height / 2));
     if (fireLights.length < MAX_FIRE_LIGHTS && hash % 13 === 0) {
@@ -239,15 +256,18 @@ function drawTerrainCell(
 
   if (material === MATERIAL.water) {
     graphics.fillStyle(WORLD_THEME.waterDeep, 0.92);
-    graphics.fillRect(x - 0.5, y, width + 1, height + 0.5);
-    graphics.fillStyle(WORLD_THEME.water, below === MATERIAL.water ? 0.22 : 0.38);
-    graphics.fillRect(x, y + Math.max(1, height / 2), width, Math.max(1, height / 2));
+    graphics.fillRect(x, y, width, height);
+    graphics.fillStyle(WORLD_THEME.water, below === MATERIAL.water ? 0.3 : 0.5);
+    const lowerOffset = Math.floor(height / 2);
+    graphics.fillRect(x, y + lowerOffset, width, height - lowerOffset);
     if (above !== MATERIAL.water) {
-      const wave = (cellX + Math.floor(timeMs / MATERIAL_ANIMATION_MS)) % 4 === 0 ? 1 : 0;
+      const requestedWave = (cellX + Math.floor(timeMs / MATERIAL_ANIMATION_MS)) % 4 === 0 ? 1 : 0;
+      const wave = Math.min(requestedWave, Math.max(0, height - 1));
+      const surfaceHeight = Math.min(height - wave, Math.max(1, height / 3));
       graphics.fillStyle(WORLD_THEME.waterLight, 0.96);
-      graphics.fillRect(x, y + wave, width, Math.max(1, height / 3));
+      graphics.fillRect(x, y + wave, width, surfaceHeight);
       if (hash % 5 === 0) {
-        graphics.fillStyle(0xc4f5ff, 0.7);
+        graphics.fillStyle(WORLD_THEME.waterFoam, 0.82);
         graphics.fillRect(x + Math.min(1, width - 1), y + wave, Math.max(1, width / 2), 1);
       }
     }
@@ -255,14 +275,13 @@ function drawTerrainCell(
   }
 
   const depth = y / terrain.height;
-  const base = depth > 0.78 ? WORLD_THEME.dirtDeep : WORLD_THEME.dirt;
-  graphics.fillStyle(hash % 8 === 0 ? WORLD_THEME.dirtSpeck : base, 1);
+  const base = depth > 0.78
+    ? WORLD_THEME.dirtDeep
+    : hash % 7 === 0
+      ? WORLD_THEME.dirtMid
+      : WORLD_THEME.dirt;
+  graphics.fillStyle(base, 1);
   graphics.fillRect(x, y, width, height);
-
-  if (cellY % 6 === 5 && hash % 3 === 0) {
-    graphics.fillStyle(WORLD_THEME.dirtDeep, 0.42);
-    graphics.fillRect(x, y + height - 1, width, 1);
-  }
   if (openLeft || openRight) {
     graphics.fillStyle(WORLD_THEME.dirtDeep, 0.78);
     const edgeX = openLeft ? x : x + width - 1;
@@ -271,10 +290,6 @@ function drawTerrainCell(
   if (exposed) {
     graphics.fillStyle(hash % 4 === 0 ? WORLD_THEME.mossLight : WORLD_THEME.moss, 1);
     graphics.fillRect(x, y, width, Math.max(1, height / 2));
-    if (hash % 11 === 0) {
-      graphics.fillStyle(WORLD_THEME.mossLight, 0.95);
-      graphics.fillRect(x + (hash % Math.max(1, width)), y - 2, 1, 2);
-    }
   }
 
   if (material === MATERIAL.oneWayLeft || material === MATERIAL.oneWayRight) {

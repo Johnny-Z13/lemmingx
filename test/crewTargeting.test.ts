@@ -86,12 +86,12 @@ describe('selectCrewTarget', () => {
     }
   });
 
-  it('assigns visible tool tips, hooks, and packs to their owner in either direction and draw order', () => {
+  it('assigns generated tool tips, climb limbs, and canopies to their visible owner', () => {
     const cases = [
       { role: 'basher', offset: (direction: number) => ({ x: direction * 22, y: -8 }) },
       { role: 'builder', offset: (direction: number) => ({ x: direction * 20, y: -1 }) },
       { role: 'climber', offset: (direction: number) => ({ x: direction * 15, y: -20 }) },
-      { role: 'floater', offset: (direction: number) => ({ x: -direction * 12, y: -9 }) },
+      { role: 'floater', offset: () => ({ x: 0, y: -35 }) },
     ] as const;
 
     for (const reverse of [false, true]) {
@@ -100,9 +100,13 @@ describe('selectCrewTarget', () => {
           const lemmings = Array.from({ length: 10 }, (_, index) => crew(index + 1, 100, 100));
           const owner = lemmings[4];
           owner.direction = direction;
-          if (testCase.role === 'basher' || testCase.role === 'builder') owner.state = testCase.role;
-          if (testCase.role === 'climber') owner.isClimber = true;
-          if (testCase.role === 'floater') owner.isFloater = true;
+          if (testCase.role === 'basher' || testCase.role === 'builder' || testCase.role === 'climber') {
+            owner.state = testCase.role;
+          }
+          if (testCase.role === 'floater') {
+            owner.state = 'faller';
+            owner.isFloater = true;
+          }
           const renderOrder = reverse ? [...lemmings].reverse() : lemmings;
           const display = layoutLemmingCrowds(renderOrder, 0, SALVAGER_CROWD_SPACING);
           const point = display.get(owner.id)!;

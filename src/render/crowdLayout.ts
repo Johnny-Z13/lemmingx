@@ -7,8 +7,8 @@ export interface LemmingDisplayPoint {
 
 /** Legacy procedural spacing remains available to isolated renderer tests. */
 export const CROWD_SPACING = 7.5;
-/** The full salvage family exposes substantial body/gear area in dense crowds. */
-export const SALVAGER_CROWD_SPACING = 16;
+/** The generated rounded family keeps at least half of each body exposed. */
+export const SALVAGER_CROWD_SPACING = 20;
 const CROWD_JOIN_X = 7;
 const CROWD_JOIN_Y = 4;
 const JITTER_X = 0.2;
@@ -24,6 +24,7 @@ export function layoutLemmingCrowds(
   lemmings: readonly Lemming[],
   timeMs: number,
   spacing = CROWD_SPACING,
+  bounds?: { readonly minX: number; readonly maxX: number },
 ): Map<number, LemmingDisplayPoint> {
   const points = new Map<number, LemmingDisplayPoint>();
   const live = lemmings.filter((lemming) => lemming.state !== 'dead' && lemming.state !== 'exited');
@@ -64,14 +65,29 @@ export function layoutLemmingCrowds(
     const meanJitterX = rawJitterX.reduce((sum, value) => sum + value, 0) / crowd.length;
     const meanJitterY = rawJitterY.reduce((sum, value) => sum + value, 0) / crowd.length;
 
-    crowd.forEach((lemming, index) => {
+    const slots = crowd.map((lemming, index) => {
       const jitterX = rawJitterX[index] - meanJitterX;
       const jitterY = rawJitterY[index] - meanJitterY;
-      points.set(lemming.id, {
+      return {
+        lemming,
         x: centerX + (index - (crowd.length - 1) / 2) * spacing + jitterX,
         y: lemming.y + jitterY,
-      });
+      };
     });
+    let shiftX = 0;
+    if (bounds) {
+      const left = Math.min(...slots.map(({ x }) => x));
+      const right = Math.max(...slots.map(({ x }) => x));
+      const available = bounds.maxX - bounds.minX;
+      if (right - left > available) {
+        shiftX = bounds.minX + available / 2 - (left + right) / 2;
+      } else if (left < bounds.minX) {
+        shiftX = bounds.minX - left;
+      } else if (right > bounds.maxX) {
+        shiftX = bounds.maxX - right;
+      }
+    }
+    for (const { lemming, x, y } of slots) points.set(lemming.id, { x: x + shiftX, y });
   }
 
   for (const lemming of lemmings) {

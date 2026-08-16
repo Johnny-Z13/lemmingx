@@ -6,7 +6,7 @@ The player should feel clever and protective while a tiny, brave salvage crew
 survives a huge living machine-world that the player reshapes.
 
 The title splash is a mood and hierarchy reference, not a sprite source. Runtime
-art must use an original industrial salvage-crew chassis, deep navy machinery,
+art must use an original compact rounded worker family, deep navy machinery,
 warm amber practical lights, cyan water/exit energy, and strong material edges.
 Crew, hazards, editable materials, hatch, and exit always outrank decoration.
 
@@ -22,7 +22,7 @@ or advance the CA/release random streams.
 |---|---|---|
 | M0 — contract and provenance | Style contract, runtime/source hashes, prompt/model record, 907×510, 800×450, and 844×390 baselines | Complete for technical rollout; human clearance remains M7 |
 | M1 — character vertical slice | Walker + Basher cached atlas; 22–25 CSS-px mobile read; stable feet; touch selection; no sim changes; ≤10% frame regression | Complete in `cfca845`; retained as the rollback boundary |
-| M2 — character family | All ten roles and every gameplay state readable by silhouette/prop and in HUD; compact declared atlas; restart memory soak | Complete; three-agent technical GO after adversarial review |
+| M2 — character family | All ten capabilities and every gameplay state readable by dominant colour/action silhouette; compact declared atlas; restart memory soak | Complete; V3 replacement accepted in compiled mobile-sized visual QA |
 | M3 — terrain/material slice | Dirty-region/chunk strategy precedes richer mutable faces; six materials remain truthful and deterministic; Level 2 + Sand Lab perf | Complete; three-agent technical GO after adversarial review |
 | M4 — setpieces and light | Hatch/exit/hazards recognized without labels; lighting never masks crew/material boundaries; reduced motion works | Complete; three-agent technical GO after adversarial review |
 | M5 — UI and camera | Required phone/tablet/desktop shapes; 48px controls; no crew occlusion; minimap/manual ownership and grace preserved | Complete; three-agent technical GO after adversarial review |
@@ -90,25 +90,26 @@ clean-room and provenance review.
 
 ## Current M2 evidence (2026-08-16)
 
-- One 512×448 atlas holds 52 used 64px cells plus four reserved cells. It is
-  146,192 bytes transferred and 917,504 bytes decoded RGBA. The in-repository
+- One 512×448 atlas holds 52 used 64px cells plus four reserved cells. The V3
+  runtime is 108,692 bytes transferred and 917,504 bytes decoded RGBA. The in-repository
   zero-dependency validator checks all 48 body frames at a minimum 48px alpha
   extent, stable non-water/water anchors, and at most 32 colours per authored
   four-frame strip (including the separately quantized canopy).
-- Ten roles share the original visor-and-hardhat salvage chassis, with broad
-  role-coloured workwear and body-scale hooks, chute pack, hazard sash,
-  shields, plank/rivet kit, drill, pick, spade, or swim tank. The bomber uses
-  five abstract warning lamps rather than a numeric countdown. Permanent and
-  queued roles retain the same body-scale identifiers.
-- The HUD fits each complete 64px source cell into a 28×28 view instead of
-  cropping its top/right edges. A sandbox-only QA roster captured all nine
-  cards together at 844×390; shipped roster filtering is unchanged.
-- The full renderer uses 16-world-px horizontal crowd spacing on every level.
-  A ten-role Level-9 crowd remains grounded, the unit targeting lane selects
-  every ID from an off-centre visible-body tap. Render-only hit regions follow
-  the same uniform/gear front order, including both-direction drill/plank tips,
-  hooks, and chute packs; a browser hover on a crowded Basher drill at +22px
-  selected its exact owner rather than the nearer neighbour.
+- All states share one generated compact rounded worker identity derived from
+  the title art's shape language without slicing or tracing it: one bold body,
+  dark face window and two bright eyes. There is no hard-hat brim, chest
+  harness, cross, stripe, role badge or procedural uniform panel. Phaser tint
+  makes the whole body colour—not a micro-glyph—the capability identifier;
+  action tools remain part of the generated frames.
+- The HUD uses the same authored frame alpha as a flat 32×32 CSS mask filled by
+  the capability colour. It has no inset portrait rim, trim bar, bomber dot or
+  floater arc. The complete nine-capability roster is legible together at
+  844×390 in `output/playwright/crew-v3/level8-planning-844x390.png`.
+- The renderer paints the 58px source at 0.72 world scale (about 30 CSS px in
+  the 844×390 proxy) and uses 20-world-px render-only crowd spacing. Dense fans
+  shift inside measured world margins instead of clipping at a hatch near the
+  level edge; simulation coordinates remain untouched. Generated action-tool
+  and canopy hit regions preserve off-centre selection and front order.
 - Tread/swim alpha ends at the live waterline (`lemming.y + 2`) and the render
   overlay adds only a ripple/wake. A Level-2 live-cell capture shows both poses
   partially submerged without opaque legs painting over the water.
@@ -119,10 +120,12 @@ clean-room and provenance review.
   textures and each fresh level returned to 0/0 without child growth. Raw
   method and counts are in
   `output/playwright/m2-worst-case-render-evidence.json` (ignored QA evidence).
-- The complete deterministic/unit/solvability suite passes 186 tests. The
-  atlas validator, compiled player, CrazyGames verifier, final mobile capture,
-  and three-agent adversarial re-review are rerun after every candidate fix;
-  this section is evidence for review, not a release-clearance claim.
+- The complete deterministic/unit/solvability suite passes 207 tests. The
+  52-frame and terrain-icon validators, production/CrazyGames builds and
+  compiled 844×390 player pass. The current proof artifact is fourteen files /
+  4,824,451 bytes with SHA-256
+  `c60453816081f0b8693d7ad26440de9cffd700552d0bcc43dd867ba0555dcdfd`;
+  fourteen human provenance decisions still keep it proof-only.
 
 ## Current M3 evidence (2026-08-16)
 
@@ -311,13 +314,27 @@ clean-room and provenance review.
 
 ## Current M7 technical evidence (2026-08-16)
 
-- The exact technical candidate passes 203 tests in 27 files, all ten scripted
-  campaign solutions, TypeScript, the 52-frame/13-strip atlas validator,
-  CrazyGames build, proof verifier and diff check. Its eight-file payload is
-  4,856,906 uncompressed bytes with SHA-256
-  `71cd55251c9679854e0b69849e85e7dadd323798d9d712dc854da1c24a11eb96`,
+- The exact technical candidate passes 207 tests in 28 files, all ten scripted
+  campaign solutions, TypeScript, the 52-frame/13-strip atlas validator, the
+  seven-icon terrain-tool validator, CrazyGames build, proof verifier and diff
+  check. Its fourteen-file payload is 4,824,451 uncompressed bytes with SHA-256
+  `c60453816081f0b8693d7ad26440de9cffd700552d0bcc43dd867ba0555dcdfd`,
   below the 20MB release budget. The verifier still reports 14 unresolved human
   provenance decisions and therefore remains proof-only.
+- Water, Sand, Dirt, Wood, Fire, Erase and Bomb now use seven original
+  generated 64×64 pixel-art objects instead of colour swatches. Runtime PNGs
+  are centred, binary-alpha, at most 24 colours and render at 28 CSS px without
+  intercepting the 48px button target. The compiled 844×390 player loaded all
+  seven relative paths at natural 64×64 resolution; both ends of the scrollable
+  rail and a live Bomb selection are captured under
+  `output/playwright/terrain-icons/`.
+- Touch and pen holds on Crew, Terrain and prototype World tools reveal one
+  capability word after 420ms without adding permanent ribbon text. An 8px
+  move cancels into the existing scroll/drag path; releasing a revealed label
+  suppresses only that synthesized click, while the next ordinary tap remains
+  selectable. The bubble clamps inside phone edges, participates in camera
+  occlusion reporting, respects reduced motion, and is captured at 844×390 in
+  `output/playwright/hold-labels/compiled-{bomber,digger}-hold-844x390.png`.
 - A data-URL favicon prevents the browser shell from issuing the previous
   `/favicon.ico` request. Fresh compiled title-to-game smoke tests at 844×390
   Mobile and 907×510 Desktop recorded zero failed requests, HTTP errors,
@@ -348,3 +365,47 @@ clean-room and provenance review.
   intentionally dirty until the user authorizes the milestone commit and push.
   The exact device journeys, sign-off fields, clearance records, and post-commit
   binding sequence are consolidated in `docs/m7-release-signoff.md`.
+
+## Environment visual gauntlet evidence (2026-08-16)
+
+- The user-approved three-round card is retained in
+  `docs/environment-visual-gauntlet.md`. The title splash was used only for
+  transferable hierarchy: deep navy negative space, selective gold/cyan/orange
+  saturation, warm practical pools and layered industrial depth. No splash
+  pixels, characters, scene geometry or portal silhouettes were sliced or
+  traced into gameplay.
+- The one existing 1672×941 backdrop was replaced in place by an original
+  generated industrial cavern. The 896,688-byte runtime PNG decodes to about
+  6MiB RGBA, so the scene still owns exactly one backdrop texture. Exact raw,
+  prompt, builder and runtime hashes are fail-closed in the provenance inventory;
+  generation is not represented as reproducible because the backend model and
+  seed were not exposed.
+- Foreground dirt, steel, sand, water, wood and fire now use a deeper, more
+  saturated palette with deterministic coordinate variation and live-cell
+  edge cues. Bounds coverage exercises rectangles and one-way triangles for
+  every material across 1px, 2px and 3px partial rows, including both animated
+  water wave states. Cached fire erase proves geometry, animation membership
+  and fallback light state all clear on the production chunk path.
+- Practical lighting remains one additive depth-6 Graphics batch below
+  setpieces and crew, capped at 28 sources, three fills per source and 96 world
+  pixels. The final tier shapes land horizontally on nearby terrain without a
+  global grade, filter, bloom, RenderTexture or extra resident object.
+- The sealed critic preferred the richer candidate in both reversed display
+  orders at medium confidence. Independent character/readability, world-truth
+  and production/performance reviews returned final technical GO after mixed
+  roles, selected gear, hydraulic timber/water, trap contact, active fire and
+  partial-cell/erase edge cases were made observable.
+- The exact final suite passes 214 tests in 29 files, both runtime-asset
+  validators, deterministic Levels 1–3 proof, TypeScript/Vite compilation,
+  CrazyGames build and proof verifier. The artifact is 14 files / 4,376,579
+  bytes with SHA-256
+  `f45716fb04c96d43456aa4ba97b79dfc9041c20582f96ca7dd3b9642f3d3d047`.
+- A same-context 844×390 Level-10 recipe measured candidate p95 at 26.8ms at
+  1× and 26.9ms at 3× versus the old-backdrop baseline at 27.0/27.0ms. The
+  0.993/0.996 ratios pass the ≤1.10 gate with zero interval above 50ms. Raw
+  recipe, source/artifact/screenshot hashes and final results are retained in
+  `output/playwright/environment-gauntlet/environment-round-2-evidence.json`.
+- No `src/sim`, level geometry, camera policy, UI layout or RNG boundary changed.
+  Technical merge is green; public release remains blocked on the same 14 human
+  provenance decisions, public-name review and real iPhone/iPad Safari hardware
+  touch/thermal/memory testing.

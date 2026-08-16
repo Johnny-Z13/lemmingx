@@ -33,7 +33,7 @@ function crew(overrides: Partial<Lemming> = {}): Lemming {
   };
 }
 
-describe('salvage crew sprite family', () => {
+describe('key-art crew sprite family', () => {
   it('maps every live state into its authored four-frame atlas range', () => {
     const starts = {
       walker: 0,
@@ -99,6 +99,7 @@ describe('salvage crew sprite family', () => {
       setOrigin() { return this; }
       setScale() { return this; }
       setFrame() { return this; }
+      setTint() { return this; }
       setFlipX() { return this; }
       setPosition() { return this; }
       setDepth() { return this; }

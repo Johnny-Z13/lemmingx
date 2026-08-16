@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pack the authored salvage-crew action strips into one compact Phaser atlas."""
+"""Pack the generated key-art crew action strips into one compact Phaser atlas."""
 
 from __future__ import annotations
 
@@ -137,8 +137,8 @@ def build_canopy_strip(source: Path, repo_root: Path) -> Image.Image:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-dir", default="docs/assets/sources/crew-salvager-m2")
-    parser.add_argument("--output", default="public/assets/crew-salvager-actions.png")
+    parser.add_argument("--source-dir", default="docs/assets/sources/crew-keyart-v3")
+    parser.add_argument("--output", default="public/assets/crew-keyart-actions.png")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
