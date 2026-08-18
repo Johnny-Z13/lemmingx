@@ -109,7 +109,7 @@ const metadata = {
   branch: git(['branch', '--show-current']),
   commit: git(['rev-parse', 'HEAD']),
   dirty: worktreeStatus.length > 0,
-  excludedUserWork: worktreeStatus.length > 0
+  workingTreePaths: worktreeStatus.length > 0
     ? worktreeStatus.split('\n').map((line) => line.slice(3))
     : [],
   fileCount: files.length,

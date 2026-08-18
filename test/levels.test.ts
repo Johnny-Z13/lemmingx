@@ -40,7 +40,7 @@ function run(
 function expectWon(sim: GameSimulation): void {
   expect(sim.state.outcome).toBe('won');
   expect(sim.state.saved).toBeGreaterThanOrEqual(sim.level.targetSaved);
-  expect(sim.state.timeRemainingMs).toBeGreaterThan(0);
+  expect(sim.state.timeRemainingMs === null || sim.state.timeRemainingMs > 0).toBe(true);
 }
 
 function waterCellCount(levelIndex: number): number {
@@ -115,10 +115,9 @@ describe('Level roster', () => {
   });
 
   it('ships focused locked-loadout challenges and player-facing briefings throughout', () => {
-    const lockedLoadouts = new Set([0, 1, 2, 6, 8]);
     for (let index = 0; index < LEVEL_COUNT; index += 1) {
       const level = createLevelAt(index);
-      expect(level.openToolbox).toBe(!lockedLoadouts.has(index));
+      expect(level.openToolbox).toBe(false);
       expect(level.objective?.length).toBeGreaterThan(20);
       expect(level.hint?.length).toBeGreaterThan(20);
       expect(level.spawn.x).toBeGreaterThanOrEqual(0);
@@ -195,6 +194,20 @@ describe('Level roster', () => {
     expect(sim.state.emitters.every(({ active }) => active)).toBe(true);
   });
 
+  it('level 1 accepts the first order within five seconds and pays the first rescue within thirty', () => {
+    const sim = new GameSimulation(createLevelAt(0));
+    while (sim.state.lemmings.length === 0) sim.step(STEP_MS);
+    const lead = sim.state.lemmings[0];
+    const inputAt = sim.state.timeMs;
+
+    expect(inputAt).toBeLessThanOrEqual(5000);
+    expect(sim.assignSkill(lead.id, 'basher')).toBe(true);
+    while (sim.state.saved === 0 && sim.state.timeMs < 30000) sim.step(STEP_MS);
+
+    expect(sim.state.saved).toBeGreaterThan(0);
+    expect(sim.state.timeMs).toBeLessThanOrEqual(30000);
+  });
+
   it('level 1 completes the breach, sand, water, wood, and crossing chain within 10 seconds', () => {
     const sim = new GameSimulation(createLevelAt(0));
     let assignedAt: number | null = null;
@@ -243,7 +256,7 @@ describe('Level roster', () => {
 
   it('level 2 (Float the Way) — cannot meet quota without lifting the bridge', () => {
     const sim = run(1, () => {});
-    expect(sim.state.outcome).toBe('lost');
+    expect(sim.state.outcome).not.toBe('won');
     expect(sim.state.saved).toBeLessThan(sim.level.targetSaved);
   });
 

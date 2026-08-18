@@ -11,6 +11,9 @@ describe('CrewActionFeedback', () => {
     expect(feedback.current(1499)).toBe('MISSED — TAP INSIDE THE GOLD RING');
     expect(feedback.current(1500)).toBeNull();
 
+    feedback.show('missed-pour', 1600);
+    expect(feedback.current(1600)).toBe('POUR INSIDE A GLOWING TARGET');
+
     feedback.show('accepted', 2000);
     expect(feedback.current(2000)).toBe('ORDER SET — BASHER FIRES AT THE DAM');
     feedback.reset();

@@ -11,6 +11,11 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@platform-runtime": ["src/platform/PlatformAdapter.ts"]
+    },
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true

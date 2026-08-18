@@ -1,14 +1,15 @@
 {
   "inventoryVersion": 1,
-  "game": "LemmingX",
-  "scope": "Early local CrazyGames candidate",
-  "reviewDate": "2026-08-16",
+  "game": "Swarmwright (working title; repository LemmingX)",
+  "scope": "D3 CrazyGames Basic/Full candidate plus submission media",
+  "reviewDate": "2026-08-18",
   "reviewer": "Codex automated inventory and generation record",
-  "releaseClaim": "blocked",
+  "releaseClaim": "blocked-pending-human-clearance",
   "releaseBlockers": [
-    "The generated industrial backdrop has an exact raw output, prompt record, runtime transform, and reference-boundary declaration, but still requires human originality and commercial-rights review.",
-    "The generated title, character family, and terrain-tool icons are prototype-only pending human originality, commercial-rights, and brand-confusion review.",
-    "Repository-authored procedural visual and audio families have not received a human originality and commercial-rights review."
+    "Human name and trademark clearance for the working title Swarmwright.",
+    "Human originality and commercial-rights review for AI-assisted runtime and cover artwork.",
+    "Human originality and commercial-rights review for the generated crew and terrain-tool icon families.",
+    "Human review of repository-authored procedural visual and audio families before public submission."
   ],
   "approvalStates": [
     "prototype-only",
@@ -19,9 +20,9 @@
   "assets": [
     {
       "id": "title-splash",
-      "runtimePath": "public/assets/title-splash.png",
-      "assetType": "raster-image/png",
-      "dimensions": "1672x941",
+      "runtimePath": "removed from runtime (historical provenance record)",
+      "assetType": "raster-image/webp",
+      "dimensions": "960x540",
       "source": "Clean-room pixel-art concept generated for this repository",
       "creator": "OpenAI built-in image generation with Z13Labs direction",
       "sourceUrl": null,
@@ -38,11 +39,14 @@
         "seed": null,
         "settings": null
       },
-      "transformations": ["Copied into the runtime without pixel modification; source and runtime hashes match"],
-      "approvalState": "prototype-only",
+      "transformations": [
+        "Copied into the prototype runtime without pixel modification; source and runtime hashes matched",
+        "Removed from the CrazyGames runtime on 2026-08-18 to eliminate title-screen delay and reduce initial payload"
+      ],
+      "approvalState": "excluded",
       "reviewer": "Codex automated generation record",
       "reviewDate": "2026-08-15",
-      "notes": "Mood/reference art only. Do not trace or slice into runtime sprites. Public Lemmings X naming still needs human brand review."
+      "notes": "Historical mood/reference art only; no longer shipped. Do not trace or slice into runtime sprites."
     },
     {
       "id": "crew-salvager",
@@ -58,12 +62,14 @@
       ],
       "licenceOrTermsStatus": "Generated-output terms and commercial originality require human review",
       "originalHashSha256": "b661690ae601e4504f7bb31e3b2cf425ec7833034b1e5aff35ca15835cd414a6",
-      "runtimeHashSha256": "d4de4b6f1b581d073bf6b2ffe9b7b56e1a64c7634c5e01ad02ff441e95f5f078",
+      "runtimeHashSha256": "b661690ae601e4504f7bb31e3b2cf425ec7833034b1e5aff35ca15835cd414a6",
       "generation": {
         "prompt": "Exactly eight equally spaced side-view pixel-art frames of one original underground industrial salvage worker: four walk frames and four pneumatic ram/drill action frames; amber hardhat and lamp, dark visor with two cyan square eyes, navy suit, orange shoulder armour, brown pack, gloves and steel-toe boots; transparent background requested; no scenery, UI, text, logos, exposed face, swept hair, smock anatomy, countdown, panic pose, watermark, or copyrighted design.",
         "model": "OpenAI built-in image generation; exact model identifier not exposed",
         "seed": null,
-        "settings": { "reference": "title splash used for mood/palette only" }
+        "settings": {
+          "reference": "title splash used for mood/palette only"
+        }
       },
       "transformations": [
         "Edge-connected neutral checkerboard removal",
@@ -145,13 +151,15 @@
         "tread.png": "600b837273a3c8785acf2e069b569236ce0c9c5c61994eaddbd01b0b26f82b93",
         "walk.png": "88e35761ce79af6ce9acef8f5dff4886e694e71dbb2cdc003595e52dc265ad71"
       },
-      "runtimeHashSha256": "2bd53e32ad92dc461090fac27d7fd63f0f4ba41830eedd7c8a88bfd7d84815be",
+      "runtimeHashSha256": "3d36456d5c44d87eb2c273a43c3519e67f67e37fc18570374d0430106780e69b",
       "generation": {
         "prompt": "See prompts.md for the shared clean-room identity/constraint block and exact per-action directions for Walk, Bash, Fall, Float, Shrug, Climb, Block, Build, Mine, Dig, Tread, Swim, and Death.",
         "promptRecordStatus": "Turn-recorded shared-contract summary plus exact accepted action directions and output identifiers retained in-repository",
         "model": "OpenAI built-in image generation; exact model identifier not exposed",
         "seed": null,
-        "settings": { "reference": "docs/assets/sources/crew-salvager-source.png at SHA-256 b661690ae601e4504f7bb31e3b2cf425ec7833034b1e5aff35ca15835cd414a6; identity only; title splash not sampled" }
+        "settings": {
+          "reference": "docs/assets/sources/crew-salvager-source.png at SHA-256 b661690ae601e4504f7bb31e3b2cf425ec7833034b1e5aff35ca15835cd414a6; identity only; title splash not sampled"
+        }
       },
       "transformations": [
         "Edge-connected neutral checkerboard removal",
@@ -246,7 +254,9 @@
         "promptRecordStatus": "Turn-recorded shared-contract summary plus exact accepted action directions and output identifiers retained in-repository",
         "model": "GPT Image 2.0 requested through OpenAI built-in image generation; exact backend model identifier not exposed",
         "seed": null,
-        "settings": { "reference": "public/assets/title-splash.png at SHA-256 5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3; visual language only; no pixel tracing or slicing" }
+        "settings": {
+          "reference": "public/assets/title-splash.png at SHA-256 5c5e1d2d47ce524160344e21a84d040b7b210c4a75a1e6fe986166c7c880fed3; visual language only; no pixel tracing or slicing"
+        }
       },
       "transformations": [
         "Edge-connected neutral-background removal",
@@ -374,9 +384,28 @@
         "src/ui/ToolHoldLabel.ts": "7566b2087c5ac69a4b1758c0ba4d7e4bdf0ec9a4b653047c913a0433c1d32820",
         "src/styles.css": "dcf920ca5fc49f24ec24bbdccad17389e67b4a0f8f747ce09f7684464a02d124"
       },
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": {
+        "src/render/CrewSpriteRenderer.ts": "3eb4ed189e3590a35f841bc7a81e8f9bb35fd804ca39fda797fafa67be4466a8",
+        "src/render/lemmingIdentity.ts": "601aa68ca609deb0443ba5ccff0626f320a73e87082403c774023e5e9ea1a18b",
+        "src/render/CampaignSetpieces.ts": "6d45ce68e1fd9184b1426d51ee1dde00976e0a2c7c83ece26b1110e5f746ed7c",
+        "src/render/WorldSetpieces.ts": "31068acb1f9f255781a2e503b965bd288a3f3152d88ec55d97cd02728ac1ffbf",
+        "src/render/motionPreference.ts": "07f9067a2288909de4bad31d0c62601d65b5b32e93c1397fc7442b3114203351",
+        "src/render/playerCamera.ts": "457047ff9f0aa7b6baaf1478e7127e7d745001c2bedfd7e48d0e03cb44faa058",
+        "src/render/crowdLayout.ts": "c2eb16123b591e11883201c2bb0850940f6098aadc4cd3ece59f19cccdfd3ca1",
+        "src/scenes/GameScene.ts": "f2d0de0b3570db81819074d39ffa3f37e7434a1fc3a830f7414e4c295802af50",
+        "src/lifecycle/BodyModalLock.ts": "e80dde4a2415531c1c8bc3bf54691a2802711f0bf473fec01a095c37d3817e0f",
+        "src/lifecycle/PortraitModalGate.ts": "362df73f9254298221502ca6a495f7475d72a7121d766075dc51770b93315457",
+        "src/ui/TitleScreen.ts": "fd854fef9a82605890bda2da7bb35c96cf1802df9747be09007f6a1842830279",
+        "src/ui/ResumeOverlay.ts": "e207d483bd1308d1f520a85a2e41bace17d60f1e90868e77aa8db5f89878892c",
+        "src/ui/Hud.ts": "da79269ba7310f0a00e1ebc9136fec301e7a7b47d5c27d398f07e63d6c073637",
+        "src/ui/ToolHoldLabel.ts": "7566b2087c5ac69a4b1758c0ba4d7e4bdf0ec9a4b653047c913a0433c1d32820",
+        "src/styles.css": "2aeccb81ca46d57b75111a98913d810e89fc43a732037f8cf996e96b69b824c9"
+      },
       "generation": null,
-      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-16",
@@ -384,9 +413,9 @@
     },
     {
       "id": "industrial-cavern-backdrop",
-      "runtimePath": "public/assets/industrial-cavern-backdrop.png",
-      "assetType": "raster-image/png",
-      "dimensions": "1672x941",
+      "runtimePath": "public/assets/industrial-cavern-backdrop.webp",
+      "assetType": "raster-image/webp",
+      "dimensions": "960x540",
       "source": "AI-assisted generated image with the exact raw output and prompt record retained in-repository",
       "creator": "OpenAI built-in Image Generation tool with Z13Labs/Codex direction",
       "sourceUrl": null,
@@ -397,7 +426,7 @@
       ],
       "licenceOrTermsStatus": "OpenAI generated-output terms and commercial-use/originality review remain pending human approval",
       "originalHashSha256": "72eb31104b508723d8b9ddedbd3b49caec3254d7b519ae8e549519bdb201a664",
-      "runtimeHashSha256": "c166719da23f48d27818ef482e83e8e6a4d57eeec7d3527bd950c13bd4c421f5",
+      "runtimeHashSha256": "c0d969a8f091b1b95cc650c22edc123ae62fef1ce9b0dec69e8cc30ad938aa0b",
       "promptRecordHashSha256": "6ac881794d6d60f49f33dc1df31be9942a92ea23f1174a02d0419ac82be764f1",
       "generation": {
         "prompt": "Verbatim prompt retained in docs/assets/sources/industrial-cavern-backdrop-v2/prompts.md",
@@ -409,13 +438,13 @@
         }
       },
       "transformations": [
-        "Pillow 11.3.0 deterministic 192-colour median-cut quantization without dithering via scripts/build-industrial-backdrop.py"
+        "Pillow 11.3.0 resize to the 960x540 runtime viewport and WebP quality-72 encoding via scripts/build-industrial-backdrop.py"
       ],
       "transformationSource": "scripts/build-industrial-backdrop.py",
-      "transformationSourceSha256": "97eacc7a1c3dbc80e1cd59381b1e847e8b4a75214f0c914a1b033d327e19c032",
+      "transformationSourceSha256": "b31bcabaed84cc3c1726bd433562b408b15000ec269908122328169b66835624",
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
-      "reviewDate": "2026-08-16",
+      "reviewDate": "2026-08-18",
       "notes": "Clean-room background-only direction explicitly excluded characters, portals, hatches, gameplay terrain, walkable silhouettes, logos, and scene-layout copying. The exact raw and runtime hashes are recorded; human originality and commercial-rights review are still required."
     },
     {
@@ -430,9 +459,15 @@
         "src/render/LemmingSprite.ts": "df6da2c95e717b07c26cac5b11fa4a5221f9c0d0c67f9db8d4e5b63f4a4c13fa",
         "src/render/fuseWarning.ts": "5654e45458c6b1bfb85995b40f9632775f881545e3d02e52959c214055897403"
       },
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": {
+        "src/render/LemmingSprite.ts": "df6da2c95e717b07c26cac5b11fa4a5221f9c0d0c67f9db8d4e5b63f4a4c13fa",
+        "src/render/fuseWarning.ts": "5654e45458c6b1bfb85995b40f9632775f881545e3d02e52959c214055897403"
+      },
       "generation": null,
-      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
@@ -446,9 +481,12 @@
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
       "originalHashSha256": "a9b8848998e4522231471f76e9b486ecc960018c03d6049dfe185b2b5b62fc78",
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": "e53862068846396b2cdac938fe08cdce790fd2d9788aa2f289de6b3becf26d06",
       "generation": null,
-      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-15"
@@ -462,9 +500,12 @@
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
       "originalHashSha256": "dca59ab3cd1699426059691a95cece393b83aa6cdec77162455b66c085110785",
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": "dca59ab3cd1699426059691a95cece393b83aa6cdec77162455b66c085110785",
       "generation": null,
-      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
@@ -478,9 +519,12 @@
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
       "originalHashSha256": "4b1455c7fd1853435784f10e9f51fbcc56e24c21e22304efd111cfb0585fe7d2",
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": "4b1455c7fd1853435784f10e9f51fbcc56e24c21e22304efd111cfb0585fe7d2",
       "generation": null,
-      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
@@ -494,9 +538,12 @@
       "sourceUrl": null,
       "licenceOrTermsStatus": "Repository authorship is recorded in Git; human originality and commercial-rights review is pending",
       "originalHashSha256": "b70fc15df23aab3159ecad841aeaed71b47707c04f5d3ce7b125b185180cb90d",
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": "450be278042afe8658808ba716a6972aaa791b4d2edfb2a1006a6b9b4f8629c9",
       "generation": null,
-      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
@@ -514,9 +561,16 @@
         "src/render/lemmingIdentity.ts": "601aa68ca609deb0443ba5ccff0626f320a73e87082403c774023e5e9ea1a18b",
         "src/render/entityLabels.ts": "d598aa01f78fde1f0344c35fa7302a55a4829b6d71515e568d7917b84ba1ef1d"
       },
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": {
+        "src/render/visualTheme.ts": "43e58e9dcd645a9b49e44ed01666f4f5cba91a5467edcc42d8bd70340f45ac95",
+        "src/render/lemmingIdentity.ts": "601aa68ca609deb0443ba5ccff0626f320a73e87082403c774023e5e9ea1a18b",
+        "src/render/entityLabels.ts": "d598aa01f78fde1f0344c35fa7302a55a4829b6d71515e568d7917b84ba1ef1d"
+      },
       "generation": null,
-      "transformations": ["TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
@@ -530,9 +584,13 @@
       "sourceUrl": null,
       "licenceOrTermsStatus": "No external audio files; human listening, originality, and commercial-rights review is pending",
       "originalHashSha256": "4fd511cb29cc79c6fb64dc9b1eed74c7a737f44fc7ffc7f9fa74da1ee38c55a9",
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": "4fd511cb29cc79c6fb64dc9b1eed74c7a737f44fc7ffc7f9fa74da1ee38c55a9",
       "generation": null,
-      "transformations": ["Runtime WebAudio synthesis", "TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "Runtime WebAudio synthesis",
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
@@ -549,9 +607,16 @@
         "src/audio/Music.ts": "be510e52b79b520a99378146ba41fcd2ca884174efb87417f31fd70729be0ede",
         "src/audio/tracks.ts": "b60eb0587fc3662757579dd4cbfa00188f12ba84c018eab42a6b782cb465420c"
       },
-      "runtimeHashSha256": null,
+      "runtimeHashSha256": {
+        "src/audio/Music.ts": "be510e52b79b520a99378146ba41fcd2ca884174efb87417f31fd70729be0ede",
+        "src/audio/tracks.ts": "b60eb0587fc3662757579dd4cbfa00188f12ba84c018eab42a6b782cb465420c"
+      },
       "generation": null,
-      "transformations": ["Runtime WebAudio synthesis", "TypeScript compilation", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "Runtime WebAudio synthesis",
+        "TypeScript compilation",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
@@ -568,10 +633,98 @@
       "runtimeHashSha256": null,
       "packageIntegrity": "sha512-UFbgwji/ZnAV7iTTE4jujyTV7J95AILKyATDUrqOJrMcUGfXvGjw3c1mcuHZUX2oJfkrAGU9KoxkrLQk2jjtiA==",
       "generation": null,
-      "transformations": ["Tree-shaken SVG node data", "Vite/Rollup bundling and minification"],
+      "transformations": [
+        "Tree-shaken SVG node data",
+        "Vite/Rollup bundling and minification"
+      ],
       "approvalState": "rights-review",
       "reviewer": "Codex automated inventory pass",
       "reviewDate": "2026-08-12"
+    },
+    {
+      "id": "swarmwright-crazygames-covers",
+      "runtimePath": "marketing/crazygames/source/swarmwright-cover-landscape-master.png; marketing/crazygames/source/swarmwright-cover-portrait-master.png; marketing/crazygames/source/swarmwright-cover-square-master.png; marketing/crazygames/covers/swarmwright-cover-landscape.png; marketing/crazygames/covers/swarmwright-cover-portrait.png; marketing/crazygames/covers/swarmwright-cover-square.png",
+      "assetType": "submission-cover-family/png",
+      "dimensions": "masters 1672x941, 1024x1536, 1254x1254; deliverables 1920x1080, 800x1200, 800x800",
+      "source": "AI-assisted original cover masters generated from this repository’s own gameplay reference frames",
+      "creator": "OpenAI built-in image generation with Z13Labs/Codex direction; deterministic title compositor",
+      "sourceUrl": null,
+      "sourceReferences": [
+        "marketing/crazygames/source/prompts.md",
+        "scripts/build-crazygames-covers.mjs",
+        ".artifacts/crazygames-candidate/browser/desktop-907x510-first-command.png"
+      ],
+      "licenceOrTermsStatus": "Generated-output terms apply; human originality, brand-confusion, and commercial-rights review remains required",
+      "generation": {
+        "prompt": "Exact landscape, portrait, and square prompts retained in marketing/crazygames/source/prompts.md",
+        "promptRecordStatus": "exact",
+        "model": "OpenAI built-in image generation; exact backend model identifier not exposed",
+        "seed": null,
+        "settings": {
+          "outputIdentifiers": [
+            "exec-46ed83eb-ef2c-47c6-8ed9-e103ef74aced.png",
+            "exec-e89aade6-e719-4721-bcf2-6befae1996d5.png",
+            "exec-a7a91c93-0381-4061-a8ce-0b3327600d7a.png"
+          ]
+        }
+      },
+      "transformations": [
+        "Exact SWARMWRIGHT working-title overlay and cyan rule rendered in headless Chromium",
+        "Deterministic crop/cover fit to CrazyGames mandatory dimensions",
+        "Visual inspection at full resolution and 200px thumbnail scale"
+      ],
+      "transformationCommands": [
+        "npm run build:covers",
+        "npm run validate:submission-media"
+      ],
+      "transformationSource": "scripts/build-crazygames-covers.mjs; scripts/validate-crazygames-media.mjs",
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated generation and validation record",
+      "reviewDate": "2026-08-18",
+      "notes": "Submission-only; deliberately excluded from public/ and the runtime download. Working title requires human clearance.",
+      "runtimeHashSha256": {
+        "marketing/crazygames/source/swarmwright-cover-landscape-master.png": "ca3ad6c2a486ff1ed17e3e2942dd177b4ac4afce755481c06d57915499b35614",
+        "marketing/crazygames/source/swarmwright-cover-portrait-master.png": "91984047fe8ebdc4ed68128a2431da0068cab0bcef63f5d1fbf9163e276ce479",
+        "marketing/crazygames/source/swarmwright-cover-square-master.png": "f40875fb18ca4155236dfe74479aef453fd36fd40c3691557c2694549a76876b",
+        "marketing/crazygames/covers/swarmwright-cover-landscape.png": "2ef92c8b4fe07bf93d0ca6b563f489c0299cc4f1727b71360a91e59dc2caa911",
+        "marketing/crazygames/covers/swarmwright-cover-portrait.png": "3c9bb737437f177888324659d34e875079da4ce1fb45ca904168c80208842454",
+        "marketing/crazygames/covers/swarmwright-cover-square.png": "10f39060d0696bea8cb32cea7d11dd67282dfd2e00afae0da40b3ebe8a724476"
+      }
+    },
+    {
+      "id": "swarmwright-crazygames-previews",
+      "runtimePath": "marketing/crazygames/previews/swarmwright-preview-landscape.webm; marketing/crazygames/previews/swarmwright-preview-portrait.webm",
+      "assetType": "submission-preview-family/webm",
+      "dimensions": "1920x1080 landscape and 1080x1620 portrait",
+      "source": "Repository-authored real-time first-run gameplay recorded from the Basic candidate",
+      "creator": "Z13Labs/Codex Playwright capture pipeline",
+      "sourceUrl": null,
+      "sourceReferences": [
+        "scripts/capture-crazygames-previews.mjs",
+        "scripts/validate-crazygames-media.mjs",
+        "marketing/crazygames/covers/swarmwright-cover-landscape.png",
+        "marketing/crazygames/covers/swarmwright-cover-portrait.png"
+      ],
+      "licenceOrTermsStatus": "Contains repository gameplay and the cover family above; inherits pending human artwork/title clearance",
+      "generation": null,
+      "transformations": [
+        "Static cover opening frame followed by unaccelerated live gameplay",
+        "Portrait presentation uses unchanged 16:9 gameplay over a full-bleed branded backdrop",
+        "No audio track, cursor, black bars, promotional CTA, or external marks"
+      ],
+      "transformationCommands": [
+        "npm run capture:previews",
+        "npm run validate:submission-media"
+      ],
+      "transformationSource": "scripts/capture-crazygames-previews.mjs; scripts/validate-crazygames-media.mjs",
+      "approvalState": "rights-review",
+      "reviewer": "Codex automated capture and validation record",
+      "reviewDate": "2026-08-18",
+      "notes": "Submission-only; validated under 20 seconds and 50MB with exact required aspect ratios and no audio track.",
+      "runtimeHashSha256": {
+        "marketing/crazygames/previews/swarmwright-preview-landscape.webm": "b9ba57d8b2b8c1af050a6f3471b40a160b511015ff3311e4e0cd3a90228d3433",
+        "marketing/crazygames/previews/swarmwright-preview-portrait.webm": "7a9673e82ea19307c5aa59eac626486d229cd31537327c5a50dbab9509f09fd4"
+      }
     }
   ],
   "excludedEvidence": [

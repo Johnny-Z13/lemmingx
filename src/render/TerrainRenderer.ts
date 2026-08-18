@@ -3,7 +3,7 @@ import { MATERIAL, type Material, type Terrain, type TerrainDirtyChunk } from '.
 import { isVisualSurface, visualHash, WORLD_THEME } from './visualTheme';
 import type { WorldLightSource } from './WorldLights';
 
-const MATERIAL_ANIMATION_MS = 110;
+const DEFAULT_MATERIAL_ANIMATION_MS = 110;
 const MAX_FIRE_LIGHTS = 18;
 
 export interface TerrainRenderResult {
@@ -32,17 +32,22 @@ interface ChunkDrawResult {
 export class ChunkedTerrainRenderer {
   private readonly records = new Map<number, TerrainChunkRecord>();
   private animationFrame = -1;
+  private animationIntervalMs = DEFAULT_MATERIAL_ANIMATION_MS;
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly depth = 0,
   ) {}
 
+  setAnimationIntervalMs(intervalMs: number): void {
+    this.animationIntervalMs = Math.max(DEFAULT_MATERIAL_ANIMATION_MS, Math.floor(intervalMs));
+  }
+
   render(terrain: Terrain, timeMs: number): TerrainRenderResult {
     const pending = new Map<number, TerrainDirtyChunk>();
     for (const chunk of terrain.consumeDirtyChunks()) pending.set(chunk.key, chunk);
 
-    const animationFrame = Math.floor(timeMs / MATERIAL_ANIMATION_MS);
+    const animationFrame = Math.floor(timeMs / this.animationIntervalMs);
     if (animationFrame !== this.animationFrame) {
       for (const [key, record] of this.records) {
         if (record.animated) pending.set(key, record.chunk);
@@ -261,7 +266,7 @@ function drawTerrainCell(
     const lowerOffset = Math.floor(height / 2);
     graphics.fillRect(x, y + lowerOffset, width, height - lowerOffset);
     if (above !== MATERIAL.water) {
-      const requestedWave = (cellX + Math.floor(timeMs / MATERIAL_ANIMATION_MS)) % 4 === 0 ? 1 : 0;
+      const requestedWave = (cellX + Math.floor(timeMs / DEFAULT_MATERIAL_ANIMATION_MS)) % 4 === 0 ? 1 : 0;
       const wave = Math.min(requestedWave, Math.max(0, height - 1));
       const surfaceHeight = Math.min(height - wave, Math.max(1, height / 3));
       graphics.fillStyle(WORLD_THEME.waterLight, 0.96);

@@ -12,6 +12,17 @@ function fakeStorage(initial: Record<string, string> = {}) {
 }
 
 describe('Progress', () => {
+  it('distinguishes a new save from a returning campaign', () => {
+    const storage = fakeStorage();
+    const progress = new Progress(storage, { unlockAll: false });
+
+    expect(progress.hasProgress()).toBe(false);
+    progress.recordWin(0, 70);
+    expect(progress.hasProgress()).toBe(true);
+    progress.reset();
+    expect(progress.hasProgress()).toBe(false);
+  });
+
   it('unlocks the full campaign in the current playtest build', () => {
     expect(PLAYTEST_UNLOCK_ALL_LEVELS).toBe(true);
     const progress = new Progress(fakeStorage());
@@ -46,6 +57,20 @@ describe('Progress', () => {
     const reloaded = new Progress(storage, { unlockAll: false });
     expect(reloaded.get(2)).toEqual({ completed: true, bestSavedPct: 100 });
     expect(reloaded.isUnlocked(3)).toBe(true);
+  });
+
+  it('deletes all saved campaign results', () => {
+    const storage = fakeStorage();
+    const progress = new Progress(storage, { unlockAll: false });
+    progress.recordWin(0, 80);
+    progress.recordWin(1, 90);
+
+    progress.reset();
+
+    const reloaded = new Progress(storage, { unlockAll: false });
+    expect(reloaded.get(0)).toEqual({ completed: false, bestSavedPct: 0 });
+    expect(reloaded.get(1)).toEqual({ completed: false, bestSavedPct: 0 });
+    expect(reloaded.isUnlocked(1)).toBe(false);
   });
 
   it('falls back to empty progress on corrupted data', () => {

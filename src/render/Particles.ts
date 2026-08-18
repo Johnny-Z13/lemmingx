@@ -33,6 +33,13 @@ const MAX_BLOOD_STAINS = 240;
 export class Particles {
   private particles: Particle[] = [];
   private bloodStains: BloodStain[] = [];
+  private budgetScale = 1;
+
+  setBudgetScale(scale: number): void {
+    this.budgetScale = Math.max(0.2, Math.min(1, scale));
+    const maximum = Math.round(320 * this.budgetScale);
+    if (this.particles.length > maximum) this.particles.splice(0, this.particles.length - maximum);
+  }
 
   /** Spawn `count` particles in a burst with the given style. */
   burst(
@@ -60,7 +67,8 @@ export class Particles {
       gravity = GRAVITY,
       upward = false,
     } = opts;
-    for (let i = 0; i < count; i += 1) {
+    const budgetedCount = Math.max(1, Math.round(count * this.budgetScale));
+    for (let i = 0; i < budgetedCount; i += 1) {
       const a = angle + (Math.random() - 0.5) * spread;
       const s = speed * (0.4 + Math.random() * 0.6);
       const col = Array.isArray(color) ? color[(Math.random() * color.length) | 0] : color;
@@ -169,8 +177,9 @@ export class Particles {
     },
   ): void {
     const { color, speed = 0.12, lifeMs = 380, size = 2 } = opts;
-    for (let i = 0; i < count; i += 1) {
-      const a = (i / count) * Math.PI * 2;
+    const budgetedCount = Math.max(1, Math.round(count * this.budgetScale));
+    for (let i = 0; i < budgetedCount; i += 1) {
+      const a = (i / budgetedCount) * Math.PI * 2;
       const col = Array.isArray(color) ? color[i % color.length] : color;
       this.particles.push({
         x,

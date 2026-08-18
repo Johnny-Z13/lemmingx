@@ -1,18 +1,12 @@
 import { BodyModalLock, registerBodyModalChild } from '../lifecycle/BodyModalLock';
-import { PORTRAIT_MODAL_CHANGE_EVENT, type PortraitModalChangeDetail } from '../lifecycle/PortraitModalGate';
 
-export type ResumeReason = 'focus' | 'orientation';
+export type ResumeReason = 'focus';
 
 const COPY: Record<ResumeReason, { kicker: string; title: string; body: string }> = {
   focus: {
     kicker: 'Run paused',
     title: 'Ready when you are',
     body: 'The world and crew stay frozen while this tab is away.',
-  },
-  orientation: {
-    kicker: 'Landscape ready',
-    title: 'Tap to resume',
-    body: 'The world and crew stayed frozen while you rotated.',
   },
 };
 
@@ -25,13 +19,6 @@ export class ResumeOverlay {
   private readonly button: HTMLButtonElement;
   private modalLock: BodyModalLock | null = null;
   private previousFocus: HTMLElement | null = null;
-  private readonly handlePortraitModalChange = (event: Event) => {
-    const { active, previousFocus } = (event as CustomEvent<PortraitModalChangeDetail>).detail;
-    if (!active && !this.root.hidden && !this.root.inert) {
-      if (previousFocus && !this.root.contains(previousFocus)) this.previousFocus = previousFocus;
-      this.button.focus({ preventScroll: true });
-    }
-  };
 
   constructor(onResume: () => void) {
     this.root = document.createElement('div');
@@ -51,7 +38,6 @@ export class ResumeOverlay {
     this.button.addEventListener('click', onResume);
     document.body.append(this.root);
     registerBodyModalChild(this.root);
-    window.addEventListener(PORTRAIT_MODAL_CHANGE_EVENT, this.handlePortraitModalChange);
     this.setReason('focus');
   }
 
@@ -60,7 +46,7 @@ export class ResumeOverlay {
     if (!this.root.hidden) return;
     this.previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.root.hidden = false;
-    this.modalLock = new BodyModalLock(this.root, (element) => element.classList.contains('rotate-notice'));
+    this.modalLock = new BodyModalLock(this.root);
     if (!this.root.inert) this.button.focus({ preventScroll: true });
   }
 
@@ -76,7 +62,6 @@ export class ResumeOverlay {
   }
 
   destroy(): void {
-    window.removeEventListener(PORTRAIT_MODAL_CHANGE_EVENT, this.handlePortraitModalChange);
     this.modalLock?.release();
     this.modalLock = null;
     this.root.remove();

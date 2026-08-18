@@ -49,6 +49,30 @@ describe('SeededRng', () => {
 });
 
 describe('sand CA', () => {
+  it('reports real Atlas-worthy material interactions from the seeded CA', () => {
+    const sandFire = new Terrain(40, 40, 4);
+    sandFire.setCell(3, 2, MATERIAL.sand);
+    sandFire.setCell(3, 3, MATERIAL.fire);
+    const sandStepper = new ChunkStepper(sandFire, new SeededRng(1));
+    sandStepper.step(1);
+    expect(sandStepper.drainInteractions().map(({ interaction }) => interaction)).toContain('sand-smothers-fire');
+
+    const waterFire = new Terrain(40, 40, 4);
+    waterFire.setCell(3, 2, MATERIAL.water);
+    waterFire.setCell(3, 3, MATERIAL.fire);
+    const waterStepper = new ChunkStepper(waterFire, new SeededRng(1));
+    waterStepper.step(1);
+    expect(waterStepper.drainInteractions().map(({ interaction }) => interaction)).toContain('water-quenches-fire');
+
+    const fireWood = new Terrain(40, 40, 4);
+    fireWood.fillRect(0, 16, 40, 4);
+    fireWood.setCell(3, 3, MATERIAL.fire);
+    fireWood.setCell(4, 3, MATERIAL.wood);
+    const fireStepper = new ChunkStepper(fireWood, new SeededRng(1));
+    fireStepper.step(1);
+    expect(fireStepper.drainInteractions().map(({ interaction }) => interaction)).toContain('fire-burns-wood');
+  });
+
   it('sand falls down onto a floor', () => {
     const terrain = new Terrain(80, 80, 4);
     terrain.fillRect(0, 60, 80, 20); // floor

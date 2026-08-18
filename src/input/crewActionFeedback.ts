@@ -1,10 +1,11 @@
-export type CrewActionFeedbackKind = 'accepted' | 'missed';
+export type CrewActionFeedbackKind = 'accepted' | 'missed' | 'missed-pour';
 
 const FEEDBACK_DURATION_MS = 1400;
 
 const FEEDBACK_TEXT: Record<CrewActionFeedbackKind, string> = {
   accepted: 'ORDER SET — BASHER FIRES AT THE DAM',
   missed: 'MISSED — TAP INSIDE THE GOLD RING',
+  'missed-pour': 'POUR INSIDE A GLOWING TARGET',
 };
 
 /** Small scene-side timer for explicit first-action acknowledgement. */

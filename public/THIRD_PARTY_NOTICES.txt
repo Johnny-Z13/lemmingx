@@ -1,4 +1,4 @@
-LemmingX third-party notices
+Swarmwright third-party notices
 
 Lucide 0.468.0 — ISC License
 

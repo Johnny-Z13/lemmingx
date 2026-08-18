@@ -1,53 +1,77 @@
-# LemmingX CrazyGames Local Proof Report
+# Swarmwright CrazyGames D3 — Local Proof Report
 
-**Date:** 2026-08-12
+**Date:** 2026-08-18
 
-**Accepted design:** D3
+**Accepted design:** D3 Basic Launch candidate with feature-gated Full Launch
+integration
 
-**Build Gate:** PASS — 91%
+**Internal result:** PASS
 
-**Claim:** early local proof candidate only; not release-cleared and not uploaded, deployed, or submitted
+**Claim boundary:** verified local candidate; not release-cleared, uploaded, or
+submitted to CrazyGames. This report was captured before Git integration; the
+final handoff records the merge and push.
 
-## Deterministic and build result
+## Automated acceptance evidence
 
 | Gate | Result |
 |---|---|
-| Full Vitest suite | PASS — 17 files, 136 tests |
-| Refresh equivalence | PASS — seeded 60/144/165 Hz outcomes match |
-| Level 1 proof | PASS — 10 saved, 0 lost; breach/material chain within 10 simulated seconds |
-| Level 2 proof | PASS — reserved-endpoint eight-stamp water stroke; 10 saved, 0 lost |
-| Level 3 proof | PASS — bomber 7/10, sand 10/10 |
-| Normal build | PASS |
-| CrazyGames build | PASS |
-| Proof verifier | PASS — 5 files, 2,969,225 bytes |
-| Release verifier | PASS (fail closed) — exit 1 on 10 unresolved provenance records |
-| Artifact SHA-256 | `cc07a5ce5db4f6f2de6efe791dd5e7223552070a61f498bfb1f07c2fb9e85fa8` |
-| Player marker scan | PASS — no prototype/debug/unlock/harness markers found |
-| Relative/subpath loading | PASS — round-1 exact `/ui11/` proof plus final exact root proof; backdrop loaded, no browser warning/error |
+| Full Vitest suite | PASS — 37 files, 267 tests |
+| Dependency audit | PASS — 0 known vulnerabilities after Vite 8 / Vitest 4 upgrade |
+| Level 1 causal proof | PASS — 10 saved, 0 lost; material chain within 10 simulated seconds |
+| Level 2 proof | PASS — broad water interaction; 10 saved, 0 lost |
+| Level 3 route proof | PASS — fast charge 8/10; lossless sand route 10/10 |
+| Daily Rescue certificates | PASS — 7 bases × 3 variants = 21 deterministic solutions |
+| Simulation benchmark | PASS — busiest sampled Site p99 3.964 ms; maximum 9.076 ms |
+| Basic build | PASS — 25 files, 1,608,397 uncompressed bytes |
+| Critical JS | PASS — 373.75 kB gzip |
+| Basic artifact SHA-256 | `5249e53babad368e094e1a25509ef583452f373b8100c17242bd01fbf01ddd86` |
+| Basic boundary | PASS — no SDK URL, dev harness, prototype, custom rotate gate, or deleted splash marker |
+| Full boundary | PASS — SDK present only in Full; no dev/prototype/rotate markers |
+| Full mocked SDK journey | PASS — init 1, gameplay starts 2, stops 1, no premature ad request |
+| Submission media | PASS — 3 required covers; 2 silent 15–20 second previews |
 | Diff hygiene | PASS — `git diff --check` |
 
-Machine-readable results are in `.artifacts/crazygames-candidate/deterministic-proof.json` and `.artifacts/crazygames-candidate/proof-metadata.json`.
+Machine-readable results are in
+`.artifacts/crazygames-candidate/deterministic-proof.json` and
+`.artifacts/crazygames-candidate/proof-metadata.json`.
 
 ## Compiled-browser evidence
 
-- `level1-first-actionable-907x510.png` — direct first-play action cue.
-- `level1-first-click-missed-907x510.png` — explicit miss acknowledgement with Basher stock retained.
-- `level1-first-click-accepted-907x510.png` — explicit accepted order with Basher stock consumed.
-- `level1-material-chain-907x510.png` — actual sand, water, wood, and crossing state.
-- `level1-complete-907x510.png` — 100%, 10/10, no losses.
-- `level2-pour-800x450.png` and `level2-844x390.png` — responsive marked pour/bridge state.
-- `level2-outcome-800x450.png` — 100%, 10/10, no losses.
-- `level3-planning-800x450.png` and `level3-live-cue-800x450.png` — two-route lesson and live cue.
-- `level3-bomber-result-800x450.png` — observed live destructive route, 80%, two lost.
-- `level3-sand-result-800x450.png` — observed live lossless route, 100%, no losses.
+- Desktop 907×510: playable in 905 ms with eight cold-start requests; the first
+  Basher command was accepted and consumed.
+- Android-class 844×390, DPR 1, four cores / 4 GB: Mobile profile selected the
+  low presentation tier; controls met the 44 px target.
+- Portrait mobile boundary: no game-owned orientation modal; supported
+  orientation is delegated to the CrazyGames host.
+- Storage denied: the first Site remained playable with safe in-session
+  progression.
+- Workshop 800×450: all six projects, Daily Rescue, Atlas gaps, and 44 px
+  controls fit without root overflow.
+- Deferred UI: Pause and Workshop assets loaded when opened; the Basic cold
+  path made no CrazyGames SDK request.
 
-At 800×450 and 844×390 the compiled player HUD had no viewport overflow, persistent bars stayed within their D3 budgets, and visible controls measured at least 48 CSS px. These were browser-emulated landscape sizes, not real-device safe-area evidence.
+Screenshots are under `.artifacts/crazygames-candidate/browser/`. Honest
+gameplay frames used to validate preview motion and composition are under
+`.artifacts/crazygames-candidate/media/`.
 
-## Explicitly unproven or release-blocking
+## Media evidence
 
-- Ten provenance records remain unresolved: the industrial backdrop is `prototype-only`; nine authored/dependency entries remain `rights-review`. Release packaging must fail closed.
-- `LemmingX`, its icon, and public marketing identity still require human brand/confusion/originality clearance.
-- Independent cold-player targets are not self-certified: ≥4/5 Level 1 causal comprehension/completion, median first interaction, Retry behavior, first-three completion, and session retention remain unobserved.
-- Independent moving-crew click reliability remains a human-observation gate; the compiled gesture now acknowledges both miss and acceptance explicitly.
-- Real-device touch, notch/safe-area, DPR-1, iOS AudioContext recovery, hosted iframe/subpath, CrazyGames Preview, portal metadata, and mobile-app eligibility remain external gates.
-- No provider call, SDK, ad/IAP, account action, spend, upload, deployment, submission, commit, push, or pull request was performed.
+- Covers: 1920×1080 landscape, 800×1200 portrait, and 800×800 square.
+- Preview clips: 1920×1080 at 18.64 seconds and 1080×1620 at 18.80 seconds.
+- Both previews are silent, below 50 MB, open on the matching cover, contain no
+  cursor or promotional copy, and show the real Basher/material chain.
+- Exact built-in image-generation prompts and output identifiers are retained
+  in `marketing/crazygames/source/prompts.md`.
+
+## External release gates
+
+- `Swarmwright` requires human name and trademark clearance.
+- Fifteen provenance records intentionally remain unresolved pending human
+  originality, commercial-rights, and procedural visual/audio review. The
+  proof build passes; release packaging fails closed while these remain.
+- Five-player cold comprehension, real-device touch/safe-area behavior, and
+  aggregate Basic Launch funnel/retention metrics require people and traffic.
+- The uploaded archive still needs CrazyGames Developer Portal Preview and
+  iOS/Android app-webview QA, including the host landscape rotation gate.
+- Full Launch still requires a hosted test of real SDK availability, ad fill,
+  lifecycle callbacks, and mute restoration.

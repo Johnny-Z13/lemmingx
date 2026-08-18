@@ -30,7 +30,6 @@ export function createLevel2(): LevelDefinition {
     minReleaseRate: 40,
     maxReleaseRate: 99,
     targetSaved: 6,
-    timeLimitMs: 240000,
     caSeed: 22,
     openToolbox: false,
     landscape: { water: 10 },
