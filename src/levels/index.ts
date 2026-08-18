@@ -13,6 +13,7 @@ import { createLevel11 } from './level11';
 import { createLevel12 } from './level12';
 import { createLabLevel } from './lab';
 import { DEV_SANDBOX_ENABLED } from '../runtimeMode';
+import { LEVEL_COUNT, PROTOTYPE_START_INDEX, SAND_LAB_INDEX } from './catalog';
 
 /**
  * Ordered campaign roster. Each entry is a factory so a fresh, mutable terrain is
@@ -31,8 +32,6 @@ export const LEVELS: ReadonlyArray<() => LevelDefinition> = [
   createLevel10,
 ];
 
-export const LEVEL_COUNT = LEVELS.length;
-
 /** Dev/test-only mechanic experiments; deliberately compiled out of player builds. */
 const COMPILED_PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> =
   __PLAYER_BUILD__ && !__DEV_SANDBOX_AVAILABLE__
@@ -41,11 +40,7 @@ const COMPILED_PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> =
 export const PROTOTYPE_LEVELS: ReadonlyArray<() => LevelDefinition> = DEV_SANDBOX_ENABLED
   ? COMPILED_PROTOTYPE_LEVELS
   : [];
-export const PROTOTYPE_START_INDEX = LEVEL_COUNT;
 export const PROTOTYPE_LEVEL_INDICES = PROTOTYPE_LEVELS.map((_, offset) => PROTOTYPE_START_INDEX + offset);
-
-/** Index for the Sand Lab free-play arena (not part of campaign or prototype slots). */
-export const SAND_LAB_INDEX = PROTOTYPE_START_INDEX + PROTOTYPE_LEVELS.length;
 
 /** Build a campaign level, prototype slot, or the Sand Lab from its select index. */
 export function createLevelAt(index: number): LevelDefinition {
@@ -56,7 +51,8 @@ export function createLevelAt(index: number): LevelDefinition {
   }
   const clamped = Math.max(0, Math.min(LEVELS.length - 1, index));
   const level = LEVELS[clamped]();
-  return { ...level, openToolbox: level.openToolbox ?? true };
+  return { ...level, openToolbox: level.openToolbox ?? false };
 }
 
 export { createLabLevel };
+export { LEVEL_COUNT, PROTOTYPE_START_INDEX, SAND_LAB_INDEX };

@@ -1,4 +1,4 @@
-import { ALL_SKILLS, type Lemming, type LevelDefinition, type SimEvent, type SimEventKind, type SimulationState, type Skill, type WorldEntityKind } from './types';
+import { ALL_SKILLS, type Lemming, type LevelDefinition, type MaterialInteraction, type SimEvent, type SimEventKind, type SimulationState, type Skill, type WorldEntityKind } from './types';
 import type { SkillContext } from './skills/types';
 import { SKILL_DEFS } from './skills/registry';
 import { MATERIAL, type Material } from './Terrain';
@@ -46,6 +46,7 @@ export class GameSimulation {
   /** Separate stream so random hatch roles never perturb seeded terrain physics. */
   private readonly releaseRng: SeededRng;
   private readonly ca: ChunkStepper | null;
+  private readonly emittedMaterialInteractions = new Set<MaterialInteraction>();
 
   /** Take and clear the events accumulated since the last drain (for FX/audio). */
   drainEvents(): SimEvent[] {
@@ -58,6 +59,12 @@ export class GameSimulation {
     this.events.push({ kind, x, y });
   }
 
+  private emitMaterial(interaction: MaterialInteraction, x: number, y: number): void {
+    if (this.emittedMaterialInteractions.has(interaction)) return;
+    this.emittedMaterialInteractions.add(interaction);
+    this.events.push({ kind: 'material', interaction, x, y });
+  }
+
   constructor(level: LevelDefinition) {
     this.level = level;
     this.caEnabled = level.caEnabled !== false;
@@ -67,6 +74,8 @@ export class GameSimulation {
     this.rng = new SeededRng(level.caSeed ?? 1);
     this.releaseRng = new SeededRng((level.caSeed ?? 1) ^ 0x52414e44);
     this.ca = this.caEnabled ? new ChunkStepper(level.terrain, this.rng) : null;
+    const firstSpawnDelayMs = Math.max(0, level.firstSpawnDelayMs ?? level.spawnIntervalMs);
+    this.spawnTimerMs = Math.max(0, level.spawnIntervalMs - firstSpawnDelayMs);
     this.state = {
       width: level.width,
       height: level.height,
@@ -168,6 +177,9 @@ export class GameSimulation {
             && existing !== MATERIAL.fire
             && existing !== MATERIAL.water
           ) continue;
+          if (material === MATERIAL.water && existing === MATERIAL.fire) {
+            this.emitMaterial('water-quenches-fire', wx, wy);
+          }
           this.level.terrain.setCell(cx, cy, material);
         }
       }
@@ -245,7 +257,12 @@ export class GameSimulation {
    * timer, traps, emitters, and lemmings remain frozen.
    */
   stepLivingTerrain(): number {
-    return this.ca?.step(this.caSubsteps, this.stabilityThreshold) ?? 0;
+    if (!this.ca) return 0;
+    const moved = this.ca.step(this.caSubsteps, this.stabilityThreshold);
+    for (const event of this.ca.drainInteractions()) {
+      this.emitMaterial(event.interaction, event.x, event.y);
+    }
+    return moved;
   }
 
   private sprayDigDebris(x: number, y: number, carved: number): void {
@@ -634,6 +651,10 @@ export class GameSimulation {
       return;
     }
 
+    if (lemming.fuseMs !== null && this.waterAtChest(lemming)) {
+      this.emitMaterial('bomber-sinks', lemming.x, lemming.y);
+    }
+
     // Chest-deep water pulls any other job off its feet. Fallers splash via
     // their own path, climbers are climbing OUT of it, and armed lemmings
     // sink with the fuse burning (see the matrix).
@@ -973,6 +994,7 @@ export class GameSimulation {
     lemming.velocityY = 0;
     lemming.squashMs = 0;
     this.emit('splash', lemming.x, lemming.y);
+    if (lemming.isSwimmer) this.emitMaterial('swimmer-crosses-deep-water', lemming.x, lemming.y);
   }
 
   /**
@@ -1043,6 +1065,7 @@ export class GameSimulation {
       ) {
         lemming.direction = dir;
         lemming.state = 'climber';
+        this.emitMaterial('climber-self-rescues', lemming.x, lemming.y);
         return true;
       }
     }
@@ -1052,6 +1075,7 @@ export class GameSimulation {
   /** Non-swimmer in deep water: bob in place, grab any exit within reach. */
   private updateTreading(lemming: Lemming, deltaMs: number): void {
     if (lemming.fuseMs !== null) {
+      this.emitMaterial('bomber-sinks', lemming.x, lemming.y);
       this.beginFall(lemming); // armed: sinks (the faller path caps the speed)
       return;
     }
@@ -1077,6 +1101,7 @@ export class GameSimulation {
   /** Swimmer trait: cross the surface, climb out banks, turn at walls. */
   private updateSwimming(lemming: Lemming, deltaMs: number): void {
     if (lemming.fuseMs !== null) {
+      this.emitMaterial('bomber-sinks', lemming.x, lemming.y);
       this.beginFall(lemming);
       return;
     }
@@ -1145,6 +1170,9 @@ export class GameSimulation {
 
     lemming.x = Math.max(BODY_HALF_WIDTH, Math.min(this.level.width - BODY_HALF_WIDTH, nextX));
     lemming.y = this.findStandingY(lemming.x, lemming.y);
+    if (this.level.terrain.materialAt(lemming.x, lemming.y + FOOT_Y + 1) === MATERIAL.sand) {
+      this.emitMaterial('sand-builds-ramp', lemming.x, lemming.y + FOOT_Y);
+    }
   }
 
   private resolveBlockers(): void {

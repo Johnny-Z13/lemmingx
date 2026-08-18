@@ -2,7 +2,6 @@ import type { CrewSpawnMode, Lemming, SimulationState, Skill, WorldEntityKind } 
 import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import { MATERIAL, type Terrain } from '../sim/Terrain';
-import type { AudioSettings } from '../audio/settings';
 import { colorToCss, skillPalette, type CrewPalette } from '../render/lemmingIdentity';
 import { createElement as createLucideIcon, DoorOpen, Hand, Maximize2, Minus, Warehouse, type IconNode } from 'lucide';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
@@ -40,7 +39,7 @@ export type HudEvents = {
   onNuke: () => void;
   onReleaseRate: (delta: number) => void;
   onRestart: () => void;
-  onTogglePause: () => void;
+  onOpenOptions: () => void;
   onCycleSpeed: () => void;
   /** Arm, commit, or cancel the limited cinematic crew intervention. */
   onArmHeroMove?: () => void;
@@ -48,10 +47,11 @@ export type HudEvents = {
   onCancelHeroMove?: () => void;
   onNext?: () => void;
   onLevelSelect?: () => void;
+  onRewardedHint?: () => void;
+  onRewardedDouble?: () => void;
   onMinimapControlStart?: () => void;
   onMinimapJump?: (fractionX: number, fractionY: number) => void;
   onMinimapControlEnd?: () => void;
-  onAudioChange?: (settings: AudioSettings) => void;
   onDebugLabelsChange?: (enabled: boolean) => void;
   /** Arm a terrain paint brush (limited charges or open-toolbox infinite). */
   onSelectBrush?: (kind: TerrainBrush) => void;
@@ -76,13 +76,30 @@ export interface MinimapData {
 export interface HudView {
   paused: boolean;
   planning: boolean;
+  /** The first expedition withholds time controls until the first order lands. */
+  showSpeed: boolean;
+  /** Some onboarding sites hide release until their world choice lands. */
+  showStart: boolean;
+  startLabel: string;
+  showMission: boolean;
+  compactMission: boolean;
   speed: number;
+  salvage: number;
+  atlasFound: number;
+  atlasTotal: number;
   nukeReady: boolean;
   hoveredJob: string | null;
   levelName: string;
   objective: string;
   hint: string;
   hasNextLevel: boolean;
+  /** Player meta navigation remains hidden until the first Expedition ends. */
+  showWorkshop: boolean;
+  signalLampActive: boolean;
+  deeperHint: string;
+  freeDeeperHint: boolean;
+  rewardedHintAvailable: boolean;
+  rewardedDoubleAmount: number;
   /** Armed terrain brush, or null when assigning skills. */
   brush: TerrainBrush | null;
   /** Selected role to place from a tray-drop prototype. */
@@ -166,6 +183,7 @@ export class Hud {
   private readonly missionObjective: HTMLElement;
   private readonly missionHint: HTMLParagraphElement;
   private readonly missionPrompt: HTMLParagraphElement;
+  private readonly missionStart: HTMLButtonElement;
   private readonly actionCue: HTMLDivElement;
   private readonly dock: HTMLDivElement;
   private readonly toolHoldLabel: ToolHoldLabel;
@@ -219,7 +237,6 @@ export class Hud {
   private readonly minimapTerrain = document.createElement('canvas');
   private minimapTerrainAt = 0;
   private readonly events: HudEvents;
-  private readonly audio: AudioSettings;
   private readonly handleDockMouseMove = (e: MouseEvent) => this.moveDock(e);
   private readonly handleDockMouseUp = () => this.endDockDrag();
   private readonly handleTrayPointerMove = (e: PointerEvent) => this.moveTrayDrag(e);
@@ -230,7 +247,6 @@ export class Hud {
 
   constructor(
     events: HudEvents,
-    audio?: AudioSettings,
     opts?: {
       openToolbox?: boolean;
       freePlay?: boolean;
@@ -250,7 +266,6 @@ export class Hud {
     this.worldTools = opts?.worldTools ?? [];
     this.playerBuild = opts?.playerBuild ?? false;
     this.debugLabels = opts?.debugLabels ?? false;
-    this.audio = audio ?? { musicMuted: true, musicVolume: 0.5, sfxMuted: false, sfxVolume: 0.5 };
     this.root = document.createElement('div');
     this.root.className = this.playerBuild ? 'hud hud--player' : 'hud';
     this.toolHoldLabel = new ToolHoldLabel(this.root);
@@ -273,9 +288,9 @@ export class Hud {
     this.missionPrompt = this.mission.querySelector('.hud__mission-prompt') as HTMLParagraphElement;
     this.missionHint = this.mission.querySelector('.hud__mission-hint') as HTMLParagraphElement;
     const startLabel = this.playerBuild && IS_MOBILE_DEVICE ? 'Play' : 'Start run';
-    const startButton = this.makeButton(startLabel, 'Start run (Space)', () => events.onStart?.());
-    startButton.className = 'hud__btn hud__primary hud__mission-start';
-    this.mission.append(startButton);
+    this.missionStart = this.makeButton(startLabel, 'Start run (Space)', () => events.onStart?.());
+    this.missionStart.className = 'hud__btn hud__primary hud__mission-start';
+    this.mission.append(this.missionStart);
     this.root.append(this.mission);
 
     this.actionCue = document.createElement('div');
@@ -448,7 +463,7 @@ export class Hud {
     const plus = this.makeButton('+', 'Faster release rate', () => events.onReleaseRate(5));
     release.append(minus, this.releaseValue, plus);
 
-    this.pauseButton = this.makeButton('▮▮', 'Pause / resume (Space)', events.onTogglePause);
+    this.pauseButton = this.makeButton('⚙', 'Pause / options', events.onOpenOptions);
     this.pauseButton.className = 'hud__btn hud__pause';
     this.speedButton = this.makeButton('⏩ 1×', 'Fast-forward (F)', events.onCycleSpeed);
     this.speedButton.className = 'hud__btn hud__speed';
@@ -485,7 +500,6 @@ export class Hud {
       restartButton,
     );
     if (this.debugLabelsButton) controls.append(this.debugLabelsButton);
-    controls.append(this.makeAudioCluster());
     const toolRail = document.createElement('div');
     toolRail.className = 'hud__tool-rail';
     toolRail.append(tools, this.worldBar, this.terrainBar);
@@ -535,40 +549,6 @@ export class Hud {
 
     document.body.append(this.root);
     window.addEventListener('resize', this.handleViewportResize);
-  }
-
-  /** Music + SFX mute toggles with volume sliders. */
-  private makeAudioCluster(): HTMLDivElement {
-    const cluster = document.createElement('div');
-    cluster.className = 'hud__audio';
-
-    const make = (label: string, mutedKey: 'musicMuted' | 'sfxMuted', volumeKey: 'musicVolume' | 'sfxVolume', title: string) => {
-      const button = this.makeButton(label, title, () => {
-        this.audio[mutedKey] = !this.audio[mutedKey];
-        button.classList.toggle('is-muted', this.audio[mutedKey]);
-        this.events.onAudioChange?.({ ...this.audio });
-      });
-      button.className = 'hud__btn hud__audio-toggle';
-      button.classList.toggle('is-muted', this.audio[mutedKey]);
-
-      const slider = document.createElement('input');
-      slider.type = 'range';
-      slider.min = '0';
-      slider.max = '100';
-      slider.value = String(Math.round(this.audio[volumeKey] * 100));
-      slider.title = `${title} volume`;
-      slider.className = 'hud__audio-slider';
-      slider.hidden = this.playerBuild;
-      slider.addEventListener('input', () => {
-        this.audio[volumeKey] = Number(slider.value) / 100;
-        this.events.onAudioChange?.({ ...this.audio });
-      });
-      cluster.append(button, slider);
-    };
-
-    make('♪', 'musicMuted', 'musicVolume', 'Music');
-    make('🔊', 'sfxMuted', 'sfxVolume', 'Sound effects');
-    return cluster;
   }
 
   /** Full-width edge chrome reserved from ordinary route framing. */
@@ -835,9 +815,13 @@ export class Hud {
       state.timeRemainingMs !== null
         ? `<span class="hud__timer${state.timeRemainingMs < 15000 ? ' is-low' : ''}">⏱ ${formatTime(state.timeRemainingMs)}</span>`
         : '';
+    const salvage = view.salvage > 0
+      ? `<span class="hud__stat hud__salvage">Salvage <strong>${view.salvage}</strong></span>`
+      : '';
     this.statusBar.innerHTML = this.playerBuild && !this.freePlay
       ? `<span class="hud__level">${view.levelName}</span>` +
         `<span class="hud__stat">Quota <strong>${state.saved}/${state.targetSaved}</strong></span>` +
+        salvage +
         timer
       : this.freePlay
       ? `<span class="hud__level">${view.levelName}</span>` +
@@ -852,13 +836,16 @@ export class Hud {
         `<span class="hud__stat">Lost <strong>${state.lost}</strong></span>` +
         timer;
 
-    this.mission.hidden = !view.planning;
-    if (view.planning) {
+    this.mission.hidden = !view.planning || !view.showMission;
+    this.mission.classList.toggle('is-release-only', view.compactMission);
+    if (view.planning && view.showMission) {
       this.missionObjective.textContent = view.objective;
       this.missionPrompt.hidden = view.prompt === null;
       this.missionPrompt.textContent = view.prompt ?? '';
       this.missionHint.textContent = view.hint;
     }
+    this.missionStart.hidden = !view.showStart;
+    this.missionStart.textContent = view.startLabel;
     this.actionCue.hidden = view.actionCue === null;
     this.actionCue.textContent = view.actionCue ?? '';
 
@@ -919,14 +906,15 @@ export class Hud {
 
     this.nukeButton.disabled = !view.nukeReady;
     this.pauseButton.classList.toggle('is-active', view.paused && !view.planning);
-    this.pauseButton.hidden = this.playerBuild && view.planning;
-    this.pauseButton.textContent = view.planning ? 'Start' : view.paused ? '▶' : '▮▮';
-    const pauseLabel = view.planning ? 'Start run (Space)' : 'Pause / resume (Space)';
+    this.pauseButton.hidden = false;
+    this.pauseButton.textContent = '⚙';
+    const pauseLabel = view.planning ? 'Options (Space starts the run)' : 'Pause / options (Space)';
     this.pauseButton.title = pauseLabel;
     this.pauseButton.setAttribute('aria-label', pauseLabel);
     const nextSpeed = view.speed >= 3 ? 1 : view.speed + 1;
     const speedLabel = `Fast-forward ${view.speed}× (F); next ${nextSpeed}×`;
     this.speedButton.textContent = `⏩ ${view.speed}×`;
+    this.speedButton.hidden = !view.showSpeed;
     this.speedButton.title = speedLabel;
     this.speedButton.setAttribute('aria-label', speedLabel);
     this.speedButton.classList.toggle('is-active', view.speed > 1);
@@ -979,31 +967,88 @@ export class Hud {
     this.overlay.hidden = false;
     this.overlay.innerHTML = `
       <div class="hud__panel ${won ? 'is-win' : 'is-lose'}">
-        <h1>${won ? 'Level Cleared!' : 'Out of Lemmings'}</h1>
+        <h1>${won ? 'Site Secured!' : 'Route Failed'}</h1>
         <p class="hud__panel-pct">${pct}%</p>
         <p class="hud__panel-sub">${won ? 'You met the rescue quota.' : failureReason}</p>
+        ${!won && view.signalLampActive ? `<p class="hud__panel-signal">SIGNAL LAMP · ${view.hint}</p>` : ''}
         <div class="hud__panel-stats">
           <span>Saved <strong>${state.saved}/${state.totalLemmings}</strong></span>
           <span>Target <strong>${state.targetSaved}</strong></span>
           <span>Lost <strong>${state.lost}</strong></span>
+          <span>Salvage <strong>${view.salvage}</strong></span>
+          <span>Atlas <strong>${view.atlasFound}/${view.atlasTotal}</strong></span>
         </div>
         <div class="hud__panel-actions"></div>
       </div>`;
     const actions = this.overlay.querySelector('.hud__panel-actions') as HTMLDivElement;
     if (won && view.hasNextLevel && this.events.onNext) {
-      const next = this.makeButton('Next Level →', 'Next level', this.events.onNext);
+      const next = this.makeButton('NEXT SITE →', 'Next site', this.events.onNext);
       next.className = 'hud__btn hud__primary';
       actions.append(next);
     }
     const retry = this.makeButton(won ? 'Replay' : 'Try Again', 'Restart', this.events.onRestart);
-    retry.className = 'hud__btn';
+    retry.className = `hud__btn${won ? '' : ' hud__primary'}`;
     actions.append(retry);
-    if (this.events.onLevelSelect) {
-      const select = this.makeButton('Level Select', 'Back to level select (Esc)', this.events.onLevelSelect);
+    if (!won) {
+      const hint = this.makeButton('HINT', 'Show a free hint', () => {
+        const existing = this.overlay.querySelector('.hud__panel-hint');
+        if (existing) return;
+        const text = document.createElement('p');
+        text.className = 'hud__panel-hint';
+        text.textContent = view.hint;
+        this.overlay.querySelector('.hud__panel-sub')?.after(text);
+        hint.disabled = true;
+      });
+      hint.className = 'hud__btn';
+      actions.append(hint);
+      if (view.freeDeeperHint) {
+        const deeper = this.makeButton('DEEPER HINT', 'Show the next causal step', () => this.showDeeperHint(view.deeperHint));
+        deeper.className = 'hud__btn';
+        actions.append(deeper);
+      } else if (view.rewardedHintAvailable && this.events.onRewardedHint) {
+        const deeper = this.makeButton('VIDEO · DEEPER HINT', 'Optional rewarded video for a deeper hint', () => {
+          deeper.disabled = true;
+          this.events.onRewardedHint?.();
+        });
+        deeper.className = 'hud__btn hud__rewarded';
+        actions.append(deeper);
+      }
+    }
+    if (won && view.rewardedDoubleAmount > 0 && this.events.onRewardedDouble) {
+      const double = this.makeButton(
+        `VIDEO · DOUBLE +${view.rewardedDoubleAmount}`,
+        `Optional rewarded video to add ${view.rewardedDoubleAmount} Salvage`,
+        () => {
+          double.disabled = true;
+          this.events.onRewardedDouble?.();
+        },
+      );
+      double.className = 'hud__btn hud__rewarded';
+      actions.append(double);
+    }
+    if (this.events.onLevelSelect && (!this.playerBuild || view.showWorkshop)) {
+      const select = this.makeButton(this.playerBuild ? 'WORKSHOP' : 'Level Select', this.playerBuild ? 'Open Workshop' : 'Back to level select (Esc)', this.events.onLevelSelect);
       select.className = 'hud__btn';
       select.hidden = this.playerBuild && !won;
       actions.append(select);
     }
+  }
+
+  showDeeperHint(text: string): void {
+    if (this.overlay.hidden) return;
+    let hint = this.overlay.querySelector<HTMLParagraphElement>('.hud__panel-deeper');
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.className = 'hud__panel-deeper';
+      this.overlay.querySelector('.hud__panel-sub')?.after(hint);
+    }
+    hint.textContent = `Next step · ${text}`;
+    for (const button of this.overlay.querySelectorAll<HTMLButtonElement>('.hud__rewarded')) button.disabled = true;
+  }
+
+  invalidateOutcome(): void {
+    this.overlay.hidden = true;
+    this.overlay.innerHTML = '';
   }
 
   destroy(): void {

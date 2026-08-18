@@ -291,6 +291,22 @@ describe('Terrain materials', () => {
 });
 
 describe('GameSimulation', () => {
+  it('supports a short first release without accelerating the later cadence', () => {
+    const sim = new GameSimulation(makeFlatLevel({
+      totalLemmings: 2,
+      targetSaved: 2,
+      spawnIntervalMs: 1000,
+      firstSpawnDelayMs: 120,
+    }));
+
+    sim.step(112);
+    expect(sim.state.spawned).toBe(0);
+    sim.step(16);
+    expect(sim.state.spawned).toBe(1);
+    sim.step(992);
+    expect(sim.state.spawned).toBe(2);
+  });
+
   it('spawns walkers and counts a lemming saved when it reaches the exit', () => {
     const sim = new GameSimulation(makeFlatLevel());
 
@@ -303,21 +319,51 @@ describe('GameSimulation', () => {
     expect(sim.state.outcome).toBe('won');
   });
 
-  it('keeps a quota-qualified campaign run open until every crew member is accounted for', () => {
+  it('wins as soon as every crew member is home, not merely when the quota is met', () => {
     const sim = new GameSimulation(
-      makeFlatLevel({ totalLemmings: 2, targetSaved: 1, spawnIntervalMs: 1200 }),
+      makeFlatLevel({ totalLemmings: 2, targetSaved: 1, spawnIntervalMs: 1200, timeLimitMs: 60_000 }),
     );
 
     for (let i = 0; i < 900 && sim.state.saved === 0; i += 1) sim.step(16);
 
     expect(sim.state.saved).toBe(1);
     expect(sim.state.outcome).toBe('running');
+    expect(sim.state.timeRemainingMs).toBeGreaterThan(0);
 
     for (let i = 0; i < 900 && sim.state.outcome === 'running'; i += 1) sim.step(16);
 
     expect(sim.state.saved).toBe(2);
     expect(sim.state.lost).toBe(0);
+    expect(sim.state.lemmings.every((lemming) => lemming.state === 'exited')).toBe(true);
     expect(sim.state.outcome).toBe('won');
+    expect(sim.state.timeRemainingMs).toBeGreaterThan(0);
+  });
+
+  it('loses as soon as every crew member has died', () => {
+    const sim = new GameSimulation(
+      makeFlatLevel({
+        totalLemmings: 2,
+        targetSaved: 1,
+        spawnIntervalMs: 1200,
+        timeLimitMs: 60_000,
+        hazards: [{ x: 0, y: 0, width: 240, height: 120, kind: 'lava' }],
+      }),
+    );
+
+    for (let i = 0; i < 200 && sim.state.lost === 0; i += 1) sim.step(16);
+
+    expect(sim.state.spawned).toBe(1);
+    expect(sim.state.lost).toBe(1);
+    expect(sim.state.outcome).toBe('running');
+
+    for (let i = 0; i < 200 && sim.state.outcome === 'running'; i += 1) sim.step(16);
+
+    expect(sim.state.spawned).toBe(2);
+    expect(sim.state.saved).toBe(0);
+    expect(sim.state.lost).toBe(2);
+    expect(sim.state.lemmings.every((lemming) => lemming.state === 'dead')).toBe(true);
+    expect(sim.state.outcome).toBe('lost');
+    expect(sim.state.timeRemainingMs).toBeGreaterThan(0);
   });
 
   it('blockers reverse walkers that run into them', () => {

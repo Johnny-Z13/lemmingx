@@ -160,6 +160,8 @@ export interface LevelDefinition {
   emitters?: EmitterDefinition[];
   /** Hatch-opening duration before the first spawn. Omit for the default. */
   hatchOpenMs?: number;
+  /** Optional delay to the first crew release; later releases use spawnIntervalMs. */
+  firstSpawnDelayMs?: number;
   spawnIntervalMs: number;
   totalLemmings: number;
   releaseRate: number;
@@ -228,7 +230,18 @@ export type SimEventKind =
   | 'land' // survived a fall (soft thud / squash)
   | 'clank' // carve attempt hit steel / a one-way wall the wrong way
   | 'trap' // a trap sprung on a victim (see trapKind)
+  | 'material' // a persistent Atlas-worthy interaction occurred
   | 'nuke';
+
+export type MaterialInteraction =
+  | 'sand-smothers-fire'
+  | 'water-quenches-fire'
+  | 'fire-burns-wood'
+  | 'wood-rides-water'
+  | 'swimmer-crosses-deep-water'
+  | 'climber-self-rescues'
+  | 'bomber-sinks'
+  | 'sand-builds-ramp';
 
 export interface SimEvent {
   kind: SimEventKind;
@@ -236,6 +249,8 @@ export interface SimEvent {
   y: number;
   /** Which machine sprung (only on 'trap' events). */
   trapKind?: TrapKind;
+  /** Which persistent material rule was observed (only on 'material'). */
+  interaction?: MaterialInteraction;
 }
 
 export interface Lemming {

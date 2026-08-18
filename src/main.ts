@@ -6,35 +6,24 @@ import {
   IS_PLAYER_EXPERIENCE,
   setDevSandboxEnabled,
 } from './runtimeMode';
-import { DEVICE_PROFILE, IS_MOBILE_DEVICE } from './deviceProfile';
-import { installMobileFullscreen } from './lifecycle/MobileFullscreen';
-import { PortraitModalGate } from './lifecycle/PortraitModalGate';
-import { TOUCH_PORTRAIT_QUERY } from './lifecycle/TouchOrientationGate';
+import { DEVICE_PROFILE } from './deviceProfile';
 import './styles.css';
+import { telemetry } from './telemetry/Telemetry';
+import { installRendererRecovery } from './platform/rendererRecovery';
 
-document.title = IS_PLAYER_EXPERIENCE ? 'LemmingX' : `LemmingX · ${__BUILD_TAG__}`;
+telemetry.emitOnce('load_started');
+window.addEventListener('pagehide', () => {
+  telemetry.emitOnce('session_end');
+  void telemetry.flush();
+});
+
+document.title = IS_PLAYER_EXPERIENCE ? 'Swarmwright' : `LemmingX Sandbox · ${__BUILD_TAG__}`;
 document.body.classList.toggle('is-player-build', IS_PLAYER_EXPERIENCE);
 document.body.classList.toggle('is-sandbox-build', DEV_SANDBOX_ENABLED);
 document.body.classList.toggle('is-mobile-device', DEVICE_PROFILE === 'mobile');
 document.body.classList.toggle('is-desktop-device', DEVICE_PROFILE === 'desktop');
-if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) {
-  const rotateNotice = document.createElement('div');
-  rotateNotice.className = 'rotate-notice';
-  rotateNotice.tabIndex = -1;
-  rotateNotice.setAttribute('aria-hidden', 'true');
-  rotateNotice.setAttribute('aria-labelledby', 'lemmingx-rotate-heading');
-  rotateNotice.setAttribute('aria-describedby', 'lemmingx-rotate-detail');
-  rotateNotice.setAttribute('aria-live', 'polite');
-  rotateNotice.innerHTML = '<strong id="lemmingx-rotate-heading">Rotate to play</strong><span id="lemmingx-rotate-detail">LemmingX is designed for landscape.</span>';
-  document.body.append(rotateNotice);
-  const portraitModalGate = new PortraitModalGate(rotateNotice, window.matchMedia(TOUCH_PORTRAIT_QUERY));
-  portraitModalGate.start();
-  window.addEventListener('pagehide', () => portraitModalGate.stop());
-  window.addEventListener('pageshow', () => portraitModalGate.start());
-  installMobileFullscreen();
-}
 
-if (DEV_SANDBOX_AVAILABLE) {
+if (__DEV_SANDBOX_AVAILABLE__) {
   const sandboxButton = document.createElement('button');
   sandboxButton.type = 'button';
   sandboxButton.className = 'dev-sandbox-toggle';
@@ -66,9 +55,20 @@ const game = new Phaser.Game({
   },
 });
 
+installRendererRecovery(game.canvas, {
+  onLost: () => {
+    telemetry.emit('renderer_context_lost');
+    game.loop.sleep();
+  },
+  onRestored: () => {
+    telemetry.emit('renderer_context_restored');
+    game.loop.wake();
+  },
+});
+
 // Dev-only handle so the preview/devtools can inspect or drive the running game
 // even when the tab is backgrounded (and rAF is throttled).
-if (DEV_SANDBOX_AVAILABLE) {
+if (__DEV_SANDBOX_AVAILABLE__) {
   (window as unknown as { game: Phaser.Game }).game = game;
   if (new URLSearchParams(window.location.search).has('playtest')) {
     void import('./playtest-harness').then(({ installPlaytestHarness }) => installPlaytestHarness(game));

@@ -6,16 +6,16 @@
     "saved": 10,
     "lost": 0,
     "milestones": {
-      "orderAcceptedMs": 1120,
-      "assignmentMs": 9072,
+      "orderAcceptedMs": 192,
+      "assignmentMs": 5056,
       "breachMs": 80,
       "sandVisibleMs": 112,
       "waterReleasedMs": 160,
       "woodLiftMs": 0,
       "walkableBridgeMs": 544,
-      "firstCrossingMs": 9424,
-      "firstSaveMs": 21904,
-      "completionMs": 31680
+      "firstCrossingMs": 9440,
+      "firstSaveMs": 18848,
+      "completionMs": 28624
     },
     "chainWithinTenSeconds": true
   },

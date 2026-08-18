@@ -1,6 +1,8 @@
-# LemmingX
+# Swarmwright
 
-**Lemmings × Noita sandworld** — a clean-room browser puzzle game.
+`Swarmwright` is the working public title for the repository historically named
+LemmingX: an original swarm-rescue puzzle game built around authored living
+terrain. Name/trademark clearance is still a human pre-publication gate.
 
 Tiny creatures spill from a hatch. You assign classic skills **and** author the
 living landscape: dig, build, bomb, flood, float wood into bridges, ignite it
@@ -23,21 +25,48 @@ campaign level unlocked, Prototype 11/12, Sand Lab, and diagnostic controls.
 Compiled builds cannot enter Sandbox mode.
 
 The runtime selects a **Desktop** or **Mobile** device profile from platform and
-input capabilities, never from viewport width alone. Desktop remains playable in
-narrow or portrait-shaped browser windows. Phones and iPads use the Mobile
-profile and show the landscape rotation gate only while the physical viewport is
-portrait; iPadOS desktop-style user agents are recognized through touch support.
+input capabilities, never from viewport width alone. The CrazyGames submission
+is landscape-only on mobile; CrazyGames owns the rotate prompt, so the game does
+not ship a competing orientation modal. iPadOS desktop-style user agents are
+recognized through touch support.
 
 ```bash
 npm run test    # vitest: sim + CA + level solvability
 npm run build   # canonical relative-path player build
-npm run build:crazygames  # explicit CrazyGames build (same player artifact)
+npm run build:crazygames       # ad-free Basic Launch candidate
+npm run build:crazygames:full  # SDK/ad-enabled Full Launch candidate
+npm run verify:crazygames:browser
+npm run build:covers
+npm run capture:previews
+npm run validate:submission-media
 ```
+
+## CrazyGames product
+
+The canonical player build now boots directly into live Site 1. A first-time
+player sees no logo, title screen, level grid, settings decision, or modal
+tutorial. The first instruction is `TAP THE CREW`; a successful tap starts a
+seeded sand → water → timber rescue chain, with the first permanent Salvage and
+Atlas progress banked as it happens.
+
+- Sites 1–3 form the first Expedition and introduce one verb at a time.
+- Sites 4–10, Workshop, Pause, Atlas, Daily Rescue, and Test Yard stream after
+  the initial playable path.
+- Workshop projects, a forgiving UTC Daily Rescue, a 14-entry Material Atlas,
+  and capped away accrual provide independent return hooks.
+- Basic Launch performs no SDK or ad request. Full Launch dynamically loads the
+  CrazyGames v3 SDK and keeps rewarded offers optional and frequency-gated.
+- The player experience is landscape-only on mobile, one-thumb/touch playable,
+  muted-safe, legible at DPR 1, and tiered down automatically on 4-core/4 GB
+  devices or after sustained frame pressure.
+- Submission covers and silent previews live in `marketing/crazygames/` and do
+  not enter the runtime payload. The locked design and implementation evidence
+  live in `docs/crazygames/`.
 
 ## Current state
 
-LemmingX is a playable, guarded game rather than a loose prototype: the full
-10-level campaign and Sand Lab ship as the player game, while two development-only
+Swarmwright is a playable, guarded CrazyGames candidate: the full
+10-site rescue route and Test Yard ship as the player game, while two development-only
 mechanic-prototype slots exercise the same deterministic headless sim,
 every campaign level has a scripted solvability path, and the rendered shell
 adds procedural sprites, role identity, crowd readability, particles, music,
@@ -45,19 +74,16 @@ and SFX without leaking Phaser or browser state into simulation code.
 
 ## How to play
 
-- **Player progression** — 10 campaign levels with progressive landscape
-  intros; Sand Lab opens after Level 3. Sequential progression and best Success
-  % are saved in localStorage. Local **Dev Sandbox** unlocks the entire roster
-  and adds Prototype 11/12 outside progression.
+- **Player progression** — 10 sequential rescue sites, grouped into short
+  Expeditions. Salvage, discoveries, best rescue counts, failures, Workshop,
+  Daily, and Atlas state are written to versioned localStorage continuously.
+  Local **Dev Sandbox** unlocks the entire roster and adds Prototype 11/12.
 - Meet the **save quota** before the **timer** ends. Live **Success %** is
   `saved / total` (100% = everyone home). Quota can be lower than 100%.
-- Most campaign levels have the **open toolbox**. Levels 2, 7, and 9 are
-  **challenge loadouts** with deliberately limited roles/tools so Swimmer, Fire,
-  and Floater/Climber cannot be bypassed. Sandbox unlocks all levels for testing.
-- Campaign levels open in a **planning phase** with a goal and route hint. The
-  clock and hatch stay stopped while you queue roles or reshape terrain; press
-  **Space** or **Start run** when ready. Painted sand, water, wood, and fire keep
-  reacting during planning so the route can be evaluated before release.
+- Player sites use curated loadouts of at most three visible tools. Site 1 is
+  already moving; Site 2 pauses for one water-route choice and explicit release;
+  later planning surfaces remain concise and contextual. Dev Sandbox retains
+  the full diagnostic toolbox.
 - Terrain is a **living pixel grid**: sand settles, water flows and supports
   wading/treading/swimming, **wood floats**, and **fire rises and consumes wood**.
   Water extinguishes fire; touching flame burns a lemming. Bombs now carve a
@@ -81,7 +107,8 @@ and SFX without leaking Phaser or browser state into simulation code.
   Esc returns to skills (stacked puzzles: dig → flood → float wood).
 - **Emitters** — some levels have spouts that pour sand or water on their own
   until their budget runs dry. Living terrain you don't control.
-- **Space** pause · **F** speed (1×/2×/3×) · **N** nuke · **H** hide/show the
+- **Space** pause · **F** speed (1×/2×/3×) · **R** restart. Dev Sandbox also
+  exposes **N** nuke · **H** hide/show the
   control dock · **L** debug labels · **R** restart · **Esc** select. The dock
   uses a compact top-right hand/minimise cluster: drag by the hand, or toggle
   the panel without moving the cursor. The canonical player belt keeps restart
@@ -91,8 +118,8 @@ and SFX without leaking Phaser or browser state into simulation code.
   the **minimap** jumps the camera. Start briefly presents the hatch, and the
   first rescue presents the exit before returning camera control.
 - **Traps** (crusher / zapper / chomper) kill one victim, then re-arm.
-- Fatal falls produce a deliberately OTT blood spray, impact flash, shake, and
-  a ground stain that lasts until restart; other death types keep distinct FX.
+- Public fatal falls use dust, helmet, impact flash, and shake feedback suitable
+  for a PEGI-12 portal audience. Dev Sandbox retains stronger diagnostic FX.
 - Chiptune **music** + SFX are synthesized at runtime. Music starts **muted**;
   HUD toggles/volumes persist.
 
@@ -111,9 +138,10 @@ and SFX without leaking Phaser or browser state into simulation code.
 | 9 | The Gauntlet | Locked Floater/Climber loadout + two fatal drops |
 | 10 | Sandworld Symphony | Full toolkit + every terrain charge + a dune spout |
 
-### Sand Lab
+### Test Yard / Sand Lab
 
-Noita-lite free play from the level select after Level 3, or immediately in Dev Sandbox:
+Living-terrain free play from the Workshop after the first Expedition, or
+immediately in Dev Sandbox:
 
 | Key | Tool |
 |:---:|------|

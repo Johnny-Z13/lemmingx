@@ -27,7 +27,7 @@ export class LevelSelect {
     this.root.hidden = true;
     this.root.innerHTML = `
       <div class="select__panel">
-        <h1 class="select__title">LemmingX</h1>
+        <h1 class="select__title">${SANDBOX_UI_ENABLED ? 'LemmingX Sandbox' : 'Swarmwright'}</h1>
         <p class="select__sub">${SANDBOX_UI_ENABLED ? 'Sandbox: campaign, prototypes, and the free-play Sand Lab.' : 'Living-terrain rescue puzzles.'}</p>
         ${SANDBOX_UI_ENABLED ? '<p class="select__build"></p>' : ''}
         <div class="select__grid"></div>

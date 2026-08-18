@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { createLevelAt, LEVEL_COUNT, PROTOTYPE_LEVEL_INDICES, PROTOTYPE_START_INDEX, SAND_LAB_INDEX } from '../levels';
+import { LEVEL_COUNT, PROTOTYPE_LEVEL_INDICES, PROTOTYPE_START_INDEX, SAND_LAB_INDEX } from '../levels/catalog';
+import { loadLevelAt } from '../levels/runtimeLoader';
 import { GameSimulation } from '../sim/GameSimulation';
 import { FixedStepClock } from '../sim/FixedStepClock';
 import { MATERIAL } from '../sim/Terrain';
@@ -8,9 +9,8 @@ import { ALL_SKILLS } from '../sim/types';
 import { SKILL_DEFS } from '../sim/skills/registry';
 import type { SimEvent } from '../sim/types';
 import { Hud, TERRAIN_TOOLS, type TerrainBrush } from '../ui/Hud';
-import { LevelSelect, type LevelCard } from '../ui/LevelSelect';
-import { TitleScreen } from '../ui/TitleScreen';
-import { Progress } from '../progress';
+import type { LevelCard, LevelSelect } from '../ui/LevelSelect';
+import { Progress, safeBrowserStorage } from '../progress';
 import { drawLemming } from '../render/LemmingSprite';
 import {
   CREW_SALVAGER_FRAME_SIZE,
@@ -35,19 +35,34 @@ import { Music } from '../audio/Music';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from '../audio/settings';
 import { colorToCss, crewColor, crewLabel, skillPalette } from '../render/lemmingIdentity';
 import { worldEntityLabels } from '../render/entityLabels';
-import { loadUiSettings, saveUiSettings } from '../ui/settings';
+import { loadUiSettings, saveUiSettings, type GraphicsQuality } from '../ui/settings';
 import { ResumeOverlay, type ResumeReason } from '../ui/ResumeOverlay';
 import { selectCrewTarget } from '../input/crewTargeting';
 import { ContinueOverlay } from '../ui/ContinueOverlay';
 import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
-import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
 import { canEdgeHoverScroll, canRestoreHeroCamera, canScriptPlayerCameraFocus, playerCameraAttentionFrame, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraLockedHudSafeFrame, playerCameraMinimapFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, playerCameraOcclusionRects, playerCameraPaddedBounds, type PlayerCameraSafeInsets } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
 import { IS_MOBILE_DEVICE } from '../deviceProfile';
 import { heroMoveChargesForLevel, heroMoveControlState, type HeroMovePhase } from '../input/heroMove';
+import type { PauseOptionsOverlay } from '../ui/PauseOptionsOverlay';
+import { SITE2_POUR_ZONES, site2PourZoneAt, type Site2PourChoice } from '../onboarding/site2Pour';
+import { platform } from '@platform-runtime';
+import { ADS_ENABLED } from '../platform/productMode';
+import { telemetry } from '../telemetry/Telemetry';
+import type { DailyRescueDefinition } from '../meta/catalog';
+import { configureDailyLevel } from '../meta/dailyRules';
+import type { WorkshopOverlay } from '../meta/WorkshopOverlay';
+import {
+  FrameBudgetMonitor,
+  lowerTier,
+  particleBudgetScale,
+  readBootPresentationTier,
+  terrainAnimationIntervalMs,
+  type PresentationTier,
+} from '../performance/presentationTier';
 
 /** Animation advances at this many frames per second (shared by all sprites). */
 const ANIM_FPS = 12;
@@ -86,6 +101,7 @@ export class GameScene extends Phaser.Scene {
   private heroMoveBeatRemainingMs = 0;
   private heroReturnCamera: { zoom: number; scrollX: number; scrollY: number } | null = null;
   private levelIndex = 0;
+  private levelLoadToken = 0;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
   /** Edge-scroll only engages once the mouse has actually entered the game. */
   private pointerSeen = false;
@@ -97,18 +113,37 @@ export class GameScene extends Phaser.Scene {
   private readonly music = new Music();
   private readonly motionPreference = new RenderMotionPreference();
   private audioSettings = loadAudioSettings();
-  private uiSettings = IS_PLAYER_EXPERIENCE ? { debugLabels: false } : loadUiSettings();
+  private uiSettings = loadUiSettings();
   private readonly lemmingLabels = new Map<number, Phaser.GameObjects.Text>();
   private readonly entityLabels = new Map<string, Phaser.GameObjects.Text>();
-  private readonly progress = new Progress(localStorage);
-  private levelSelect!: LevelSelect;
-  private titleScreen?: TitleScreen;
-  private titleOpen = true;
+  private onboardingMarkerLabels: Phaser.GameObjects.Text[] = [];
+  private readonly progress = new Progress(safeBrowserStorage());
+  private levelSelect?: LevelSelect;
   private selectOpen = false;
   private winRecorded = false;
+  private lossRecorded = false;
   private celebrateFired = false;
   private firstExitFocusShown = false;
   private ambientAccMs = 0;
+  private sessionActiveMs = 0;
+  private siteActiveMs = 0;
+  private returningSession = false;
+  private expeditionSalvageEarned = 0;
+  private expeditionsCompletedThisSession = 0;
+  private lastRewardedOfferMs = -90_000;
+  private rewardedHintAvailable = false;
+  private rewardedDoubleAmount = 0;
+  private pendingInterstitial = false;
+  private advancingAfterInterstitial = false;
+  private adMuted = false;
+  private readonly frameBudget = new FrameBudgetMonitor(readBootPresentationTier(IS_MOBILE_DEVICE ? 'mobile' : 'desktop'));
+  private presentationTier: PresentationTier = this.frameBudget.tier;
+  private lastLongFrameReportMs = -10_000;
+  private lastTerrainRedrawCount = 0;
+  private hostMuted = false;
+  private removePlatformMuteListener: (() => void) | null = null;
+  private workshopOverlay?: WorkshopOverlay;
+  private dailyRun: { definition: DailyRescueDefinition; date: string } | null = null;
   private brush: TerrainBrush | null = null;
   private crewPlacement: Skill | null = null;
   private worldTool: WorldEntityKind | null = null;
@@ -137,8 +172,12 @@ export class GameScene extends Phaser.Scene {
   private lastStampX = 0;
   private lastStampY = 0;
   private resumeOverlay!: ResumeOverlay;
+  private pauseOptions?: PauseOptionsOverlay;
   private continueOverlay?: ContinueOverlay;
-  private touchOrientationGate?: TouchOrientationGate;
+  private firstCommandAccepted = false;
+  private site2PourChoice: Site2PourChoice | null = null;
+  private routeChoiceRecorded = false;
+  private commandsUsed = 0;
   private lifecycleReason: ResumeReason = 'focus';
   private readonly lifecycle = new FocusLifecycle({
     onSuspend: () => {
@@ -162,10 +201,11 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super('GameScene');
+    if (IS_PLAYER_EXPERIENCE) this.uiSettings.debugLabels = false;
   }
 
   preload(): void {
-    this.load.image(INDUSTRIAL_BACKDROP_KEY, `${import.meta.env.BASE_URL}assets/industrial-cavern-backdrop.png`);
+    this.load.image(INDUSTRIAL_BACKDROP_KEY, `${import.meta.env.BASE_URL}assets/industrial-cavern-backdrop.webp`);
     this.load.spritesheet(CREW_SALVAGER_TEXTURE_KEY, `${import.meta.env.BASE_URL}${CREW_SALVAGER_TEXTURE_PATH}`, {
       frameWidth: CREW_SALVAGER_FRAME_SIZE,
       frameHeight: CREW_SALVAGER_FRAME_SIZE,
@@ -174,17 +214,25 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.motionPreference.start();
+    this.removePlatformMuteListener = platform.onMuteChange((muted) => {
+      this.hostMuted = muted;
+      this.applyAudioSettings(this.audioSettings);
+    });
+    void platform.init().then(() => {
+      const tier = readBootPresentationTier(platform.systemInfo().deviceType);
+      if (this.frameBudget.constrainTo(tier)) this.applyPresentationTier(this.frameBudget.tier, 'platform');
+    });
     this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
-    if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) {
-      this.touchOrientationGate = new TouchOrientationGate(
-        window.matchMedia(TOUCH_PORTRAIT_QUERY),
-        () => this.suspendForLifecycle('orientation'),
-      );
+    if (IS_PLAYER_EXPERIENCE) {
       this.continueOverlay = new ContinueOverlay(
-        () => this.continueOverlay?.hide(),
         () => {
           this.continueOverlay?.hide();
-          this.openLevelSelect();
+          this.paused = this.planning;
+          if (!this.planning && this.sim?.state.outcome === 'running') platform.gameplayStart();
+        },
+        () => {
+          this.continueOverlay?.hide();
+          void this.openWorkshop();
         },
       );
     }
@@ -194,6 +242,8 @@ export class GameScene extends Phaser.Scene {
     this.installKeyboard();
     if (IS_PLAYER_EXPERIENCE && IS_MOBILE_DEVICE) this.input.addPointer(1);
     this.applyAudioSettings(this.audioSettings);
+    this.applyGraphicsQuality(this.uiSettings.graphicsQuality);
+    this.applyPresentationTier(this.uiSettings.graphicsQuality === 'low' ? 'low' : this.frameBudget.tier, 'boot');
     // Audio contexts need a user gesture; unlock on the first pointer/key.
     this.input.on('pointerdown', () => this.unlockAudio());
     this.input.keyboard?.on('keydown', () => this.unlockAudio());
@@ -350,6 +400,7 @@ export class GameScene extends Phaser.Scene {
           || this.lifecycle.isSuspended()
           || this.selectOpen
           || this.continueOverlay?.isVisible()
+          || this.pauseOptions?.isVisible()
           || this.isPlayerCameraLocked()
           || !this.sim
         ) return;
@@ -358,36 +409,59 @@ export class GameScene extends Phaser.Scene {
         (pointer.event as WheelEvent | undefined)?.preventDefault();
       },
     );
-    this.levelSelect = new LevelSelect((index) => {
-      this.unlockAudio();
-      this.levelIndex = index;
-      this.selectOpen = false;
-      this.levelSelect.hide();
-      this.startLevel();
-    });
-    this.titleScreen = new TitleScreen(() => {
-      this.unlockAudio();
-      this.titleOpen = false;
-      if (IS_PLAYER_EXPERIENCE) {
-        this.levelIndex = this.nextUnsolvedLevelIndex();
-        this.startLevel();
-        if (this.levelIndex > 0) this.continueOverlay?.show(this.level.name ?? `Level ${this.levelIndex + 1}`);
-      } else {
-        this.openLevelSelect();
-      }
-    });
-    this.touchOrientationGate?.start();
+    if (IS_PLAYER_EXPERIENCE) {
+      const returning = this.progress.hasProgress();
+      this.returningSession = returning;
+      const away = this.progress.applyAwayAccrual(Date.now());
+      telemetry.emit('storage_status', this.progress.status);
+      this.levelIndex = this.nextUnsolvedLevelIndex();
+      void this.startLevel().then(() => {
+        telemetry.emitOnce('first_frame', { site: this.levelIndex + 1 });
+        if (returning) {
+          telemetry.emitOnce('return_session', { awayHours: away.hours, awaySalvage: away.salvageGranted });
+          this.paused = true;
+          const save = this.progress.snapshot();
+          this.continueOverlay?.show({
+            levelName: this.level.name ?? `Site ${this.levelIndex + 1}`,
+            salvage: save.salvage,
+            rescuedTotal: save.rescuedTotal,
+            workshopBuilt: save.workshop.length,
+            awayHours: away.hours,
+            awaySalvage: away.salvageGranted,
+            metaUnlocked: this.progress.get(2).completed,
+          });
+          platform.gameplayStop();
+        }
+      });
+    } else {
+      void this.openLevelSelect();
+    }
   }
 
   /** Show the campaign screen (boot, Esc, or from the win/lose overlay). */
-  private openLevelSelect(): void {
+  private async openLevelSelect(): Promise<void> {
     this.lifecycle.clear();
     this.resumeOverlay.hide();
+    this.pauseOptions?.hide(false);
     this.simClock.reset();
+    this.paused = false;
     this.selectOpen = true;
     this.music.stop();
-    const cards: LevelCard[] = Array.from({ length: LEVEL_COUNT }, (_, index) => {
-      const def = createLevelAt(index);
+    platform.gameplayStop();
+    if (!this.levelSelect) {
+      const { LevelSelect } = await import('../ui/LevelSelect');
+      this.levelSelect = new LevelSelect((index) => {
+        this.unlockAudio();
+        this.levelIndex = index;
+        this.selectOpen = false;
+        this.levelSelect?.hide();
+        void this.startLevel();
+      });
+    }
+    const campaignDefinitions = await Promise.all(
+      Array.from({ length: LEVEL_COUNT }, (_, index) => loadLevelAt(index)),
+    );
+    const cards: LevelCard[] = campaignDefinitions.map((def, index) => {
       const result = this.progress.get(index);
       return {
         index,
@@ -398,7 +472,7 @@ export class GameScene extends Phaser.Scene {
       };
     });
     for (const index of PROTOTYPE_LEVEL_INDICES) {
-      const def = createLevelAt(index);
+      const def = await loadLevelAt(index);
       cards.push({
         index,
         name: def.name ?? `Prototype ${index + 1}`,
@@ -408,9 +482,10 @@ export class GameScene extends Phaser.Scene {
         prototype: true,
       });
     }
+    const lab = await loadLevelAt(SAND_LAB_INDEX);
     cards.push({
       index: SAND_LAB_INDEX,
-      name: 'Sand Lab',
+      name: lab.name ?? 'Sand Lab',
       unlocked: !IS_PLAYER_EXPERIENCE || this.progress.get(2).completed,
       completed: false,
       bestSavedPct: 0,
@@ -596,10 +671,57 @@ export class GameScene extends Phaser.Scene {
    * return to skill assignment; open-toolbox campaign levels paint freely.
    */
   private paintStamp(worldX: number, worldY: number, brush: Exclude<TerrainBrush, 'bomb'>): void {
+    if (IS_PLAYER_EXPERIENCE && this.levelIndex === 1 && this.planning && brush === 'water') {
+      if (this.site2PourChoice !== null) return;
+      const zone = site2PourZoneAt(worldX, worldY);
+      if (!zone) {
+        telemetry.emit('tool_invalid', { site: 2, tool: 'water' });
+        this.crewActionFeedback.show('missed-pour', this.animClockMs);
+        this.particles.ring(worldX, worldY, 10, {
+          color: 0xff5b7f,
+          speed: 0.04,
+          lifeMs: 240,
+          size: 1.4,
+        });
+        return;
+      }
+      const x = zone.x + zone.width / 2;
+      const y = zone.y + zone.height / 2;
+      if (!this.sim.paintLandscape(x, y, zone.paintRadius, brush)) return;
+      this.commandsUsed += 1;
+      this.site2PourChoice = zone.id;
+      this.routeChoiceRecorded = true;
+      this.progress.markStarted();
+      telemetry.emitOnce('first_input', { site: 2, tool: 'water' });
+      telemetry.emit('route_choice', { site: 2, route: zone.id });
+      this.lastStampX = x;
+      this.lastStampY = y;
+      this.brush = null;
+      this.painting = false;
+      this.sfx.play('assign');
+      this.particles.ring(x, y, zone.paintRadius * 0.48, {
+        color: [0x6ae1ff, 0xffffff],
+        speed: 0.08,
+        lifeMs: 420,
+        size: 1.8,
+      });
+      return;
+    }
+
     const painted = this.sim.paintLandscape(worldX, worldY, 16, brush);
     if (painted) {
+      this.commandsUsed += 1;
       this.lastStampX = worldX;
       this.lastStampY = worldY;
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex >= 2 && !this.planning) this.paused = false;
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT && !this.dailyRun) {
+        this.progress.markStarted();
+        telemetry.emitOnce('first_input', { site: this.levelIndex + 1, tool: brush });
+        if (this.levelIndex === 2 && brush === 'sand' && !this.routeChoiceRecorded) {
+          this.routeChoiceRecorded = true;
+          telemetry.emit('route_choice', { site: 3, route: 'lossless-sand' });
+        }
+      }
     }
     if (!this.hasOpenToolbox() && this.sim.state.landscape[brush] <= 0) {
       this.brush = null;
@@ -616,8 +738,30 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.titleOpen || this.selectOpen || !this.sim) return; // frozen behind title / level select
+    if (this.selectOpen || !this.sim) return; // frozen behind level select
     if (this.lifecycle.isSuspended()) return;
+    const budget = this.frameBudget.observe(delta);
+    if (budget.changed) this.applyPresentationTier(budget.tier, 'automatic');
+    if (budget.longFrame && this.animClockMs - this.lastLongFrameReportMs >= 10_000) {
+      this.lastLongFrameReportMs = this.animClockMs;
+      telemetry.emit('long_frame', {
+        frameMs: Math.round(delta),
+        tier: this.presentationTier,
+        particles: this.particles.count,
+        redrawnChunks: this.lastTerrainRedrawCount,
+      });
+    }
+    if (
+      this.sim.state.outcome === 'running' &&
+      !this.pauseOptions?.isVisible() &&
+      !this.continueOverlay?.isVisible() &&
+      (!this.paused || this.planning)
+    ) {
+      this.sessionActiveMs += delta;
+      this.siteActiveMs += delta;
+      if (this.sessionActiveMs >= 60_000) telemetry.emitOnce('active_60s');
+      if (this.sessionActiveMs >= 90_000) telemetry.emitOnce('active_90s');
+    }
     if (this.planning) {
       // Planning freezes the run, not the living world the player is shaping.
       this.simClock.advance(delta, 1, () => this.sim.stepLivingTerrain());
@@ -639,7 +783,63 @@ export class GameScene extends Phaser.Scene {
     if (this.sim.state.outcome === 'won' && !this.winRecorded) {
       this.winRecorded = true;
       const pct = (this.sim.state.saved / Math.max(1, this.sim.state.totalLemmings)) * 100;
-      this.progress.recordWin(this.levelIndex, pct);
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT) {
+        if (this.dailyRun) {
+          const { definition, date } = this.dailyRun;
+          const mastery = definition.variant === 'perfect'
+            ? this.sim.state.lost === 0
+            : definition.variant === 'rush'
+              ? this.sim.state.timeMs <= 120_000
+              : this.sim.state.saved === this.sim.state.totalLemmings;
+          const score = `${definition.id}:${this.sim.state.saved}.${this.commandsUsed}.${Math.round(this.sim.state.timeMs / 100)}`;
+          this.progress.completeDaily(date, mastery, score);
+          telemetry.emit('site_complete', { daily: true, mastery, saved: this.sim.state.saved });
+        } else {
+          this.progress.recordWin(this.levelIndex, pct);
+          telemetry.emit('site_complete', {
+            site: this.levelIndex + 1,
+            saved: this.sim.state.saved,
+            total: this.sim.state.totalLemmings,
+          });
+          if (this.levelIndex === 2) telemetry.emitOnce('first_expedition_complete');
+          if (this.isExpeditionBoundary()) {
+            this.expeditionsCompletedThisSession += 1;
+            const canOfferDouble = ADS_ENABLED
+              && this.returningSession
+              && this.sessionActiveMs >= 90_000
+              && this.expeditionSalvageEarned > 0
+              && this.sessionActiveMs - this.lastRewardedOfferMs >= 90_000;
+            if (canOfferDouble) {
+              this.rewardedDoubleAmount = this.expeditionSalvageEarned;
+              this.lastRewardedOfferMs = this.sessionActiveMs;
+              telemetry.emit('ad_offer', { placement: 'expedition-double', amount: this.rewardedDoubleAmount });
+            } else if (ADS_ENABLED && this.returningSession && this.expeditionsCompletedThisSession >= 3) {
+              this.pendingInterstitial = true;
+            }
+          }
+        }
+        platform.gameplayStop();
+      }
+    }
+    if (this.sim.state.outcome === 'lost' && !this.lossRecorded) {
+      this.lossRecorded = true;
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT) {
+        if (this.dailyRun) {
+          telemetry.emit('site_fail', { daily: true, site: this.levelIndex + 1 });
+        } else {
+          const failures = this.progress.recordFailure(this.levelIndex);
+          telemetry.emit('site_fail', { site: this.levelIndex + 1, failures });
+          if (
+            ADS_ENABLED && failures === 2 && this.siteActiveMs >= 90_000
+            && this.sessionActiveMs - this.lastRewardedOfferMs >= 90_000
+          ) {
+            this.rewardedHintAvailable = true;
+            this.lastRewardedOfferMs = this.sessionActiveMs;
+            telemetry.emit('ad_offer', { placement: 'deeper-hint', site: this.levelIndex + 1 });
+          }
+        }
+        platform.gameplayStop();
+      }
     }
     if (this.sim.state.outcome === 'won' && !this.celebrateFired) {
       this.celebrateFired = true;
@@ -664,7 +864,7 @@ export class GameScene extends Phaser.Scene {
   /** Camera pan: arrow keys + screen-edge scroll (drag pan lives in create()). */
   private updateCamera(deltaMs: number): void {
     const cam = this.cameras.main;
-    if (this.isPlayerCameraLocked()) return;
+    if (this.pauseOptions?.isVisible() || this.isPlayerCameraLocked()) return;
     const insets = IS_PLAYER_EXPERIENCE ? this.playerCameraInsets() : null;
     if (insets) {
       this.setPlayerCameraBounds(playerCameraOccludedWorldHeight(this.level.height, insets.bottom, cam.zoom));
@@ -743,8 +943,32 @@ export class GameScene extends Phaser.Scene {
   /** Route sim events to sound + particle feedback. */
   private consumeEvents(events: SimEvent[]): void {
     for (const e of events) {
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT && !this.dailyRun) {
+        if (e.kind === 'bash' && this.levelIndex === 0) {
+          telemetry.emitOnce('first_chain_reaction', { site: 1 });
+        }
+        if (e.kind === 'exit') {
+          const grant = this.progress.awardRescue(this.levelIndex, this.sim.state.saved);
+          if (this.levelIndex === 0) this.progress.discover('blast-opens-floodgate');
+          if (this.levelIndex === 1) this.progress.discover('wood-floats');
+          if (grant.salvageGranted > 0) {
+            this.expeditionSalvageEarned += grant.salvageGranted;
+            telemetry.emitOnce('first_reward', { site: this.levelIndex + 1, salvage: grant.salvageGranted });
+          }
+        } else if (e.kind === 'clank') {
+          this.progress.discover('steel-resists-tools');
+        } else if (e.kind === 'splash') {
+          this.progress.discover('water-breaks-falls');
+        } else if (e.kind === 'explode') {
+          this.progress.discover('blast-carves-terrain');
+        } else if (e.kind === 'burn') {
+          this.progress.discover('fire-burns-crew');
+        } else if (e.kind === 'material' && e.interaction) {
+          this.progress.discover(e.interaction);
+        }
+      }
       if (e.kind === 'trap') this.sfx.playTrap(e.trapKind);
-      else this.sfx.play(e.kind);
+      else if (e.kind !== 'material') this.sfx.play(e.kind);
       switch (e.kind) {
         case 'assign':
           this.particles.ring(e.x, e.y, 10, { color: [0xffffff, 0x6ae1ff, 0x5ef2a1], speed: 0.14, lifeMs: 320, size: 2 });
@@ -773,8 +997,18 @@ export class GameScene extends Phaser.Scene {
           }
           break;
         case 'splat':
-          this.particles.bloodSplat(e.x, e.y + 8);
-          if (!this.reducedMotion) this.cameras.main.flash(90, 145, 0, 20);
+          if (IS_PLAYER_EXPERIENCE) {
+            this.particles.burst(e.x, e.y + 7, 12, {
+              color: [0xffd96b, WORLD_THEME.dirtSpeck, WORLD_THEME.steelLight],
+              speed: 0.11,
+              spread: Math.PI,
+              lifeMs: 520,
+              size: 2.2,
+            });
+          } else {
+            this.particles.bloodSplat(e.x, e.y + 8);
+            if (!this.reducedMotion) this.cameras.main.flash(90, 145, 0, 20);
+          }
           this.addShake(9);
           this.focusPlayerCameraEvent(e.x, e.y);
           break;
@@ -817,6 +1051,9 @@ export class GameScene extends Phaser.Scene {
         case 'spawn':
           this.particles.burst(e.x, e.y, 3, { color: [0xffd96b, 0xffffff], speed: 0.04, lifeMs: 280, size: 1.4, upward: true });
           break;
+        case 'material':
+          this.particles.ring(e.x, e.y, 7, { color: [0x6ae1ff, 0x78ffd6], speed: 0.04, lifeMs: 360, size: 1.4 });
+          break;
       }
     }
   }
@@ -830,7 +1067,12 @@ export class GameScene extends Phaser.Scene {
 
   /** Soft ambient sparkles at the exit so the goal always reads alive. */
   private updateAmbient(deltaMs: number): void {
-    if (this.reducedMotion || this.paused || this.sim.state.outcome !== 'running') return;
+    if (
+      this.reducedMotion ||
+      this.uiSettings.graphicsQuality === 'low' ||
+      this.paused ||
+      this.sim.state.outcome !== 'running'
+    ) return;
     this.ambientAccMs += deltaMs * this.speed;
     if (this.ambientAccMs < 220) return;
     this.ambientAccMs = 0;
@@ -865,27 +1107,51 @@ export class GameScene extends Phaser.Scene {
     const heroControl = this.heroMoveControl();
     const cam = this.cameras.main;
     const scrolls = this.level.width > this.scale.width || this.level.height > this.scale.height;
-    const levelPrefix = this.isLab()
+    const levelPrefix = this.dailyRun
+      ? 'Daily'
+      : this.isLab()
       ? 'Lab'
       : this.isPrototype()
         ? `Prototype ${this.levelIndex + 1}`
-        : `${this.levelIndex + 1}/${LEVEL_COUNT}`;
+        : this.levelIndex <= 2
+          ? `First Shift · ${this.levelIndex + 1}/3`
+          : this.levelIndex <= 5
+            ? `Pressure Works · ${this.levelIndex - 2}/3`
+            : this.levelIndex <= 8
+              ? `Hazard Line · ${this.levelIndex - 5}/3`
+              : 'The Last Crossing';
     return {
       paused: this.paused || this.lifecycle.isSuspended(),
       planning: this.planning,
+      salvage: this.progress.salvage,
+      atlasFound: this.progress.atlasCount,
+      atlasTotal: 14,
+      showSpeed: !IS_PLAYER_EXPERIENCE || this.levelIndex !== 0 || this.firstCommandAccepted,
+      showStart: !IS_PLAYER_EXPERIENCE || this.levelIndex !== 1 || this.site2PourChoice !== null,
+      startLabel: IS_PLAYER_EXPERIENCE && this.levelIndex === 1 ? 'RELEASE' : IS_MOBILE_DEVICE ? 'PLAY' : 'START RUN',
+      showMission: !IS_PLAYER_EXPERIENCE || this.levelIndex !== 1 || this.site2PourChoice !== null,
+      compactMission: IS_PLAYER_EXPERIENCE && this.levelIndex === 1,
       speed: this.speed,
       nukeReady: this.sim.state.outcome === 'running' && !this.planning && !this.sim.state.nuking,
       hoveredJob: hovered ? SKILL_DEFS[hovered.state as Skill]?.label ?? this.titleCase(hovered.state) : null,
-      levelName: `${levelPrefix} · ${this.level.name ?? 'LemmingX'}`,
-      objective: this.level.objective ?? `Save ${this.level.targetSaved} lemmings.`,
-      hint: this.level.hint ?? 'Queue roles or reshape the terrain before release.',
-      hasNextLevel: !this.isLab() && !this.isPrototype() && this.levelIndex < LEVEL_COUNT - 1,
+      levelName: `${levelPrefix} · ${this.dailyRun?.definition.title ?? this.level.name ?? (IS_PLAYER_EXPERIENCE ? 'Swarmwright' : 'LemmingX')}`,
+      objective: this.dailyRun?.definition.rule ?? this.level.objective ?? `Save ${this.level.targetSaved} crew.`,
+      hint: this.dailyRun?.definition.mastery ?? this.level.hint ?? 'Choose a tool, then change the route.',
+      hasNextLevel: !this.dailyRun && !this.isLab() && !this.isPrototype() && this.levelIndex < LEVEL_COUNT - 1,
+      showWorkshop: this.progress.get(2).completed,
+      signalLampActive: this.progress.hasProject('signal-lamp'),
+      deeperHint: this.deepHintForLevel(),
+      freeDeeperHint: !this.dailyRun && this.progress.getSite(this.levelIndex).failures >= 3,
+      rewardedHintAvailable: this.rewardedHintAvailable,
+      rewardedDoubleAmount: this.rewardedDoubleAmount,
       brush: this.brush,
       crewPlacement: this.crewPlacement,
       worldTool: this.worldTool,
       canPlaceWorldEntities: this.planning && this.sim.state.spawned === 0,
       prompt: this.planningPrompt(),
-      hasTerrainTools: this.hasOpenToolbox() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
+      hasTerrainTools: IS_PLAYER_EXPERIENCE
+        ? (this.playerVisibleTerrainTools()?.length ?? 0) > 0
+        : this.hasOpenToolbox() || Object.values(this.level.landscape ?? {}).some((n) => (n ?? 0) > 0),
       actionCue: this.playerActionCue(),
       heroMove: {
         phase: this.heroMovePhase,
@@ -895,7 +1161,7 @@ export class GameScene extends Phaser.Scene {
         skillLabel: SKILL_DEFS[this.sim.state.selectedSkill].label,
         crewLabel: heroTarget ? crewLabel(heroTarget) : null,
       },
-      minimap: scrolls
+      minimap: scrolls && (!IS_PLAYER_EXPERIENCE || this.levelIndex >= 3)
         ? {
             terrain: this.level.terrain,
             lemmings: this.sim.state.lemmings,
@@ -931,21 +1197,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   private planningPrompt(): string | null {
-    if (IS_PLAYER_EXPERIENCE && this.planning && this.levelIndex === 0) {
-      return IS_MOBILE_DEVICE
-        ? 'Tap Play when you are ready. The hatch and timer stay frozen until then.'
-        : 'Press Start when you are ready. The hatch and timer stay frozen until then.';
+    if (IS_PLAYER_EXPERIENCE && this.planning && this.levelIndex === 1) {
+      return this.site2PourChoice === null
+        ? 'Choose one glowing pour and predict how the timber will rise.'
+        : 'The lock is filling. Release the crew when the crossing looks ready.';
     }
     return this.prototypePrompt();
   }
 
   private playerActionCue(): string | null {
-    if (!IS_PLAYER_EXPERIENCE || this.planning) return null;
+    if (!IS_PLAYER_EXPERIENCE) return null;
     const feedback = this.crewActionFeedback.current(this.animClockMs);
     if (feedback) return feedback;
-    if (this.levelIndex === 0 && this.sim.state.skills.basher > 0) {
-      return 'CLICK A WALKER — BASHER FIRES AT THE DAM';
+    if (this.levelIndex === 0 && !this.firstCommandAccepted && this.sim.state.skills.basher > 0) {
+      return 'TAP THE CREW';
     }
+    if (this.levelIndex === 1 && this.planning && this.site2PourChoice === null) {
+      return 'POUR WATER';
+    }
+    if (this.levelIndex === 1 && this.planning && this.site2PourChoice !== null) return null;
     if (this.levelIndex === 2 && this.sim.state.outcome === 'running') {
       const blocker = this.sim.state.lemmings.find(({ state }) => state === 'blocker');
       if (!blocker) return 'HOLD THEM — TAP A WALKER NEAR THE WALL';
@@ -981,13 +1251,24 @@ export class GameScene extends Phaser.Scene {
     this.hoveredId = target?.id ?? null;
   }
 
-  private startLevel(): void {
+  private async startLevel(): Promise<void> {
+    const loadToken = ++this.levelLoadToken;
     this.lifecycle.clear();
     this.resumeOverlay.hide();
-    this.level = createLevelAt(this.levelIndex);
+    this.pauseOptions?.hide(false);
+    const level = await loadLevelAt(this.levelIndex);
+    if (loadToken !== this.levelLoadToken) return;
+    this.level = level;
+    if (this.dailyRun) configureDailyLevel(this.level, this.dailyRun.definition);
     this.sim = new GameSimulation(this.level);
     this.winRecorded = false;
+    this.lossRecorded = false;
     this.firstExitFocusShown = false;
+    this.siteActiveMs = 0;
+    this.rewardedHintAvailable = false;
+    this.rewardedDoubleAmount = 0;
+    this.pendingInterstitial = false;
+    if (!this.dailyRun && [0, 3, 6, 9].includes(this.levelIndex)) this.expeditionSalvageEarned = 0;
 
     this.crewSpriteRenderer?.clear();
     this.crewSpriteRenderer = undefined;
@@ -996,6 +1277,7 @@ export class GameScene extends Phaser.Scene {
     this.children.removeAll(true);
     this.lemmingLabels.clear();
     this.entityLabels.clear();
+    this.onboardingMarkerLabels = [];
     this.lemmingDisplayPoints.clear();
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.level.width, this.level.height);
@@ -1016,8 +1298,24 @@ export class GameScene extends Phaser.Scene {
 
     this.worldBackdrop = new WorldBackdrop(this, this.level.width, this.level.height);
     this.terrainRenderer = new ChunkedTerrainRenderer(this, 0);
+    this.terrainRenderer.setAnimationIntervalMs(terrainAnimationIntervalMs(this.presentationTier));
     this.lightGraphics = this.add.graphics().setDepth(6).setBlendMode(Phaser.BlendModes.ADD);
     this.setpieceGraphics = this.add.graphics().setDepth(10);
+    if (IS_PLAYER_EXPERIENCE && this.levelIndex === 1) {
+      this.onboardingMarkerLabels = SITE2_POUR_ZONES.map((zone, index) => this.add.text(
+        zone.x + zone.width / 2,
+        zone.y + zone.height / 2,
+        index === 0 ? 'FAST' : 'HIGH',
+        {
+          fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+          fontSize: '10px',
+          fontStyle: 'bold',
+          color: index === 0 ? '#d7f6ff' : '#d9fff0',
+          stroke: '#061019',
+          strokeThickness: 3,
+        },
+      ).setOrigin(0.5).setDepth(11));
+    }
     this.actorGraphics = this.add.graphics().setDepth(21);
     this.crewSpriteRenderer = new CrewSpriteRenderer(this);
     this.fxGraphics = this.add.graphics().setDepth(30);
@@ -1025,11 +1323,15 @@ export class GameScene extends Phaser.Scene {
     this.particles.clear();
     this.simClock.reset();
     this.crewActionFeedback.reset();
-    this.planning = !this.isLab();
+    this.firstCommandAccepted = false;
+    this.site2PourChoice = null;
+    this.routeChoiceRecorded = false;
+    this.commandsUsed = 0;
+    this.planning = !this.isLab() && (!IS_PLAYER_EXPERIENCE || this.levelIndex === 1);
     this.paused = this.planning;
     this.speed = 1;
     this.heroMovePhase = 'idle';
-    this.heroMoveCharges = heroMoveChargesForLevel(this.levelIndex, LEVEL_COUNT);
+    this.heroMoveCharges = IS_PLAYER_EXPERIENCE ? 0 : heroMoveChargesForLevel(this.levelIndex, LEVEL_COUNT);
     this.heroMoveTargetId = null;
     this.heroMoveBeatRemainingMs = 0;
     this.manualCameraUntilMs = 0;
@@ -1058,6 +1360,7 @@ export class GameScene extends Phaser.Scene {
         this.brush = null;
         this.worldTool = null;
         this.selectSkill(skill);
+        this.pauseForTargeting();
         this.crewPlacement = this.level.playMode?.spawn === 'tray-drop' ? skill : null;
       },
       onStart: () => this.startRun(),
@@ -1068,6 +1371,7 @@ export class GameScene extends Phaser.Scene {
         this.brush = kind;
         this.crewPlacement = null;
         this.worldTool = null;
+        this.pauseForTargeting();
       },
       onSelectWorldTool: (kind) => {
         this.brush = null;
@@ -1086,8 +1390,8 @@ export class GameScene extends Phaser.Scene {
       },
       onNuke: () => this.triggerNuke(),
       onReleaseRate: (delta) => this.sim.changeReleaseRate(delta),
-      onRestart: () => this.startLevel(),
-      onTogglePause: () => this.togglePause(),
+      onRestart: () => this.restartLevel(),
+      onOpenOptions: () => this.openPauseOptions(),
       onCycleSpeed: () => this.cycleSpeed(),
       onArmHeroMove: () => this.armHeroMove(),
       onCommitHeroMove: () => this.commitHeroMove(),
@@ -1107,13 +1411,11 @@ export class GameScene extends Phaser.Scene {
         this.minimapCameraActive = false;
         this.manualCameraUntilMs = this.animClockMs + CAMERA_USER_GRACE_MS;
       },
-      onLevelSelect: () => this.openLevelSelect(),
-      onAudioChange: (settings) => {
-        this.applyAudioSettings(settings);
-        saveAudioSettings(settings);
-      },
+      onLevelSelect: () => this.openPlayerNavigation(),
+      onRewardedHint: () => this.requestRewardedHint(),
+      onRewardedDouble: () => this.requestRewardedDouble(),
       onDebugLabelsChange: (enabled) => this.setDebugLabels(enabled),
-    }, this.audioSettings, {
+    }, {
       openToolbox: this.hasOpenToolbox(),
       freePlay: this.isFreePlay(),
       debugLabels: this.uiSettings.debugLabels,
@@ -1128,6 +1430,16 @@ export class GameScene extends Phaser.Scene {
     this.frameScrollingRoomAboveHud();
 
     this.music.play(this.levelIndex);
+    if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT) {
+      if (this.dailyRun) {
+        telemetry.emit('site_start', { daily: true, site: this.levelIndex + 1 });
+      } else {
+        this.progress.setCurrentSite(this.levelIndex);
+        telemetry.emit('site_start', { site: this.levelIndex + 1 });
+        if (this.levelIndex === 3) telemetry.emitOnce('second_expedition_started');
+      }
+      platform.gameplayStart();
+    }
   }
 
   private unlockAudio(): void {
@@ -1137,10 +1449,33 @@ export class GameScene extends Phaser.Scene {
 
   private applyAudioSettings(settings: AudioSettings): void {
     this.audioSettings = settings;
-    this.sfx.setMuted(settings.sfxMuted);
+    this.sfx.setMuted(settings.sfxMuted || this.hostMuted || this.adMuted);
     this.sfx.setVolume(settings.sfxVolume);
-    this.music.setMuted(settings.musicMuted);
+    this.music.setMuted(settings.musicMuted || this.hostMuted || this.adMuted);
     this.music.setVolume(settings.musicVolume);
+  }
+
+  private applyGraphicsQuality(quality: GraphicsQuality): void {
+    const effective = quality === 'low' ? 'low' : this.frameBudget.tier;
+    this.applyPresentationTier(effective, 'setting');
+  }
+
+  private setGraphicsQuality(quality: GraphicsQuality): void {
+    this.uiSettings.graphicsQuality = quality;
+    saveUiSettings(this.uiSettings);
+    this.applyGraphicsQuality(quality);
+  }
+
+  private applyPresentationTier(tier: PresentationTier, reason: 'boot' | 'platform' | 'automatic' | 'setting'): void {
+    const effective = this.uiSettings.graphicsQuality === 'low' ? 'low' : lowerTier(tier, this.frameBudget.tier);
+    this.presentationTier = effective;
+    document.body.dataset.presentationTier = effective;
+    document.body.classList.toggle('graphics-low', effective === 'low');
+    document.body.classList.toggle('graphics-medium', effective === 'medium');
+    this.particles.setBudgetScale(particleBudgetScale(effective));
+    this.terrainRenderer?.setAnimationIntervalMs(terrainAnimationIntervalMs(effective));
+    if (effective === 'low') this.lightGraphics?.clear();
+    if (reason === 'automatic') telemetry.emit('quality_step_down', { tier: effective });
   }
 
   private setDebugLabels(enabled: boolean): void {
@@ -1152,16 +1487,163 @@ export class GameScene extends Phaser.Scene {
 
   /** Advance to the next level; from the finale, back to the level select. */
   private nextLevel(): void {
+    if (this.pendingInterstitial && !this.advancingAfterInterstitial) {
+      this.pendingInterstitial = false;
+      const requested = this.requestAdBreak('midgame', 'expedition-interstitial', () => {
+        this.advancingAfterInterstitial = true;
+        this.nextLevel();
+        this.advancingAfterInterstitial = false;
+      }, true);
+      if (requested) return;
+    }
+    if (IS_PLAYER_EXPERIENCE && [2, 5, 8, 9].includes(this.levelIndex)) {
+      void this.openWorkshop();
+      return;
+    }
     if (this.isLab() || this.isPrototype() || this.levelIndex + 1 >= LEVEL_COUNT) {
-      this.openLevelSelect();
+      this.openPlayerNavigation();
       return;
     }
     this.levelIndex += 1;
     this.startLevel();
   }
 
+  private openPlayerNavigation(): void {
+    if (IS_PLAYER_EXPERIENCE && this.progress.get(2).completed) {
+      void this.openWorkshop();
+      return;
+    }
+    this.openLevelSelect();
+  }
+
+  private async openWorkshop(): Promise<void> {
+    if (!IS_PLAYER_EXPERIENCE) {
+      this.openLevelSelect();
+      return;
+    }
+    this.paused = true;
+    this.painting = false;
+    this.canvasGesture = null;
+    this.pauseOptions?.hide(false);
+    platform.gameplayStop();
+    if (!this.workshopOverlay) {
+      const { WorkshopOverlay } = await import('../meta/WorkshopOverlay');
+      this.workshopOverlay = new WorkshopOverlay({
+        onContinue: () => {
+          this.workshopOverlay?.hide();
+          this.dailyRun = null;
+          this.levelIndex = this.nextUnsolvedLevelIndex();
+          this.startLevel();
+        },
+        onPurchase: (id, cost) => {
+          if (!this.progress.purchaseProject(id, cost)) return;
+          telemetry.emitOnce('first_project_purchased', { project: id, cost });
+          this.workshopOverlay?.show(this.progress.snapshot());
+        },
+        onDaily: (definition, date) => {
+          this.workshopOverlay?.hide();
+          this.dailyRun = { definition, date };
+          this.progress.startDaily(date);
+          this.levelIndex = definition.baseSite;
+          this.startLevel();
+        },
+        onTestYard: () => {
+          this.workshopOverlay?.hide();
+          this.dailyRun = null;
+          this.levelIndex = SAND_LAB_INDEX;
+          this.startLevel();
+        },
+      });
+    }
+    this.workshopOverlay.show(this.progress.snapshot());
+  }
+
+  private isExpeditionBoundary(): boolean {
+    return !this.dailyRun && [2, 5, 8, 9].includes(this.levelIndex);
+  }
+
+  private deepHintForLevel(): string {
+    const hints = [
+      'Order the lead crew to Bash before the dirt face; the breach releases the reservoir.',
+      'Pour into the lower FAST zone for the quickest timber lift, then release the hatch.',
+      'Hold the crowd with a Blocker, then choose a Bomber breach or a three-pour Sand ramp.',
+      'Save one Basher for each of the three dirt walls; the marsh itself is safe to wade.',
+      'Dig just before the steel cap so the shaft passes beneath its protected edge.',
+      'Build a Sand berm over the crusher trigger before the crowd reaches the machines.',
+      'Ignite both timber doors while the hatch is still safe; water protects the route.',
+      'Assign Miner on the lower mountain face so the diagonal tunnel meets the exit shelf.',
+      'Give each crew member Floater and Climber before the first fatal drop.',
+      'Bash, build twice over the first gap, bash again, then dig the final shelf.',
+    ];
+    return hints[this.levelIndex] ?? this.level.hint ?? 'Change one material relationship at a time.';
+  }
+
+  private requestRewardedHint(): void {
+    if (!ADS_ENABLED || !this.rewardedHintAvailable) return;
+    this.rewardedHintAvailable = false;
+    telemetry.emit('ad_accept', { placement: 'deeper-hint' });
+    this.requestAdBreak('rewarded', 'deeper-hint', () => {
+      this.hud.showDeeperHint(this.deepHintForLevel());
+    });
+  }
+
+  private requestRewardedDouble(): void {
+    const amount = this.rewardedDoubleAmount;
+    if (!ADS_ENABLED || amount <= 0) return;
+    this.rewardedDoubleAmount = 0;
+    this.pendingInterstitial = false;
+    telemetry.emit('ad_accept', { placement: 'expedition-double', amount });
+    this.requestAdBreak('rewarded', 'expedition-double', () => {
+      this.progress.grantBonusSalvage(amount);
+      this.hud.invalidateOutcome();
+    });
+  }
+
+  private requestAdBreak(
+    kind: 'rewarded' | 'midgame',
+    placement: string,
+    onSuccess: () => void,
+    continueOnError = false,
+  ): boolean {
+    let settled = false;
+    const finish = (success: boolean, error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      this.adMuted = false;
+      this.applyAudioSettings(this.audioSettings);
+      if (success) {
+        telemetry.emit('ad_complete', { placement });
+        onSuccess();
+      } else {
+        telemetry.emit('ad_error', { placement, error: error instanceof Error ? error.name : 'unavailable' });
+        if (continueOnError) onSuccess();
+      }
+    };
+    const requested = platform.requestAd(kind, {
+      onStarted: () => {
+        this.adMuted = true;
+        this.applyAudioSettings(this.audioSettings);
+        platform.gameplayStop();
+        telemetry.emit('ad_started', { placement });
+      },
+      onFinished: () => finish(true),
+      onError: (error) => finish(false, error),
+    });
+    if (!requested) return false;
+    return true;
+  }
+
   private selectSkill(skill: Skill): void {
     this.sim.setSelectedSkill(skill);
+  }
+
+  private pauseForTargeting(): void {
+    if (
+      !IS_PLAYER_EXPERIENCE || this.levelIndex < 2 || this.planning ||
+      this.sim.state.outcome !== 'running'
+    ) return;
+    this.paused = true;
+    this.simClock.reset();
   }
 
   private triggerNuke(): void {
@@ -1171,11 +1653,20 @@ export class GameScene extends Phaser.Scene {
 
   private startRun(): void {
     if (this.lifecycle.isSuspended() || !this.planning || this.sim.state.outcome !== 'running') return;
+    if (IS_PLAYER_EXPERIENCE && this.levelIndex === 1 && this.site2PourChoice === null) return;
     this.planning = false;
     this.paused = false;
     this.simClock.reset();
     this.worldTool = null;
+    platform.gameplayStart();
     this.focusPlayerCamera(this.level.spawn.x);
+  }
+
+  private restartLevel(): void {
+    if (IS_PLAYER_EXPERIENCE && this.sim?.state.outcome === 'lost') {
+      telemetry.emit('site_retry', { site: this.levelIndex + 1 });
+    }
+    this.startLevel();
   }
 
   private isPlayerCameraLocked(): boolean {
@@ -1239,15 +1730,71 @@ export class GameScene extends Phaser.Scene {
 
   private togglePause(): void {
     if (this.sim.state.outcome !== 'running') return;
+    if (this.pauseOptions?.isVisible()) {
+      this.closePauseOptions();
+      return;
+    }
     if (this.planning) {
       this.startRun();
       return;
     }
-    this.paused = !this.paused;
+    this.openPauseOptions();
+  }
+
+  private async openPauseOptions(): Promise<void> {
+    if (this.sim.state.outcome !== 'running' || this.pauseOptions?.isVisible()) return;
+    if (this.heroMovePhase !== 'idle') return;
+    this.painting = false;
+    this.pendingTouchBrush = null;
+    this.canvasGesture = null;
+    this.resetCameraGestures();
+    this.paused = true;
     this.simClock.reset();
+    platform.gameplayStop();
+    if (!this.pauseOptions) {
+      const { PauseOptionsOverlay } = await import('../ui/PauseOptionsOverlay');
+      this.pauseOptions ??= new PauseOptionsOverlay({
+        onResume: () => this.closePauseOptions(),
+        onRestart: () => {
+          this.closePauseOptions(false);
+          this.restartLevel();
+        },
+        onLevelSelect: () => {
+          this.closePauseOptions(false);
+          this.openPlayerNavigation();
+        },
+        onAudioChange: (settings) => {
+          this.applyAudioSettings(settings);
+          saveAudioSettings(settings);
+        },
+        onGraphicsQualityChange: (quality) => this.setGraphicsQuality(quality),
+        onDeleteSaveData: () => this.deleteSaveData(),
+      });
+    }
+    this.pauseOptions.show({
+      audio: this.audioSettings,
+      graphicsQuality: this.uiSettings.graphicsQuality,
+      campaignAvailable: !IS_PLAYER_EXPERIENCE || this.progress.get(2).completed,
+    });
+  }
+
+  private closePauseOptions(restoreFocus = true): void {
+    if (!this.pauseOptions?.isVisible()) return;
+    this.pauseOptions.hide(restoreFocus);
+    this.paused = this.planning;
+    this.simClock.reset();
+    if (!this.planning) platform.gameplayStart();
+  }
+
+  private deleteSaveData(): void {
+    this.progress.reset();
+    this.levelIndex = 0;
+    this.closePauseOptions(false);
+    this.startLevel();
   }
 
   private cycleSpeed(): void {
+    if (IS_PLAYER_EXPERIENCE && this.levelIndex === 0 && !this.firstCommandAccepted) return;
     // 1× → 2× → 3× → 1×
     this.speed = this.speed >= 3 ? 1 : this.speed + 1;
   }
@@ -1259,14 +1806,14 @@ export class GameScene extends Phaser.Scene {
     this.cursors = kb.createCursorKeys();
     kb.on('keydown', (event: KeyboardEvent) => {
       if (this.lifecycle.isSuspended()) return;
-      if (this.titleOpen) return;
       if (this.selectOpen) return; // the level select owns the keyboard
+      if (this.pauseOptions?.isVisible()) return; // the modal owns its controls
       const key = event.key.toLowerCase();
 
-      if (key === 'q' && this.level.playMode?.spawn !== 'tray-drop') {
+      if (!IS_PLAYER_EXPERIENCE && key === 'q' && this.level.playMode?.spawn !== 'tray-drop') {
         this.sim.enqueueRelease(this.sim.state.selectedSkill);
         return;
-      } else if (key === 'backspace') {
+      } else if (!IS_PLAYER_EXPERIENCE && key === 'backspace') {
         this.sim.popReleaseQueue();
         return;
       }
@@ -1279,6 +1826,7 @@ export class GameScene extends Phaser.Scene {
           this.brush = tool.kind;
           this.crewPlacement = null;
           this.worldTool = null;
+          this.pauseForTargeting();
           return;
         }
       }
@@ -1289,6 +1837,7 @@ export class GameScene extends Phaser.Scene {
         this.brush = null;
         this.worldTool = null;
         this.selectSkill(skill);
+        this.pauseForTargeting();
         this.crewPlacement = this.level.playMode?.spawn === 'tray-drop' ? skill : null;
         return;
       }
@@ -1297,7 +1846,7 @@ export class GameScene extends Phaser.Scene {
         this.togglePause();
       } else if (key === 'f') {
         this.cycleSpeed();
-      } else if (key === 'e') {
+      } else if (key === 'e' && !IS_PLAYER_EXPERIENCE) {
         this.armHeroMove();
       } else if (key === 'n') {
         this.triggerNuke();
@@ -1306,7 +1855,7 @@ export class GameScene extends Phaser.Scene {
       } else if (key === 'l' && !IS_PLAYER_EXPERIENCE) {
         this.setDebugLabels(!this.uiSettings.debugLabels);
       } else if (key === 'r') {
-        this.startLevel();
+        this.restartLevel();
       } else if (key === 'escape' && !this.selectOpen && !IS_PLAYER_EXPERIENCE) {
         // First Esc disarms a brush; the next one leaves the level.
         if (this.brush || this.crewPlacement || this.worldTool) {
@@ -1325,34 +1874,48 @@ export class GameScene extends Phaser.Scene {
     this.music.suspend();
     if (this.selectOpen || !this.sim) return;
     this.lifecycleReason = reason;
-    if (!this.lifecycle.suspend() && reason === 'orientation') {
-      this.resumeOverlay.show(reason);
-    }
+    this.lifecycle.suspend();
   }
 
   private resumeFromLifecycle(): void {
-    if (this.touchOrientationGate?.isPortrait()) return;
     this.lifecycle.resume();
   }
 
   private cleanupLifecycle(): void {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     window.removeEventListener('blur', this.handleWindowBlur);
-    this.touchOrientationGate?.stop();
-    this.titleScreen?.destroy();
     this.crewSpriteRenderer?.clear();
     this.crewSpriteRenderer = undefined;
     this.terrainRenderer?.clear();
     this.terrainRenderer = undefined;
     this.motionPreference.stop();
     this.resumeOverlay.destroy();
+    this.pauseOptions?.destroy();
     this.continueOverlay?.destroy();
+    this.workshopOverlay?.destroy();
+    this.workshopOverlay = undefined;
+    this.removePlatformMuteListener?.();
+    this.removePlatformMuteListener = null;
+    document.body.classList.remove('graphics-low');
   }
 
   private assignSelectedSkillTo(target: Lemming): void {
     if (this.sim.state.outcome !== 'running') return;
     if (this.sim.assignSkill(target.id, this.sim.state.selectedSkill)) {
+      this.commandsUsed += 1;
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex >= 2 && !this.planning) this.paused = false;
+      if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT) {
+        const skill = this.sim.state.selectedSkill;
+        this.progress.markStarted();
+        telemetry.emitOnce('first_input', { site: this.levelIndex + 1, tool: skill });
+        telemetry.emit('tool_assigned', { site: this.levelIndex + 1, tool: skill });
+        if (this.levelIndex === 2 && skill === 'bomber' && !this.routeChoiceRecorded) {
+          this.routeChoiceRecorded = true;
+          telemetry.emit('route_choice', { site: 3, route: 'fast-charge' });
+        }
+      }
       if (IS_PLAYER_EXPERIENCE && this.levelIndex === 0) {
+        this.firstCommandAccepted = true;
         this.crewActionFeedback.show('accepted', this.animClockMs);
       }
       const point = this.lemmingDisplayPoints.get(target.id) ?? target;
@@ -1363,6 +1926,9 @@ export class GameScene extends Phaser.Scene {
         size: 1.5,
       });
     } else {
+      if (IS_PLAYER_EXPERIENCE) {
+        telemetry.emit('tool_invalid', { site: this.levelIndex + 1, tool: this.sim.state.selectedSkill });
+      }
       const point = this.lemmingDisplayPoints.get(target.id) ?? target;
       this.particles.ring(point.x, point.y, 9, {
         color: 0xff5b7f,
@@ -1480,30 +2046,45 @@ export class GameScene extends Phaser.Scene {
 
   private playerVisibleSkills(): readonly Skill[] | undefined {
     if (!IS_PLAYER_EXPERIENCE) return undefined;
-    if (this.levelIndex === 0) return ['basher'];
-    if (this.levelIndex === 1) return [];
-    if (this.levelIndex === 2) return ['blocker', 'bomber'];
-    return ALL_SKILLS.filter((skill) => this.level.skills[skill] > 0);
+    const bySite: ReadonlyArray<readonly Skill[]> = [
+      ['basher'],
+      [],
+      ['blocker', 'bomber'],
+      ['basher'],
+      ['digger'],
+      [],
+      [],
+      ['miner'],
+      ['floater', 'climber'],
+      ['basher', 'builder', 'digger'],
+    ];
+    return bySite[this.levelIndex] ?? [];
   }
 
   private playerVisibleTerrainTools(): readonly TerrainBrush[] | undefined {
     if (!IS_PLAYER_EXPERIENCE) return undefined;
-    if (this.levelIndex === 0) return [];
-    if (this.levelIndex === 1) return ['water'];
-    if (this.levelIndex === 2) return ['sand'];
-    return TERRAIN_TOOLS
-      .filter(({ kind, openOnly }) =>
-        (!openOnly || this.hasOpenToolbox()) &&
-        (this.hasOpenToolbox() || kind === 'bomb' || this.sim.state.landscape[kind] > 0),
-      )
-      .map(({ kind }) => kind);
+    const bySite: ReadonlyArray<readonly TerrainBrush[]> = [
+      [],
+      ['water'],
+      ['sand'],
+      [],
+      [],
+      ['sand'],
+      ['fire'],
+      [],
+      [],
+      [],
+    ];
+    return bySite[this.levelIndex] ?? [];
   }
 
   private drawWorld(): void {
     // Persistent chunks redraw only where material cells or animated surfaces
     // changed; setpieces and actors remain on their independent frame layers.
     if (this.terrainRenderer) {
-      this.fireLights = this.terrainRenderer.render(this.level.terrain, this.visualTime()).fireLights;
+      const result = this.terrainRenderer.render(this.level.terrain, this.visualTime());
+      this.fireLights = result.fireLights;
+      this.lastTerrainRedrawCount = result.redrawnChunks;
     }
     this.setpieceGraphics.clear();
     this.drawOnboardingMarkers();
@@ -1529,17 +2110,30 @@ export class GameScene extends Phaser.Scene {
 
   private drawOnboardingMarkers(): void {
     if (!IS_PLAYER_EXPERIENCE || this.levelIndex !== 1 || !this.planning) return;
-    this.setpieceGraphics.fillStyle(0x247ba4, 0.12);
-    this.setpieceGraphics.fillRoundedRect(420, 372, 120, 108, 8);
-    this.setpieceGraphics.lineStyle(2, 0x6ae1ff, 0.7);
-    for (let x = 426; x < 534; x += 18) {
-      this.setpieceGraphics.lineBetween(x, 382, Math.min(x + 10, 534), 382);
+    const pulse = 0.62 + Math.sin(this.visualTime() * 0.006) * 0.18;
+    if (this.site2PourChoice !== null) {
+      for (const label of this.onboardingMarkerLabels) label.setVisible(false);
+      this.setpieceGraphics.lineStyle(4, 0xffd96b, pulse);
+      this.setpieceGraphics.strokeCircle(this.level.spawn.x, this.level.spawn.y - 10, 30);
+      this.setpieceGraphics.fillStyle(0xffd96b, pulse);
+      this.setpieceGraphics.fillTriangle(
+        this.level.spawn.x - 7,
+        this.level.spawn.y - 48,
+        this.level.spawn.x + 7,
+        this.level.spawn.y - 48,
+        this.level.spawn.x,
+        this.level.spawn.y - 37,
+      );
+      return;
     }
-    this.setpieceGraphics.lineBetween(420, 382, 420, 420);
-    this.setpieceGraphics.lineBetween(540, 382, 540, 420);
-    this.setpieceGraphics.fillStyle(0x6ae1ff, 0.75);
-    this.setpieceGraphics.fillTriangle(416, 414, 424, 414, 420, 422);
-    this.setpieceGraphics.fillTriangle(536, 414, 544, 414, 540, 422);
+    for (const label of this.onboardingMarkerLabels) label.setVisible(true);
+    for (const [index, zone] of SITE2_POUR_ZONES.entries()) {
+      const color = index === 0 ? 0x6ae1ff : 0x78ffd6;
+      this.setpieceGraphics.fillStyle(color, 0.14);
+      this.setpieceGraphics.fillRoundedRect(zone.x, zone.y, zone.width, zone.height, 7);
+      this.setpieceGraphics.lineStyle(3, color, pulse);
+      this.setpieceGraphics.strokeRoundedRect(zone.x, zone.y, zone.width, zone.height, 7);
+    }
   }
 
   private torchPosition(): { x: number; y: number } {
@@ -1548,6 +2142,10 @@ export class GameScene extends Phaser.Scene {
 
   /** Render-only emissive pools for active materials and powered setpieces. */
   private drawLighting(): void {
+    if (this.presentationTier === 'low') {
+      this.lightGraphics.clear();
+      return;
+    }
     const exit = this.level.exit;
     const sources: WorldLightSource[] = [
       {
@@ -1604,7 +2202,11 @@ export class GameScene extends Phaser.Scene {
 
     sources.push(...this.fireLights);
 
-    drawWorldLights(this.lightGraphics, sources, this.visualTime());
+    drawWorldLights(
+      this.lightGraphics,
+      this.presentationTier === 'medium' ? sources.slice(0, 14) : sources,
+      this.visualTime(),
+    );
   }
 
   /** Tinted ring at the pointer while a terrain brush is armed. */

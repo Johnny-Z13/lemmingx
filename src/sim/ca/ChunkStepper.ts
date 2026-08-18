@@ -1,6 +1,7 @@
 import { MATERIAL, type Terrain } from '../Terrain';
 import { FIRE_TUNING } from '../terrainTuning';
 import type { SeededRng } from './SeededRng';
+import type { MaterialInteraction } from '../types';
 
 const CHUNK = 16;
 const WATER_DISPERSION = 5;
@@ -18,6 +19,7 @@ export class ChunkStepper {
   /** Bitset of chunks that need a pass. */
   private readonly active: Uint8Array;
   private xOrder: number[];
+  private readonly interactions = new Map<MaterialInteraction, { x: number; y: number }>();
 
   constructor(
     private readonly terrain: Terrain,
@@ -90,6 +92,18 @@ export class ChunkStepper {
       if (!this.hasActive()) break;
     }
     return moved;
+  }
+
+  drainInteractions(): Array<{ interaction: MaterialInteraction; x: number; y: number }> {
+    const events = [...this.interactions].map(([interaction, point]) => ({ interaction, ...point }));
+    this.interactions.clear();
+    return events;
+  }
+
+  private recordInteraction(interaction: MaterialInteraction, cellX: number, cellY: number): void {
+    if (this.interactions.has(interaction)) return;
+    const cs = this.terrain.cellSize;
+    this.interactions.set(interaction, { x: cellX * cs + cs / 2, y: cellY * cs + cs / 2 });
   }
 
   private hasActive(): boolean {
@@ -197,6 +211,7 @@ export class ChunkStepper {
     }
     // Falling sand smothers fire rather than balancing on hot gas.
     if (this.terrain.getCell(x, y + 1) === MATERIAL.fire) {
+      this.recordInteraction('sand-smothers-fire', x, y + 1);
       this.terrain.setCell(x, y, MATERIAL.empty);
       this.terrain.setCell(x, y + 1, MATERIAL.sand);
       return true;
@@ -216,6 +231,7 @@ export class ChunkStepper {
     const nx = x + dir;
     const below = this.terrain.getCell(nx, y + 1);
     if (below === MATERIAL.fire) {
+      this.recordInteraction('sand-smothers-fire', nx, y + 1);
       this.terrain.setCell(x, y, MATERIAL.empty);
       this.terrain.setCell(nx, y + 1, MATERIAL.sand);
       return true;
@@ -260,6 +276,7 @@ export class ChunkStepper {
       (this.terrain.getCell(x - 1, y) === MATERIAL.water ||
         this.terrain.getCell(x + 1, y) === MATERIAL.water)
     ) {
+      this.recordInteraction('wood-rides-water', x, y);
       this.terrain.setCell(x, y - 1, MATERIAL.wood);
       this.terrain.setCell(x, y, MATERIAL.water);
       return true;
@@ -288,6 +305,7 @@ export class ChunkStepper {
       return true;
     }
     if (below === MATERIAL.fire) {
+      this.recordInteraction('water-quenches-fire', x, y + 1);
       this.terrain.setCell(x, y, MATERIAL.empty);
       this.terrain.setCell(x, y + 1, MATERIAL.water);
       return true;
@@ -319,6 +337,7 @@ export class ChunkStepper {
         return true;
       }
       if (material === MATERIAL.fire) {
+        this.recordInteraction('water-quenches-fire', nx, y);
         this.terrain.setCell(x, y, MATERIAL.empty);
         this.terrain.setCell(nx, y, MATERIAL.water);
         return true;
@@ -333,6 +352,7 @@ export class ChunkStepper {
         return true;
       }
       if (material === MATERIAL.fire) {
+        this.recordInteraction('water-quenches-fire', nx, y);
         this.terrain.setCell(x, y, MATERIAL.empty);
         this.terrain.setCell(nx, y, MATERIAL.water);
         return true;
@@ -358,6 +378,7 @@ export class ChunkStepper {
       return true;
     }
     if (material === MATERIAL.fire) {
+      this.recordInteraction('water-quenches-fire', nx, y + 1);
       this.terrain.setCell(x, y, MATERIAL.empty);
       this.terrain.setCell(nx, y + 1, MATERIAL.water);
       return true;
@@ -374,12 +395,14 @@ export class ChunkStepper {
       [x, y + 1],
     ] as const;
     if (neighbors.some(([nx, ny]) => this.terrain.getCell(nx, ny) === MATERIAL.water)) {
+      this.recordInteraction('water-quenches-fire', x, y);
       this.terrain.setCell(x, y, MATERIAL.empty);
       return;
     }
 
     const fuel = neighbors.filter(([nx, ny]) => this.terrain.getCell(nx, ny) === MATERIAL.wood);
     if (fuel.length > 0) {
+      this.recordInteraction('fire-burns-wood', x, y);
       if (this.rng.next() < FIRE_TUNING.spreadChance) {
         const [fx, fy] = fuel[Math.floor(this.rng.next() * fuel.length)];
         this.terrain.setCell(fx, fy, MATERIAL.fire);
