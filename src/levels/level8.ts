@@ -26,7 +26,7 @@ export function createLevel8(): LevelDefinition {
   return {
     name: 'Down and Out',
     objective: 'Bring at least 8 lemmings down to the basement exit.',
-    hint: 'Mine diagonally through the mountain or sculpt a safer descent.',
+    hint: 'Assign a Miner on the lower mountain face so the tunnel meets the exit shelf.',
     width: 1440,
     height: 810,
     spawn: { x: 80, y: 178 },

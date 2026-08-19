@@ -60,6 +60,93 @@ const browser = await chromium.launch({ headless: true });
 try {
   {
     const context = await browser.newContext({ viewport: { width: 907, height: 510 }, deviceScaleFactor: 1 });
+    await context.addInitScript(() => {
+      localStorage.setItem('swarmwright.save.v2', JSON.stringify({
+        version: 2,
+        started: true,
+        currentSite: 2,
+        salvage: 20,
+        rescuedTotal: 20,
+        sites: {
+          0: { completed: true, bestSavedPct: 100, bestSavedCount: 10, failures: 0 },
+          1: { completed: true, bestSavedPct: 100, bestSavedCount: 10, failures: 0 },
+        },
+        atlas: [],
+        workshop: [],
+        daily: {
+          activeAttemptDate: null,
+          lastCompletedDate: null,
+          currentChain: 0,
+          bestChain: 0,
+          graceAvailable: true,
+          totalCompletions: 0,
+          rewardsByDate: {},
+          bestScoreByDate: {},
+        },
+        lastSeenUtcMs: Date.now(),
+      }));
+    });
+    const page = await context.newPage();
+    const failures = collectFailures(page, 'live-tool-selection');
+    await page.goto(gameUrl, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Continue' }).click();
+    const pauseButton = page.locator('.hud__pause');
+    await page.getByRole('button', { name: 'Bomber' }).click();
+    await page.waitForTimeout(100);
+    invariant(!await pauseButton.evaluate((button) => button.classList.contains('is-active')), 'Selecting Bomber paused the run');
+    await page.getByRole('button', { name: 'Blocker' }).click();
+    await page.waitForTimeout(100);
+    invariant(!await pauseButton.evaluate((button) => button.classList.contains('is-active')), 'Switching skills paused the run');
+    await pauseButton.click();
+    await page.getByRole('heading', { name: 'Options' }).waitFor();
+    invariant(failures.length === 0, failures.join('\n'));
+    console.log('PASS live tool selection: switching skills does not pause; Options still does');
+    await context.close();
+  }
+
+  {
+    const context = await browser.newContext({ viewport: { width: 907, height: 510 }, deviceScaleFactor: 1 });
+    await context.addInitScript(() => {
+      localStorage.setItem('swarmwright.save.v2', JSON.stringify({
+        version: 2,
+        started: true,
+        currentSite: 6,
+        salvage: 60,
+        rescuedTotal: 60,
+        sites: Object.fromEntries(Array.from({ length: 6 }, (_, index) => [
+          index,
+          { completed: true, bestSavedPct: 100, bestSavedCount: 10, failures: 0 },
+        ])),
+        atlas: [],
+        workshop: [],
+        daily: {
+          activeAttemptDate: null,
+          lastCompletedDate: null,
+          currentChain: 0,
+          bestChain: 0,
+          graceAvailable: true,
+          totalCompletions: 0,
+          rewardsByDate: {},
+          bestScoreByDate: {},
+        },
+        lastSeenUtcMs: Date.now(),
+      }));
+    });
+    const page = await context.newPage();
+    const failures = collectFailures(page, 'trial-by-fire-planning');
+    await page.goto(gameUrl, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('button', { name: 'Start run' }).waitFor();
+    await page.getByRole('button', { name: 'Fire' }).click();
+    invariant(await page.getByRole('button', { name: 'Start run' }).isVisible(), 'Selecting Fire left the planning phase');
+    invariant(await page.getByRole('heading', { name: 'Options' }).count() === 0, 'Selecting Fire opened Options');
+    invariant(failures.length === 0, failures.join('\n'));
+    console.log('PASS Trial by Fire: starts in planning and Fire selection preserves planning');
+    await context.close();
+  }
+
+  {
+    const context = await browser.newContext({ viewport: { width: 907, height: 510 }, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const failures = collectFailures(page, 'desktop-cold');
     const requests = [];
@@ -220,8 +307,12 @@ try {
     }));
     invariant(viewportFit.scrollHeight <= viewportFit.clientHeight + 1, `Workshop root scrolls at 800x450: ${JSON.stringify(viewportFit)}`);
     await page.screenshot({ path: path.join(proofRoot, 'workshop-800x450.png') });
+    await page.getByRole('button', { name: 'TEST YARD' }).click();
+    await page.getByText('Free Play', { exact: true }).waitFor();
+    invariant(await page.locator('.hud__tools--crew button[data-skill]').count() === 9, 'Test Yard did not expose all nine crew tools');
+    invariant(await page.locator('.hud__tools--terrain .hud__tool').count() === 7, 'Test Yard did not expose all seven terrain tools');
     invariant(failures.length === 0, failures.join('\n'));
-    console.log('PASS Workshop 800x450: six projects, Daily, Atlas gaps, no root overflow');
+    console.log('PASS Workshop 800x450 and Test Yard: meta surface fits; complete free-play toolbox available');
     await context.close();
   }
 } finally {

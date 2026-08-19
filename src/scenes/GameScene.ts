@@ -722,7 +722,6 @@ export class GameScene extends Phaser.Scene {
       this.commandsUsed += 1;
       this.lastStampX = worldX;
       this.lastStampY = worldY;
-      if (IS_PLAYER_EXPERIENCE && this.levelIndex >= 2 && !this.planning) this.paused = false;
       if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT && !this.dailyRun) {
         this.progress.markStarted();
         telemetry.emitOnce('first_input', { site: this.levelIndex + 1, tool: brush });
@@ -1336,7 +1335,8 @@ export class GameScene extends Phaser.Scene {
     this.site2PourChoice = null;
     this.routeChoiceRecorded = false;
     this.commandsUsed = 0;
-    this.planning = !this.isLab() && (!IS_PLAYER_EXPERIENCE || this.levelIndex === 1);
+    const playerNeedsPlanning = this.levelIndex === 1 || this.levelIndex === 6;
+    this.planning = !this.isLab() && (!IS_PLAYER_EXPERIENCE || playerNeedsPlanning);
     this.paused = this.planning;
     this.speed = 1;
     this.heroMovePhase = 'idle';
@@ -1369,7 +1369,6 @@ export class GameScene extends Phaser.Scene {
         this.brush = null;
         this.worldTool = null;
         this.selectSkill(skill);
-        this.pauseForTargeting();
         this.crewPlacement = this.level.playMode?.spawn === 'tray-drop' ? skill : null;
       },
       onStart: () => this.startRun(),
@@ -1380,7 +1379,6 @@ export class GameScene extends Phaser.Scene {
         this.brush = kind;
         this.crewPlacement = null;
         this.worldTool = null;
-        this.pauseForTargeting();
       },
       onSelectWorldTool: (kind) => {
         this.brush = null;
@@ -1646,15 +1644,6 @@ export class GameScene extends Phaser.Scene {
     this.sim.setSelectedSkill(skill);
   }
 
-  private pauseForTargeting(): void {
-    if (
-      !IS_PLAYER_EXPERIENCE || this.levelIndex < 2 || this.planning ||
-      this.sim.state.outcome !== 'running'
-    ) return;
-    this.paused = true;
-    this.simClock.reset();
-  }
-
   private triggerNuke(): void {
     if (this.planning || this.sim.state.outcome !== 'running' || this.sim.state.nuking) return;
     this.sim.nukeAll();
@@ -1835,7 +1824,6 @@ export class GameScene extends Phaser.Scene {
           this.brush = tool.kind;
           this.crewPlacement = null;
           this.worldTool = null;
-          this.pauseForTargeting();
           return;
         }
       }
@@ -1846,7 +1834,6 @@ export class GameScene extends Phaser.Scene {
         this.brush = null;
         this.worldTool = null;
         this.selectSkill(skill);
-        this.pauseForTargeting();
         this.crewPlacement = this.level.playMode?.spawn === 'tray-drop' ? skill : null;
         return;
       }
@@ -1914,7 +1901,6 @@ export class GameScene extends Phaser.Scene {
     if (this.sim.state.outcome !== 'running') return;
     if (this.sim.assignSkill(target.id, this.sim.state.selectedSkill)) {
       this.commandsUsed += 1;
-      if (IS_PLAYER_EXPERIENCE && this.levelIndex >= 2 && !this.planning) this.paused = false;
       if (IS_PLAYER_EXPERIENCE && this.levelIndex < LEVEL_COUNT) {
         const skill = this.sim.state.selectedSkill;
         this.progress.markStarted();
@@ -2057,6 +2043,7 @@ export class GameScene extends Phaser.Scene {
 
   private playerVisibleSkills(): readonly Skill[] | undefined {
     if (!IS_PLAYER_EXPERIENCE) return undefined;
+    if (this.isLab()) return ALL_SKILLS;
     const bySite: ReadonlyArray<readonly Skill[]> = [
       ['basher'],
       [],
@@ -2074,6 +2061,7 @@ export class GameScene extends Phaser.Scene {
 
   private playerVisibleTerrainTools(): readonly TerrainBrush[] | undefined {
     if (!IS_PLAYER_EXPERIENCE) return undefined;
+    if (this.isLab()) return TERRAIN_TOOLS.map(({ kind }) => kind);
     const bySite: ReadonlyArray<readonly TerrainBrush[]> = [
       [],
       ['water'],

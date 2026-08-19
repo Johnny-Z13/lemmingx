@@ -25,7 +25,7 @@ export function createLevel9(): LevelDefinition {
   return {
     name: 'The Gauntlet',
     objective: 'Get at least 6 through two fatal drops, steel, and a final trap.',
-    hint: 'Queue Climbers, then give each release Floater on the start ledge before the first drop.',
+    hint: 'Give every release both Floater and Climber on the start ledge before the first drop.',
     width: 2400,
     height: 810,
     spawn: { x: 80, y: 126 },

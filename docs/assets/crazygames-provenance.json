@@ -392,7 +392,7 @@
         "src/render/motionPreference.ts": "07f9067a2288909de4bad31d0c62601d65b5b32e93c1397fc7442b3114203351",
         "src/render/playerCamera.ts": "457047ff9f0aa7b6baaf1478e7127e7d745001c2bedfd7e48d0e03cb44faa058",
         "src/render/crowdLayout.ts": "c2eb16123b591e11883201c2bb0850940f6098aadc4cd3ece59f19cccdfd3ca1",
-        "src/scenes/GameScene.ts": "3558e4ca155bcd1094dc7869cda477f9fb578a7fd6217360b72583149163d67a",
+        "src/scenes/GameScene.ts": "7156976f9c79e0b8c4f0698843cbbd60408cf7b322fe8345978f8f156ac201d4",
         "src/lifecycle/BodyModalLock.ts": "e80dde4a2415531c1c8bc3bf54691a2802711f0bf473fec01a095c37d3817e0f",
         "src/lifecycle/PortraitModalGate.ts": "362df73f9254298221502ca6a495f7475d72a7121d766075dc51770b93315457",
         "src/ui/TitleScreen.ts": "fd854fef9a82605890bda2da7bb35c96cf1802df9747be09007f6a1842830279",

@@ -28,7 +28,7 @@ export function createLevel4(): LevelDefinition {
   return {
     name: 'The Long March',
     objective: 'Guide at least 8 lemmings across the three-wall trek.',
-    hint: 'Use the minimap and camera; breach each wall or redraw the route.',
+    hint: 'Use the minimap and camera; save one Basher for each of the three walls.',
     width: 2880,
     height: 540,
     spawn: { x: 90, y: 410 },

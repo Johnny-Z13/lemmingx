@@ -37,7 +37,7 @@ export function createLevel10(): LevelDefinition {
   return {
     name: 'Sandworld Symphony',
     objective: 'Save at least 6 through the full sandworld gauntlet.',
-    hint: 'Plan roles first: breach, cross water, bypass steel, then descend.',
+    hint: 'Bash, build twice over the water, bash again, then dig to the exit shelf.',
     width: 2880,
     height: 810,
     spawn: { x: 80, y: 406 },

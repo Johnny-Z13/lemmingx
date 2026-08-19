@@ -28,7 +28,7 @@ export function createLevel5(): LevelDefinition {
   return {
     name: 'Steel Yourself',
     objective: 'Save at least 7 by reaching the lower gallery beyond the steel lock.',
-    hint: 'Steel cannot be erased or carved. Dig west of the cap or build around it.',
+    hint: 'Steel cannot be carved. Assign a Digger just west of the protected cap.',
     width: 1440,
     height: 540,
     spawn: { x: 80, y: 406 },
