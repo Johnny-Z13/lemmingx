@@ -27,7 +27,7 @@ async function hashesFor(relativePaths) {
 }
 
 inventory.game = 'Swarmwright (working title; repository LemmingX)';
-inventory.scope = 'D3 CrazyGames Basic/Full candidate plus submission media';
+inventory.scope = 'Single production artifact for direct/Vercel and CrazyGames launches plus submission media';
 inventory.reviewDate = '2026-08-18';
 inventory.releaseClaim = 'blocked-pending-human-clearance';
 inventory.releaseBlockers = [

@@ -17,24 +17,13 @@ const BUILD_MESSAGE = gitValue(['log', '-1', '--pretty=%s'], 'local build');
 
 export default defineConfig(({ command, mode }) => ({
   base: command === 'build' ? './' : '/',
-  resolve: {
-    alias: {
-      '@platform-runtime': new URL(
-        mode === 'crazygames-full'
-          ? './src/platform/PlatformAdapter.full.ts'
-          : './src/platform/PlatformAdapter.ts',
-        import.meta.url,
-      ).pathname,
-    },
-  },
   define: {
     __PLAYER_BUILD__: JSON.stringify(mode !== 'test'),
-    __DEV_SANDBOX_AVAILABLE__: JSON.stringify(command === 'serve' && mode !== 'crazygames'),
+    __DEV_SANDBOX_AVAILABLE__: JSON.stringify(command === 'serve'),
     __APP_VERSION__: JSON.stringify(packageJson.version),
     __BUILD_TAG__: JSON.stringify(BUILD_TAG),
     __BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
     __BUILD_MESSAGE__: JSON.stringify(BUILD_MESSAGE),
-    __PRODUCT_MODE__: JSON.stringify(mode === 'crazygames-full' ? 'full' : command === 'serve' ? 'local' : 'basic'),
   },
   server: {
     host: '127.0.0.1',

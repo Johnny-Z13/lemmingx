@@ -5,6 +5,7 @@ import { chromium } from '@playwright/test';
 const projectRoot = process.cwd();
 const proofRoot = path.join(projectRoot, '.artifacts/crazygames-candidate/browser');
 const gameUrl = process.env.SWARMWRIGHT_PREVIEW_URL ?? 'http://127.0.0.1:5178/';
+const sdkUrl = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -24,6 +25,16 @@ async function waitForColdGameplay(page) {
   await page.goto(gameUrl, { waitUntil: 'domcontentloaded' });
   await page.getByText('TAP THE CREW', { exact: true }).waitFor({ timeout: 10_000 });
   return performance.now() - startedAt;
+}
+
+async function waitForEmbeddedGameplay(page) {
+  const frameNavigated = page.waitForEvent('framenavigated', {
+    predicate: (frame) => frame !== page.mainFrame() && frame.url().startsWith(gameUrl),
+  });
+  await page.setContent(`<iframe title="Swarmwright" src="${gameUrl}" style="border:0;width:100%;height:100%"></iframe>`);
+  const frame = await frameNavigated;
+  await frame.getByText('TAP THE CREW', { exact: true }).waitFor({ timeout: 10_000 });
+  return frame;
 }
 
 async function acceptFirstCommand(page) {
@@ -58,7 +69,7 @@ try {
 
     invariant(timeToGameplayMs < 2_500, `Cold local gameplay took ${timeToGameplayMs.toFixed(0)}ms`);
     invariant(!coldRequests.some((url) => /WorkshopOverlay|PauseOptionsOverlay|LevelSelect|\/level(?:4|5|6|7|8|9|10)-|\/lab-/.test(url)), 'Cold path fetched a deferred surface or later site');
-    invariant(!coldRequests.some((url) => /crazygames-sdk|sdk\.crazygames/i.test(url)), 'Basic build requested the CrazyGames SDK');
+    invariant(!coldRequests.some((url) => /crazygames-sdk|sdk\.crazygames/i.test(url)), 'Direct launch requested the CrazyGames SDK');
     invariant(await page.getByText('Dev Sandbox', { exact: true }).count() === 0, 'Player build exposed Dev Sandbox');
     invariant(await page.getByText(/loading/i).count() === 0, 'Player boot exposed a loading screen');
 
@@ -94,13 +105,13 @@ try {
     const bodyClasses = await page.locator('body').getAttribute('class') ?? '';
     invariant(bodyClasses.includes('is-mobile-device'), `Android was not detected as mobile: ${bodyClasses}`);
     invariant(bodyClasses.includes('graphics-low'), `4-core/4GB Android did not boot low tier: ${bodyClasses}`);
-    invariant(await page.getByText(/rotate (your )?(phone|device)/i).count() === 0, 'Game supplied a custom orientation gate');
+    invariant(await page.getByText(/rotate (your )?(phone|device)/i).count() === 0, 'Landscape launch supplied an orientation gate');
     const basherBounds = await page.getByRole('button', { name: 'Basher' }).boundingBox();
     invariant(!!basherBounds && basherBounds.width >= 44 && basherBounds.height >= 44, 'Mobile Basher target is below 44x44 CSS pixels');
     await acceptFirstCommand(page);
     await page.screenshot({ path: path.join(proofRoot, 'android-low-844x390.png') });
     invariant(failures.length === 0, failures.join('\n'));
-    console.log('PASS Android low tier 844x390: mobile profile, DPR1, 44px target, no custom rotate gate');
+    console.log('PASS Android low tier 844x390: mobile profile, DPR1, 44px target');
     await context.close();
   }
 
@@ -113,11 +124,39 @@ try {
       userAgent: 'Mozilla/5.0 (Linux; Android 12; Test Device) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
     });
     const page = await context.newPage();
-    const failures = collectFailures(page, 'android-portrait-host-gate');
-    await waitForColdGameplay(page);
-    invariant(await page.getByText(/rotate (your )?(phone|device)/i).count() === 0, 'Portrait viewport exposed an in-game rotate modal');
+    const failures = collectFailures(page, 'android-portrait-direct-gate');
+    await page.goto(gameUrl, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('dialog', { name: 'Rotate to play' }).waitFor({ timeout: 10_000 });
     invariant(failures.length === 0, failures.join('\n'));
-    console.log('PASS Android portrait boundary: no in-game orientation modal (host owns the gate)');
+    console.log('PASS Android portrait direct launch: game owns the landscape gate');
+    await context.close();
+  }
+
+  {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 1,
+      isMobile: true,
+      hasTouch: true,
+      userAgent: 'Mozilla/5.0 (Linux; Android 12; Test Device) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+    });
+    await context.route(sdkUrl, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        body: `window.CrazyGames = { SDK: {
+          environment: 'disabled',
+          init: async () => {},
+          game: { gameplayStart: () => {}, gameplayStop: () => {} },
+        }};`,
+      });
+    });
+    const page = await context.newPage();
+    const failures = collectFailures(page, 'android-portrait-embedded');
+    const frame = await waitForEmbeddedGameplay(page);
+    invariant(await frame.getByText(/rotate (your )?(phone|device)/i).count() === 0, 'Embedded launch exposed a competing rotate modal');
+    invariant(failures.length === 0, failures.join('\n'));
+    console.log('PASS Android portrait embedded launch: host owns the landscape gate');
     await context.close();
   }
 

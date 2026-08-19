@@ -595,6 +595,42 @@ body {
   background: rgba(94, 242, 161, 0.2);
 }
 
+.rotate-notice {
+  display: none;
+  outline: none;
+}
+
+.is-portrait-modal > :not(.rotate-notice) {
+  visibility: hidden;
+}
+
+@media (orientation: portrait) {
+  .is-player-build.is-mobile-device .rotate-notice {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: grid;
+    place-content: center;
+    gap: 8px;
+    padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+      max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+    color: #eff7ff;
+    background: #080c12;
+    text-align: center;
+  }
+
+  .rotate-notice strong {
+    color: var(--gold);
+    font: 1000 1.45rem/1.1 "Courier New", ui-monospace, monospace;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .rotate-notice span {
+    color: rgba(239, 247, 255, 0.72);
+  }
+}
+
 .dev-sandbox-toggle {
   position: fixed;
   top: max(8px, env(safe-area-inset-top));

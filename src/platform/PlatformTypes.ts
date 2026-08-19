@@ -1,5 +1,3 @@
-import type { ProductMode } from './productMode';
-
 export interface PlatformSystemInfo {
   environment: 'local' | 'crazygames' | 'disabled' | 'unavailable';
   deviceType: 'desktop' | 'tablet' | 'mobile' | 'unknown';
@@ -13,7 +11,6 @@ export interface AdCallbacks {
 }
 
 export interface PlatformAdapter {
-  readonly mode: ProductMode;
   readonly adsEnabled: boolean;
   init(): Promise<void>;
   gameplayStart(): void;

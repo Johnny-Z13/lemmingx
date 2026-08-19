@@ -10,6 +10,9 @@ import { DEVICE_PROFILE } from './deviceProfile';
 import './styles.css';
 import { telemetry } from './telemetry/Telemetry';
 import { installRendererRecovery } from './platform/rendererRecovery';
+import { GAME_OWNS_MOBILE_ORIENTATION } from './lifecycle/MobileOrientationPolicy';
+import { PortraitModalGate } from './lifecycle/PortraitModalGate';
+import { TOUCH_PORTRAIT_QUERY } from './lifecycle/TouchOrientationGate';
 
 telemetry.emitOnce('load_started');
 window.addEventListener('pagehide', () => {
@@ -22,6 +25,27 @@ document.body.classList.toggle('is-player-build', IS_PLAYER_EXPERIENCE);
 document.body.classList.toggle('is-sandbox-build', DEV_SANDBOX_ENABLED);
 document.body.classList.toggle('is-mobile-device', DEVICE_PROFILE === 'mobile');
 document.body.classList.toggle('is-desktop-device', DEVICE_PROFILE === 'desktop');
+
+if (GAME_OWNS_MOBILE_ORIENTATION) {
+  const rotateNotice = document.createElement('div');
+  rotateNotice.className = 'rotate-notice';
+  rotateNotice.tabIndex = -1;
+  rotateNotice.setAttribute('aria-hidden', 'true');
+  rotateNotice.setAttribute('aria-labelledby', 'swarmwright-rotate-heading');
+  rotateNotice.setAttribute('aria-describedby', 'swarmwright-rotate-detail');
+  rotateNotice.setAttribute('aria-live', 'polite');
+  rotateNotice.innerHTML =
+    '<strong id="swarmwright-rotate-heading">Rotate to play</strong>' +
+    '<span id="swarmwright-rotate-detail">Swarmwright is designed for landscape.</span>';
+  document.body.append(rotateNotice);
+  const portraitModalGate = new PortraitModalGate(
+    rotateNotice,
+    window.matchMedia(TOUCH_PORTRAIT_QUERY),
+  );
+  portraitModalGate.start();
+  window.addEventListener('pagehide', () => portraitModalGate.stop());
+  window.addEventListener('pageshow', () => portraitModalGate.start());
+}
 
 if (__DEV_SANDBOX_AVAILABLE__) {
   const sandboxButton = document.createElement('button');

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserPlatformAdapter } from '../src/platform/CrazyGamesPlatformAdapter';
-import { NoopPlatformAdapter } from '../src/platform/PlatformAdapter';
+import { createPlatformAdapter, NoopPlatformAdapter } from '../src/platform/PlatformAdapter';
 
 describe('BrowserPlatformAdapter', () => {
-  it('keeps Basic Launch ad-free and safe without an SDK', async () => {
-    const adapter = new NoopPlatformAdapter('basic');
+  it('keeps direct launches ad-free and safe without an SDK', async () => {
+    const adapter = new NoopPlatformAdapter();
     await adapter.init();
     adapter.gameplayStart();
     adapter.gameplayStop();
@@ -20,7 +20,7 @@ describe('BrowserPlatformAdapter', () => {
     expect(callbacks.onStarted).not.toHaveBeenCalled();
   });
 
-  it('queues lifecycle until Full Launch SDK init and forwards mute, system, and ad callbacks', async () => {
+  it('queues lifecycle until embedded SDK init and forwards mute, system, and ad callbacks', async () => {
     let settingsListener: ((settings: { muteAudio?: boolean }) => void) | undefined;
     const gameplayStart = vi.fn();
     const gameplayStop = vi.fn();
@@ -40,7 +40,7 @@ describe('BrowserPlatformAdapter', () => {
       user: { systemInfo: { device: { type: 'mobile' as const }, applicationType: 'crazygames-app' } },
       ad: { requestAd },
     };
-    const adapter = new BrowserPlatformAdapter('full', async () => sdk);
+    const adapter = new BrowserPlatformAdapter(async () => sdk);
     const mute = vi.fn();
     adapter.onMuteChange(mute);
     adapter.gameplayStart();
@@ -63,5 +63,10 @@ describe('BrowserPlatformAdapter', () => {
     expect(callbacks.onStarted).toHaveBeenCalledOnce();
     adapter.gameplayStop();
     expect(gameplayStop).toHaveBeenCalledOnce();
+  });
+
+  it('selects the host adapter at runtime without a separate build', () => {
+    expect(createPlatformAdapter(false)).toBeInstanceOf(NoopPlatformAdapter);
+    expect(createPlatformAdapter(true)).toBeInstanceOf(BrowserPlatformAdapter);
   });
 });

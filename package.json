@@ -6,8 +6,6 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
-    "build:crazygames": "tsc && vite build --mode crazygames",
-    "build:crazygames:full": "tsc && vite build --mode crazygames-full",
     "verify:crazygames": "node scripts/verify-crazygames-build.mjs",
     "proof:deterministic": "vite-node scripts/capture-deterministic-proof.ts",
     "benchmark:sim": "vite-node scripts/benchmark-simulation.ts",
@@ -16,7 +14,7 @@
     "capture:preview:portrait": "SWARMWRIGHT_PREVIEW_FORMAT=portrait node scripts/capture-crazygames-previews.mjs",
     "validate:submission-media": "node scripts/validate-crazygames-media.mjs",
     "verify:crazygames:browser": "node scripts/verify-crazygames-browser.mjs",
-    "verify:crazygames:full-browser": "node scripts/verify-crazygames-full-browser.mjs",
+    "verify:crazygames:sdk": "node scripts/verify-crazygames-sdk-browser.mjs",
     "refresh:crazygames:provenance": "node scripts/refresh-crazygames-provenance.mjs",
     "validate:crew-atlas": "node scripts/validate-crew-salvager-actions.mjs",
     "validate:terrain-icons": "node scripts/validate-terrain-tool-icons.mjs",

@@ -42,6 +42,8 @@ import { ContinueOverlay } from '../ui/ContinueOverlay';
 import { interpolatePaintStroke } from '../input/paintStroke';
 import { FocusLifecycle } from '../lifecycle/FocusLifecycle';
 import { CrewActionFeedback } from '../input/crewActionFeedback';
+import { TOUCH_PORTRAIT_QUERY, TouchOrientationGate } from '../lifecycle/TouchOrientationGate';
+import { GAME_OWNS_MOBILE_ORIENTATION } from '../lifecycle/MobileOrientationPolicy';
 import { canEdgeHoverScroll, canRestoreHeroCamera, canScriptPlayerCameraFocus, playerCameraAttentionFrame, playerCameraBottomSafeScroll, playerCameraCrewFocus, playerCameraFrame, playerCameraGestureFrame, playerCameraLandmarkFrame, playerCameraLockedHudSafeFrame, playerCameraMinimapFrame, playerCameraOccludedWorldHeight, playerCameraOcclusionInsets, playerCameraOcclusionRects, playerCameraPaddedBounds, type PlayerCameraSafeInsets } from '../render/playerCamera';
 import { TouchCameraGesture } from '../input/TouchCameraGesture';
 import { IS_PLAYER_EXPERIENCE } from '../runtimeMode';
@@ -49,8 +51,7 @@ import { IS_MOBILE_DEVICE } from '../deviceProfile';
 import { heroMoveChargesForLevel, heroMoveControlState, type HeroMovePhase } from '../input/heroMove';
 import type { PauseOptionsOverlay } from '../ui/PauseOptionsOverlay';
 import { SITE2_POUR_ZONES, site2PourZoneAt, type Site2PourChoice } from '../onboarding/site2Pour';
-import { platform } from '@platform-runtime';
-import { ADS_ENABLED } from '../platform/productMode';
+import { platform } from '../platform/PlatformAdapter';
 import { telemetry } from '../telemetry/Telemetry';
 import type { DailyRescueDefinition } from '../meta/catalog';
 import { configureDailyLevel } from '../meta/dailyRules';
@@ -174,6 +175,7 @@ export class GameScene extends Phaser.Scene {
   private resumeOverlay!: ResumeOverlay;
   private pauseOptions?: PauseOptionsOverlay;
   private continueOverlay?: ContinueOverlay;
+  private touchOrientationGate?: TouchOrientationGate;
   private firstCommandAccepted = false;
   private site2PourChoice: Site2PourChoice | null = null;
   private routeChoiceRecorded = false;
@@ -223,6 +225,12 @@ export class GameScene extends Phaser.Scene {
       if (this.frameBudget.constrainTo(tier)) this.applyPresentationTier(this.frameBudget.tier, 'platform');
     });
     this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
+    if (GAME_OWNS_MOBILE_ORIENTATION) {
+      this.touchOrientationGate = new TouchOrientationGate(
+        window.matchMedia(TOUCH_PORTRAIT_QUERY),
+        () => this.suspendForLifecycle('orientation'),
+      );
+    }
     if (IS_PLAYER_EXPERIENCE) {
       this.continueOverlay = new ContinueOverlay(
         () => {
@@ -416,6 +424,7 @@ export class GameScene extends Phaser.Scene {
       telemetry.emit('storage_status', this.progress.status);
       this.levelIndex = this.nextUnsolvedLevelIndex();
       void this.startLevel().then(() => {
+        this.touchOrientationGate?.start();
         telemetry.emitOnce('first_frame', { site: this.levelIndex + 1 });
         if (returning) {
           telemetry.emitOnce('return_session', { awayHours: away.hours, awaySalvage: away.salvageGranted });
@@ -804,7 +813,7 @@ export class GameScene extends Phaser.Scene {
           if (this.levelIndex === 2) telemetry.emitOnce('first_expedition_complete');
           if (this.isExpeditionBoundary()) {
             this.expeditionsCompletedThisSession += 1;
-            const canOfferDouble = ADS_ENABLED
+            const canOfferDouble = platform.adsEnabled
               && this.returningSession
               && this.sessionActiveMs >= 90_000
               && this.expeditionSalvageEarned > 0
@@ -813,7 +822,7 @@ export class GameScene extends Phaser.Scene {
               this.rewardedDoubleAmount = this.expeditionSalvageEarned;
               this.lastRewardedOfferMs = this.sessionActiveMs;
               telemetry.emit('ad_offer', { placement: 'expedition-double', amount: this.rewardedDoubleAmount });
-            } else if (ADS_ENABLED && this.returningSession && this.expeditionsCompletedThisSession >= 3) {
+            } else if (platform.adsEnabled && this.returningSession && this.expeditionsCompletedThisSession >= 3) {
               this.pendingInterstitial = true;
             }
           }
@@ -830,7 +839,7 @@ export class GameScene extends Phaser.Scene {
           const failures = this.progress.recordFailure(this.levelIndex);
           telemetry.emit('site_fail', { site: this.levelIndex + 1, failures });
           if (
-            ADS_ENABLED && failures === 2 && this.siteActiveMs >= 90_000
+            platform.adsEnabled && failures === 2 && this.siteActiveMs >= 90_000
             && this.sessionActiveMs - this.lastRewardedOfferMs >= 90_000
           ) {
             this.rewardedHintAvailable = true;
@@ -1579,7 +1588,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private requestRewardedHint(): void {
-    if (!ADS_ENABLED || !this.rewardedHintAvailable) return;
+    if (!platform.adsEnabled || !this.rewardedHintAvailable) return;
     this.rewardedHintAvailable = false;
     telemetry.emit('ad_accept', { placement: 'deeper-hint' });
     this.requestAdBreak('rewarded', 'deeper-hint', () => {
@@ -1589,7 +1598,7 @@ export class GameScene extends Phaser.Scene {
 
   private requestRewardedDouble(): void {
     const amount = this.rewardedDoubleAmount;
-    if (!ADS_ENABLED || amount <= 0) return;
+    if (!platform.adsEnabled || amount <= 0) return;
     this.rewardedDoubleAmount = 0;
     this.pendingInterstitial = false;
     telemetry.emit('ad_accept', { placement: 'expedition-double', amount });
@@ -1874,16 +1883,18 @@ export class GameScene extends Phaser.Scene {
     this.music.suspend();
     if (this.selectOpen || !this.sim) return;
     this.lifecycleReason = reason;
-    this.lifecycle.suspend();
+    if (!this.lifecycle.suspend() && reason === 'orientation') this.resumeOverlay.show(reason);
   }
 
   private resumeFromLifecycle(): void {
+    if (this.touchOrientationGate?.isPortrait()) return;
     this.lifecycle.resume();
   }
 
   private cleanupLifecycle(): void {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     window.removeEventListener('blur', this.handleWindowBlur);
+    this.touchOrientationGate?.stop();
     this.crewSpriteRenderer?.clear();
     this.crewSpriteRenderer = undefined;
     this.terrainRenderer?.clear();

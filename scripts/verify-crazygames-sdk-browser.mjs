@@ -43,27 +43,31 @@ try {
     if (request.url() === sdkUrl) sdkRequests.push(request.url());
   });
 
-  await page.goto(gameUrl, { waitUntil: 'domcontentloaded' });
-  await page.getByText('TAP THE CREW', { exact: true }).waitFor({ timeout: 10_000 });
-  await page.waitForFunction(() => window.__crazyGamesMock?.init === 1 && window.__crazyGamesMock?.starts >= 1);
+  const frameNavigated = page.waitForEvent('framenavigated', {
+    predicate: (frame) => frame !== page.mainFrame() && frame.url().startsWith(gameUrl),
+  });
+  await page.setContent(`<iframe title="Swarmwright" src="${gameUrl}" style="border:0;width:100%;height:100%"></iframe>`);
+  const game = await frameNavigated;
+  await game.getByText('TAP THE CREW', { exact: true }).waitFor({ timeout: 10_000 });
+  await game.waitForFunction(() => window.__crazyGamesMock?.init === 1 && window.__crazyGamesMock?.starts >= 1);
 
-  const initial = await page.evaluate(() => ({ ...window.__crazyGamesMock, settingsListener: !!window.__crazyGamesMock.settingsListener }));
-  invariant(sdkRequests.length === 1, `Full build requested SDK ${sdkRequests.length} times`);
+  const initial = await game.evaluate(() => ({ ...window.__crazyGamesMock, settingsListener: !!window.__crazyGamesMock.settingsListener }));
+  invariant(sdkRequests.length === 1, `Embedded launch requested SDK ${sdkRequests.length} times`);
   invariant(initial.init === 1, `SDK init count was ${initial.init}`);
-  invariant(initial.starts >= 1, 'Full build did not report gameplayStart');
-  invariant(initial.ads.length === 0, 'Full build requested an ad in the first session');
-  invariant(initial.settingsListener, 'Full build did not install the host settings listener');
-  invariant(await page.getByText(/VIDEO/).count() === 0, 'First-session Full build exposed an ad offer');
+  invariant(initial.starts >= 1, 'Embedded launch did not report gameplayStart');
+  invariant(initial.ads.length === 0, 'Embedded launch requested an ad in the first session');
+  invariant(initial.settingsListener, 'Embedded launch did not install the host settings listener');
+  invariant(await game.getByText(/VIDEO/).count() === 0, 'First session exposed an ad offer');
 
-  await page.getByRole('button', { name: /options/i }).click();
-  await page.getByRole('heading', { name: 'Options' }).waitFor();
-  await page.waitForFunction(() => window.__crazyGamesMock?.stops >= 1);
-  await page.getByRole('button', { name: 'Resume' }).click();
-  await page.waitForFunction(() => window.__crazyGamesMock?.starts >= 2);
+  await game.getByRole('button', { name: /options/i }).click();
+  await game.getByRole('heading', { name: 'Options' }).waitFor();
+  await game.waitForFunction(() => window.__crazyGamesMock?.stops >= 1);
+  await game.getByRole('button', { name: 'Resume' }).click();
+  await game.waitForFunction(() => window.__crazyGamesMock?.starts >= 2);
 
   invariant(errors.length === 0, errors.join('\n'));
-  const finalState = await page.evaluate(() => window.__crazyGamesMock);
-  console.log(`PASS Full SDK browser: init ${finalState.init}, starts ${finalState.starts}, stops ${finalState.stops}, ads ${finalState.ads.length}`);
+  const finalState = await game.evaluate(() => window.__crazyGamesMock);
+  console.log(`PASS embedded SDK runtime: init ${finalState.init}, starts ${finalState.starts}, stops ${finalState.stops}, ads ${finalState.ads.length}`);
   await context.close();
 } finally {
   await browser.close();

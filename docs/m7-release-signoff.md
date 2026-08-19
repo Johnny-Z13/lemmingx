@@ -84,7 +84,7 @@ Run only after the user authorizes the milestone commit and push.
 
 1. Commit the complete intended scope with no unrelated user changes.
 2. Confirm `git status --short` is empty and `main` contains the milestone.
-3. Rebuild from that clean commit with `npm run build:crazygames`.
+3. Rebuild the canonical artifact from that clean commit with `npm run build`.
 4. Run `npm run test:run`, `npm run validate:crew-atlas`,
    `node scripts/verify-crazygames-build.mjs --release`, and `git diff --check`.
 5. Record the commit SHA, exact artifact file count/bytes/SHA-256, and deployment

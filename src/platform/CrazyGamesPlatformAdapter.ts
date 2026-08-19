@@ -1,4 +1,3 @@
-import type { ProductMode } from './productMode';
 import type { AdCallbacks, PlatformAdapter, PlatformSystemInfo } from './PlatformTypes';
 
 type CrazySettings = { muteAudio?: boolean; disableChat?: boolean };
@@ -52,7 +51,6 @@ function loadCrazyGamesSdk(): Promise<CrazySdk | null> {
 }
 
 export class BrowserPlatformAdapter implements PlatformAdapter {
-  readonly adsEnabled: boolean;
   private sdk: CrazySdk | null = null;
   private initialized = false;
   private wantsGameplay = false;
@@ -60,15 +58,14 @@ export class BrowserPlatformAdapter implements PlatformAdapter {
   private muteListeners = new Set<(muted: boolean) => void>();
   private settingsListener: ((settings: CrazySettings) => void) | null = null;
 
-  constructor(
-    readonly mode: ProductMode = 'full',
-    private readonly sdkLoader: () => Promise<CrazySdk | null> = loadCrazyGamesSdk,
-  ) {
-    this.adsEnabled = mode === 'full';
+  constructor(private readonly sdkLoader: () => Promise<CrazySdk | null> = loadCrazyGamesSdk) {}
+
+  get adsEnabled(): boolean {
+    return this.initialized && !!this.sdk?.ad;
   }
 
   async init(): Promise<void> {
-    if (this.initialized || this.mode !== 'full') return;
+    if (this.initialized) return;
     const sdk = await this.sdkLoader();
     if (!sdk) return;
     try {

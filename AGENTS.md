@@ -34,11 +34,12 @@ dock, deterministic Random hatch roles, and event-driven impact FX.
 | Tests | Vitest — behavior + **level solvability scripts** |
 | Build | Vite + `tsc` |
 
-Commands: `npm run dev` · `npm test` · `npm run build` · `npm run build:crazygames`
+Commands: `npm run dev` · `npm test` · `npm run build`
 
-`npm run dev` and both build commands default to the canonical player/CrazyGames
-experience. The local-only **Dev Sandbox** button reloads the tab with the full
-test roster and diagnostics. Compiled builds fail closed with Sandbox unavailable.
+`npm run build` creates the single production artifact used for direct/Vercel and
+CrazyGames launches. Host behavior is selected at runtime, not through build
+variants. The local-only **Dev Sandbox** button reloads the tab with the full test
+roster and diagnostics. Compiled builds fail closed with Sandbox unavailable.
 
 `deviceProfile.ts` selects Desktop versus Mobile from pointer/touch/platform
 capabilities, including iPadOS desktop-UA detection (`MacIntel` with multiple

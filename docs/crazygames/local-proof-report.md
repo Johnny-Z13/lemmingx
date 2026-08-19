@@ -1,5 +1,9 @@
 # Swarmwright CrazyGames D3 — Local Proof Report
 
+> Historical D3 snapshot. The current repository supersedes the build split
+> below with one production artifact that selects direct or embedded behavior
+> at runtime.
+
 **Date:** 2026-08-18
 
 **Accepted design:** D3 Basic Launch candidate with feature-gated Full Launch

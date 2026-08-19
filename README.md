@@ -25,17 +25,17 @@ campaign level unlocked, Prototype 11/12, Sand Lab, and diagnostic controls.
 Compiled builds cannot enter Sandbox mode.
 
 The runtime selects a **Desktop** or **Mobile** device profile from platform and
-input capabilities, never from viewport width alone. The CrazyGames submission
-is landscape-only on mobile; CrazyGames owns the rotate prompt, so the game does
-not ship a competing orientation modal. iPadOS desktop-style user agents are
-recognized through touch support.
+input capabilities, never from viewport width alone. Direct and shareable launches
+(including Vercel/Home Screen launches) supply their own landscape-only rotate
+gate. The same artifact detects when it is embedded by CrazyGames and delegates
+that prompt to the host, avoiding a competing modal. iPadOS desktop-style user
+agents are recognized through touch support.
 
 ```bash
 npm run test    # vitest: sim + CA + level solvability
-npm run build   # canonical relative-path player build
-npm run build:crazygames       # ad-free Basic Launch candidate
-npm run build:crazygames:full  # SDK/ad-enabled Full Launch candidate
+npm run build   # the one production artifact for Vercel and CrazyGames
 npm run verify:crazygames:browser
+npm run verify:crazygames:sdk
 npm run build:covers
 npm run capture:previews
 npm run validate:submission-media
@@ -54,8 +54,9 @@ Atlas progress banked as it happens.
   the initial playable path.
 - Workshop projects, a forgiving UTC Daily Rescue, a 14-entry Material Atlas,
   and capped away accrual provide independent return hooks.
-- Basic Launch performs no SDK or ad request. Full Launch dynamically loads the
-  CrazyGames v3 SDK and keeps rewarded offers optional and frequency-gated.
+- Direct/Vercel launches make no CrazyGames SDK or ad request. The same artifact
+  loads the CrazyGames v3 SDK only when embedded by a host; rewarded offers stay
+  optional and frequency-gated.
 - The player experience is landscape-only on mobile, one-thumb/touch playable,
   muted-safe, legible at DPR 1, and tiered down automatically on 4-core/4 GB
   devices or after sustained frame pressure.

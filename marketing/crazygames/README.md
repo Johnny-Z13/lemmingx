@@ -30,10 +30,10 @@ and begin on the matching static cover. Required targets:
 - landscape: 1920×1080, 16:9
 - portrait: 1080×1620, 2:3
 
-Capture from a fresh Basic build served on the default local preview port:
+Capture from a fresh production build served on the default local preview port:
 
 ```sh
-npm run build:crazygames
+npm run build
 npx vite preview --host 127.0.0.1 --port 5178
 npm run capture:previews
 npm run validate:submission-media
