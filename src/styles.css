@@ -43,11 +43,16 @@ html,
 body {
   height: 100%;
   height: 100dvh;
+  /* Keep taps inside the game UI: Safari may still pan or pinch continuous
+     surfaces, but must not reinterpret two taps as viewport zoom. */
+  touch-action: manipulation;
 }
 
 #app {
   height: 100%;
   min-height: 100svh;
+  /* Phaser owns every gesture over the playfield, including pinch/pan. */
+  touch-action: none;
 }
 
 body {
