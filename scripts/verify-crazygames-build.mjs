@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, '..');
 const dist = join(root, 'dist');
 const provenancePath = join(root, 'docs/assets/crazygames-provenance.json');
 const releaseMode = process.argv.includes('--release');
+const portalMode = process.argv.includes('--portals');
 const errors = [];
 
 async function filesUnder(dir) {
@@ -28,7 +29,10 @@ const sizes = await Promise.all(files.map(async (path) => (await stat(path)).siz
 const bytes = sizes.reduce((total, size) => total + size, 0);
 if (!relFiles.includes('index.html')) errors.push('index.html is not at archive root');
 if (files.length > 1500) errors.push(`file count ${files.length} exceeds 1500`);
-if (bytes >= 20 * 1024 * 1024) errors.push(`uncompressed bytes ${bytes} exceed 20 MB proof budget`);
+const proofBudgetMb = portalMode ? 8 : 20;
+if (bytes >= proofBudgetMb * 1024 * 1024) {
+  errors.push(`uncompressed bytes ${bytes} exceed ${proofBudgetMb} MB proof budget`);
+}
 if (relFiles.some((path) => path.endsWith('.map'))) errors.push('source maps entered the player artifact');
 if (!relFiles.includes('THIRD_PARTY_NOTICES.txt')) errors.push('THIRD_PARTY_NOTICES.txt is missing');
 
@@ -128,7 +132,8 @@ if (errors.length > 0) {
   for (const error of errors) console.error(`FAIL ${error}`);
   process.exitCode = 1;
 } else {
-  console.log(`PASS CrazyGames ${releaseMode ? 'release' : 'proof'} artifact: ${files.length} files, ${bytes} bytes`);
+  const target = portalMode ? 'Poki/CrazyGames' : 'CrazyGames';
+  console.log(`PASS ${target} ${releaseMode ? 'release' : 'proof'} artifact: ${files.length} files, ${bytes} bytes`);
   console.log(`Artifact SHA-256: ${artifactHash}`);
   if (unresolved.length > 0) console.log(`Proof-only: ${unresolved.length} provenance record(s) remain unresolved`);
 }

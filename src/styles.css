@@ -46,6 +46,7 @@ body {
   /* Keep taps inside the game UI: Safari may still pan or pinch continuous
      surfaces, but must not reinterpret two taps as viewport zoom. */
   touch-action: manipulation;
+  overscroll-behavior: none;
 }
 
 #app {
@@ -59,6 +60,8 @@ body {
   min-width: 320px;
   background: #080c12;
   -webkit-touch-callout: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -1578,8 +1581,8 @@ input:focus-visible {
   color: #d7ffe9;
 }
 
-/* Player proof build: one contextual belt, safe-area contained, with the
-   central playfield left clear at CrazyGames' smallest landscape viewport. */
+/* Player build: one contextual belt, safe-area contained, with the central
+   playfield clear at the smallest Poki/CrazyGames landscape viewports. */
 .hud--player .hud__status {
   top: max(6px, env(safe-area-inset-top));
   min-height: 36px;

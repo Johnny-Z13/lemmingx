@@ -220,10 +220,8 @@ export class GameScene extends Phaser.Scene {
       this.hostMuted = muted;
       this.applyAudioSettings(this.audioSettings);
     });
-    void platform.init().then(() => {
-      const tier = readBootPresentationTier(platform.systemInfo().deviceType);
-      if (this.frameBudget.constrainTo(tier)) this.applyPresentationTier(this.frameBudget.tier, 'platform');
-    });
+    const tier = readBootPresentationTier(platform.systemInfo().deviceType);
+    if (this.frameBudget.constrainTo(tier)) this.applyPresentationTier(this.frameBudget.tier, 'platform');
     this.resumeOverlay = new ResumeOverlay(() => this.resumeFromLifecycle());
     if (GAME_OWNS_MOBILE_ORIENTATION) {
       this.touchOrientationGate = new TouchOrientationGate(
@@ -441,9 +439,11 @@ export class GameScene extends Phaser.Scene {
           });
           platform.gameplayStop();
         }
+        platform.reportProgress(this.campaignCompletionPercent());
+        platform.loadingComplete();
       });
     } else {
-      void this.openLevelSelect();
+      void this.openLevelSelect().then(() => platform.loadingComplete());
     }
   }
 
@@ -804,6 +804,8 @@ export class GameScene extends Phaser.Scene {
           telemetry.emit('site_complete', { daily: true, mastery, saved: this.sim.state.saved });
         } else {
           this.progress.recordWin(this.levelIndex, pct);
+          platform.reportProgress(this.campaignCompletionPercent());
+          if (this.levelIndex === LEVEL_COUNT - 1) platform.celebrate(1);
           telemetry.emit('site_complete', {
             site: this.levelIndex + 1,
             saved: this.sim.state.saved,
@@ -1565,6 +1567,14 @@ export class GameScene extends Phaser.Scene {
     return !this.dailyRun && [2, 5, 8, 9].includes(this.levelIndex);
   }
 
+  private campaignCompletionPercent(): number {
+    const completed = Array.from(
+      { length: LEVEL_COUNT },
+      (_, index) => this.progress.get(index).completed,
+    ).filter(Boolean).length;
+    return Math.round((completed / LEVEL_COUNT) * 100);
+  }
+
   private deepHintForLevel(): string {
     const hints = [
       'Order the lead crew to Bash before the dirt face; the breach releases the reservoir.',
@@ -1613,6 +1623,7 @@ export class GameScene extends Phaser.Scene {
       if (settled) return;
       settled = true;
       this.adMuted = false;
+      this.input.enabled = true;
       this.applyAudioSettings(this.audioSettings);
       if (success) {
         telemetry.emit('ad_complete', { placement });
@@ -1625,6 +1636,8 @@ export class GameScene extends Phaser.Scene {
     const requested = platform.requestAd(kind, {
       onStarted: () => {
         this.adMuted = true;
+        this.input.enabled = false;
+        this.input.keyboard?.resetKeys();
         this.applyAudioSettings(this.audioSettings);
         platform.gameplayStop();
         telemetry.emit('ad_started', { placement });

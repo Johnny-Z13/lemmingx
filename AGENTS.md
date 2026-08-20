@@ -36,8 +36,8 @@ dock, deterministic Random hatch roles, and event-driven impact FX.
 
 Commands: `npm run dev` · `npm test` · `npm run build`
 
-`npm run build` creates the single production artifact used for direct/Vercel and
-CrazyGames launches. Host behavior is selected at runtime, not through build
+`npm run build` creates the single production artifact used for direct/Vercel,
+Poki, and CrazyGames launches. Host behavior is selected at runtime, not through build
 variants. The local-only **Dev Sandbox** button reloads the tab with the full test
 roster and diagnostics. Compiled builds fail closed with Sandbox unavailable.
 
@@ -151,6 +151,11 @@ follows at index 12.
   internal roster after reload. Production builds cannot honor a stored Sandbox
   preference, and prototype names/code must continue to pass the player-only
   marker verifier.
+- `platform/PlatformAdapter.ts` selects direct/no-op, Poki v2, or CrazyGames v3
+  from the embedding origin (with `?portal=` reserved for local verification).
+  Direct/Vercel launches must request neither SDK. Poki defers its first
+  `gameplayStart` until loading is complete and the first real player input;
+  keep lifecycle events deduplicated on both portals.
 - `PLAYTEST_UNLOCK_ALL_LEVELS` in `progress.ts` follows Sandbox mode. Player
   builds use sequential progression; explicit `{ unlockAll: false }` remains
   available for progression tests.

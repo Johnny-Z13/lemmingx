@@ -35,5 +35,8 @@ export default defineConfig(({ command, mode }) => ({
   },
   test: {
     environment: 'node',
+    // Deterministic campaign routes simulate several minutes of CA time and
+    // can cross Vitest's 5s default when the full parallel suite is busy.
+    testTimeout: 20_000,
   },
 }));

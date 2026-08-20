@@ -6,6 +6,7 @@ const projectRoot = process.cwd();
 const proofRoot = path.join(projectRoot, '.artifacts/crazygames-candidate/browser');
 const gameUrl = process.env.SWARMWRIGHT_PREVIEW_URL ?? 'http://127.0.0.1:5178/';
 const sdkUrl = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+const pokiSdkUrl = 'https://game-cdn.poki.com/scripts/v2/poki-sdk.js';
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -157,6 +158,7 @@ try {
     invariant(timeToGameplayMs < 2_500, `Cold local gameplay took ${timeToGameplayMs.toFixed(0)}ms`);
     invariant(!coldRequests.some((url) => /WorkshopOverlay|PauseOptionsOverlay|LevelSelect|\/level(?:4|5|6|7|8|9|10)-|\/lab-/.test(url)), 'Cold path fetched a deferred surface or later site');
     invariant(!coldRequests.some((url) => /crazygames-sdk|sdk\.crazygames/i.test(url)), 'Direct launch requested the CrazyGames SDK');
+    invariant(!coldRequests.some((url) => url === pokiSdkUrl || /game-cdn\.poki\.com/i.test(url)), 'Direct launch requested the Poki SDK');
     invariant(await page.getByText('Dev Sandbox', { exact: true }).count() === 0, 'Player build exposed Dev Sandbox');
     invariant(await page.getByText(/loading/i).count() === 0, 'Player boot exposed a loading screen');
 
