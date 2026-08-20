@@ -85,12 +85,12 @@ export class WorkshopOverlay {
       <main class="workshop__shell" role="dialog" aria-modal="true" aria-labelledby="workshop-title">
         <header class="workshop__header">
           <div>
-            <span class="workshop__kicker">The Workshop changed</span>
+            <span class="workshop__kicker">Workshop</span>
             <h1 id="workshop-title">${expeditionTitle}</h1>
             <p>${save.rescuedTotal} crew rescued · ${save.workshop.length}/6 projects built</p>
           </div>
           <div class="workshop__wallet"><span>Salvage</span><strong>${save.salvage}</strong></div>
-          <button class="workshop__continue" type="button" data-action="continue">CONTINUE</button>
+          <button class="workshop__continue" type="button" data-action="continue">BACK TO CAMPAIGN</button>
         </header>
 
         <section class="workshop__scene" aria-label="Restored Workshop">

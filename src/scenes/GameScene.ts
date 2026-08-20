@@ -1492,7 +1492,7 @@ export class GameScene extends Phaser.Scene {
     this.hud?.setDebugLabels(enabled);
   }
 
-  /** Advance to the next level; from the finale, back to the level select. */
+  /** Advance straight through the campaign; meta navigation stays an explicit choice. */
   private nextLevel(): void {
     if (this.pendingInterstitial && !this.advancingAfterInterstitial) {
       this.pendingInterstitial = false;
@@ -1502,10 +1502,6 @@ export class GameScene extends Phaser.Scene {
         this.advancingAfterInterstitial = false;
       }, true);
       if (requested) return;
-    }
-    if (IS_PLAYER_EXPERIENCE && [2, 5, 8, 9].includes(this.levelIndex)) {
-      void this.openWorkshop();
-      return;
     }
     if (this.isLab() || this.isPrototype() || this.levelIndex + 1 >= LEVEL_COUNT) {
       this.openPlayerNavigation();
