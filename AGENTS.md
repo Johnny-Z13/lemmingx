@@ -63,6 +63,8 @@ portrait-shaped desktop browser whenever this boundary changes.
 7. **Crowd spacing is render-only** — never write display fan-out/jitter back to
    `Lemming.x/y`; hit-testing may follow display positions, sim logic may not.
 8. Commit only when the user asks (`type(scope): summary`).
+9. Stay on `main`; do not create delivery branches. When the user asks to push,
+   verify the intended diff, commit it on `main`, and push `origin/main`.
 
 ## Layout
 
@@ -85,6 +87,15 @@ src/
 test/                   simulation, ca, levels, tracks, progress
 docs/superpowers/       Design specs + plans (Sand hybrid USP locked here)
 ```
+
+## Documentation authority
+
+- `docs/README.md` separates current sources from dated decision history.
+- `docs/product-status.md` owns current product scope, CrazyGames/Poki success
+  mapping, claim boundaries, and development order.
+- `docs/platform-runtime.md` owns the single-artifact portal runtime.
+- Dated implementation plans and gauntlet logs are historical evidence. Do not
+  restore their retired branches, build variants, commands, or old status.
 
 ## Materials (`MATERIAL`)
 

@@ -1,5 +1,10 @@
 # LemmingX CrazyGames Early Candidate — Design Packet
 
+> **Historical D3 packet (superseded 2026-08-20).** This record explains the
+> first local proof and is not the current shipping contract. Use
+> `docs/product-status.md` and `2026-08-18-product-design.md` for current product
+> direction; use `docs/platform-runtime.md` for portal behavior.
+
 **Revision:** D3
 
 **Date:** 2026-08-12

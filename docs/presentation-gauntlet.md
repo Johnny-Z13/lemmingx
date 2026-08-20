@@ -1,5 +1,10 @@
 # Lemmings X presentation gauntlet
 
+> **Historical milestone journal.** This file preserves dated visual evidence
+> and old hashes/counts. Current product/delivery status lives in
+> `docs/product-status.md`; unresolved human/device rows live in
+> `docs/m7-release-signoff.md`.
+
 ## Experience contract
 
 The player should feel clever and protective while a tiny, brave salvage crew

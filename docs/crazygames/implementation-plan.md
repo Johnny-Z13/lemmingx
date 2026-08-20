@@ -1,10 +1,17 @@
 # LemmingX CrazyGames Early Candidate — Implementation Plan
 
+> **Historical record (superseded 2026-08-20).** This local-proof plan predates
+> the integrated product and single runtime-selected portal artifact. Do not run
+> its retired build-split, no-SDK, dirty-tree, branch, or stop-condition
+> instructions. Use `docs/product-status.md`, `docs/platform-runtime.md`, and
+> `AGENTS.md` for current work.
+
 **Accepted design:** D3 (`docs/crazygames/early-candidate-design.md`)
 
 **Design Gate:** PASS, 89%, 2026-08-12
 
-**Scope:** Local proof candidate only. No upload, deploy, submission, SDK, ads, IAP, accounts, backend, paid/provider generation, commit, push, or PR.
+**Historical scope:** Local proof candidate only. No upload, deploy, submission,
+SDK, ads, IAP, accounts, backend, paid/provider generation, commit, push, or PR.
 
 ## Engineering constraints
 

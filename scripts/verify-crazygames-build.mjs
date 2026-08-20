@@ -108,7 +108,7 @@ const worktreeStatus = execFileSync(
 const metadata = {
   schemaVersion: 1,
   proofOnly: true,
-  evidenceScope: worktreeStatus.length > 0 ? 'pre-merge working-tree build' : 'committed candidate build',
+  evidenceScope: worktreeStatus.length > 0 ? 'pre-commit working-tree build' : 'committed candidate build',
   releaseCleared: unresolved.length === 0,
   branch: git(['branch', '--show-current']),
   commit: git(['rev-parse', 'HEAD']),

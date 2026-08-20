@@ -75,12 +75,21 @@ Atlas progress banked as it happens.
 
 ## Current state
 
-Swarmwright is a playable, guarded CrazyGames candidate: the full
+Swarmwright is a playable, internally verified multi-portal candidate: the full
 10-site rescue route and Test Yard ship as the player game, while two development-only
 mechanic-prototype slots exercise the same deterministic headless sim,
 every campaign level has a scripted solvability path, and the rendered shell
 adds procedural sprites, role identity, crowd readability, particles, music,
 and SFX without leaking Phaser or browser state into simulation code.
+
+Current authority and claim boundaries:
+
+- `docs/product-status.md` — shipping scope, CrazyGames/Poki alignment, and the
+  next evidence gates;
+- `docs/platform-runtime.md` — the one-artifact portal runtime;
+- `docs/README.md` — canonical versus historical documentation;
+- `docs/m7-release-signoff.md` — human, hosted, identity, and device gates that
+  automation cannot close.
 
 ## How to play
 
@@ -207,7 +216,7 @@ And the terrain, from the swarm's side:
 | Wood | yes | yes | falls in air, floats on water, burns into non-solid flame | Fire |
 | Fire | no | n/a | rises, spreads through wood, burns out; water/sand extinguish it | Burns on contact |
 
-Design source of truth:
+Water/material behavior source of truth:
 `docs/superpowers/specs/2026-07-11-water-reactive-lemmings-design.md`.
 Campaign review and automated test plan:
 `docs/level-design-review-and-solvability-test-plan.md`.

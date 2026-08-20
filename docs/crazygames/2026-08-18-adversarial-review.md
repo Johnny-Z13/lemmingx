@@ -1,5 +1,10 @@
 # Swarmwright CrazyGames Product Design — Adversarial Review
 
+> **Historical design-gate review.** Findings below were resolved into the D3
+> contract or deliberately left for player/market evidence. The fresh compiled
+> product review is `2026-08-20-adversarial-review.md`; current status is
+> `docs/product-status.md`.
+
 **Reviewed draft:** D1, 2026-08-18
 
 **Method:** Fresh-pass hostile review against the supplied portal pillars, current

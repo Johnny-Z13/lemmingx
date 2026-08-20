@@ -8,7 +8,8 @@
 
 **Date:** 2026-08-18
 
-**Status:** Locked product contract for Gate A; hypotheses and owner decisions are explicit
+**Status:** Accepted product contract; internally implemented, with market and
+human release evidence still open
 
 **Scope:** CrazyGames-first browser delivery; desktop and landscape mobile/tablet
 **Review record:** [`2026-08-18-adversarial-review.md`](./2026-08-18-adversarial-review.md)
@@ -125,7 +126,7 @@ When requirements appear to conflict, use this order:
 4. Every retention or monetisation claim in this document is a hypothesis until
    measured with real players.
 
-Official CrazyGames documentation was rechecked on 2026-08-18. Notable
+Official CrazyGames documentation was rechecked on 2026-08-20. Notable
 distinctions:
 
 - CrazyGames permits a 50 MB initial download, or 20 MB for mobile-homepage
@@ -145,7 +146,12 @@ distinctions:
   D3 therefore places hint offers only on frozen failure surfaces and makes the
   same deeper hint available for free after one further failed attempt.
 
-## 3. Audit of the current product
+## 3. Audit of the 2026-08-18 baseline
+
+> This section records the implementation baseline that motivated the product
+> contract. It is not a description of the current repository. Current delivery
+> status lives in `docs/product-status.md`; current portal behavior lives in
+> `docs/platform-runtime.md`.
 
 ### 3.1 What is already strong
 
@@ -901,7 +907,7 @@ Stop if this is not compelling. Do not build retention around an unclear core.
 - A campaign level editor for players.
 - Shipping all prototype mechanics because they already exist.
 
-## 19. Official sources checked 2026-08-18
+## 19. Official sources checked 2026-08-20
 
 - [Technical requirements](https://docs.crazygames.com/requirements/technical/)
 - [Gameplay requirements](https://docs.crazygames.com/requirements/gameplay/)

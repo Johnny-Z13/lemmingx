@@ -34,11 +34,12 @@ dock, deterministic Random hatch roles, and event-driven impact FX.
 | Tests | Vitest — behavior + **level solvability scripts** |
 | Build | Vite + `tsc` |
 
-Commands: `npm run dev` · `npm test` · `npm run build` · `npm run build:crazygames`
+Commands: `npm run dev` · `npm test` · `npm run build`
 
-`npm run dev` and both build commands default to the canonical player/CrazyGames
-experience. The local-only **Dev Sandbox** button reloads the tab with the full
-test roster and diagnostics. Compiled builds fail closed with Sandbox unavailable.
+`npm run build` creates the single production artifact used for direct/Vercel,
+Poki, and CrazyGames launches. Host behavior is selected at runtime, not through build
+variants. The local-only **Dev Sandbox** button reloads the tab with the full test
+roster and diagnostics. Compiled builds fail closed with Sandbox unavailable.
 
 `deviceProfile.ts` selects Desktop versus Mobile from pointer/touch/platform
 capabilities, including iPadOS desktop-UA detection (`MacIntel` with multiple
@@ -62,6 +63,8 @@ portrait-shaped desktop browser whenever this boundary changes.
 7. **Crowd spacing is render-only** — never write display fan-out/jitter back to
    `Lemming.x/y`; hit-testing may follow display positions, sim logic may not.
 8. Commit only when the user asks (`type(scope): summary`).
+9. Stay on `main`; do not create delivery branches. When the user asks to push,
+   verify the intended diff, commit it on `main`, and push `origin/main`.
 
 ## Layout
 
@@ -84,6 +87,15 @@ src/
 test/                   simulation, ca, levels, tracks, progress
 docs/superpowers/       Design specs + plans (Sand hybrid USP locked here)
 ```
+
+## Documentation authority
+
+- `docs/README.md` separates current sources from dated decision history.
+- `docs/product-status.md` owns current product scope, CrazyGames/Poki success
+  mapping, claim boundaries, and development order.
+- `docs/platform-runtime.md` owns the single-artifact portal runtime.
+- Dated implementation plans and gauntlet logs are historical evidence. Do not
+  restore their retired branches, build variants, commands, or old status.
 
 ## Materials (`MATERIAL`)
 
@@ -150,6 +162,11 @@ follows at index 12.
   internal roster after reload. Production builds cannot honor a stored Sandbox
   preference, and prototype names/code must continue to pass the player-only
   marker verifier.
+- `platform/PlatformAdapter.ts` selects direct/no-op, Poki v2, or CrazyGames v3
+  from the embedding origin (with `?portal=` reserved for local verification).
+  Direct/Vercel launches must request neither SDK. Poki defers its first
+  `gameplayStart` until loading is complete and the first real player input;
+  keep lifecycle events deduplicated on both portals.
 - `PLAYTEST_UNLOCK_ALL_LEVELS` in `progress.ts` follows Sandbox mode. Player
   builds use sequential progression; explicit `{ unlockAll: false }` remains
   available for progression tests.

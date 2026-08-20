@@ -1,5 +1,9 @@
 # Design QA — final environment visual gauntlet
 
+> Historical environment-pass snapshot. Its test counts, artifact hash, and
+> release boundary are not current. See `docs/product-status.md` and
+> `docs/crazygames/2026-08-20-adversarial-review.md` for the reconciled state.
+
 ## Target and scope
 
 - Reference: `public/assets/title-splash.png` as a mood, colour, depth and hierarchy reference only.

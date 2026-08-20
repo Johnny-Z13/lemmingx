@@ -1,5 +1,10 @@
 # LemmingX CrazyGames Gauntlet Review Log
 
+> **Historical local-proof log.** Scores, artifact boundaries, and blocker
+> counts below describe the 2026-08-12 D3 proof, not the current repository.
+> Use `2026-08-20-adversarial-review.md` and `docs/product-status.md` for the
+> current decision.
+
 ## Design round 1 — REVISE
 
 - **Maker revision:** D1, 2026-08-12

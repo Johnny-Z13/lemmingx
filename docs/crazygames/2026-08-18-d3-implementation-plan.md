@@ -1,17 +1,22 @@
 # Swarmwright CrazyGames D3 — Implementation Plan
 
+> **Historical execution plan (completed and superseded 2026-08-20).** Phases
+> A–G are integrated on `main`. Do not recreate the retired feature branch or
+> its Basic/Full build split. Current delivery is the single artifact described
+> by `docs/product-status.md`, `docs/platform-runtime.md`, and `AGENTS.md`.
+
 **Design source:** [`2026-08-18-product-design.md`](./2026-08-18-product-design.md)
 
 **Review source:** [`2026-08-18-adversarial-review.md`](./2026-08-18-adversarial-review.md)
 
-**Branch:** `codex/crazygames-d3`
+**Historical branch:** `codex/crazygames-d3` (merged; do not recreate)
 
 **Target:** a complete CrazyGames Basic Launch candidate plus feature-gated Full
 Launch integration, merged to `main` and pushed after internal verification.
 
-**Implementation status (2026-08-18):** Phases A–G are implemented and the
-internal automated acceptance matrix is green. The final Git delivery is the
-remaining in-repository step. Human name/rights clearance, five-player cold
+**Implementation status (2026-08-20):** Phases A–G and the runtime-selected
+CrazyGames/Poki integration are on `main`; internal automated acceptance is
+green. Human name/rights clearance, five-player cold
 comprehension, and hosted CrazyGames app/webview QA remain external release
 gates and are intentionally not self-certified here.
 
@@ -249,9 +254,13 @@ external evidence that cannot be self-certified: five-player comprehension,
 CrazyGames hosted/app QA, public-name rights clearance, aggregate Basic Launch
 metrics, and live ad fill.
 
-When internal verification is green:
+The following was the historical 2026-08-18 branch handoff. It is retained as
+decision history, not current Git guidance:
 
 - update proof/provenance metadata intentionally;
 - commit the complete scoped change on `codex/crazygames-d3`;
 - switch to `main`, merge the feature branch non-destructively, rerun the final
   smoke suite, and push `main` to `origin`.
+
+Current delivery stays on `main`, creates no branch, verifies the one artifact,
+and pushes `origin/main` only when the user asks.
